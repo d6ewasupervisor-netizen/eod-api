@@ -107,6 +107,8 @@ async function start() {
       userName,
       userEmail,
       signoffPhotos,
+      checkInManager,
+      checkOutManager,
     } = req.body;
 
     if (!storeNumber || !subject || !body || !recipients?.length) {
@@ -158,6 +160,18 @@ async function start() {
       }
 
       logger.info({ id: data?.id, storeNumber, from }, 'EOD email sent');
+
+      logger.info('Attempting store data upsert for store:', storeNumber);
+      try {
+        await upsertStoreData(storeNumber, {
+          managerNames: [checkInManager, checkOutManager].filter(Boolean),
+          recipientEmails: recipients || []
+        });
+        logger.info('Store data upserted successfully for store:', storeNumber);
+      } catch (err) {
+        logger.error('Store data upsert failed:', err.message);
+      }
+
       return res.json({ success: true, id: data?.id });
     } catch (err) {
       logger.error({ err, storeNumber }, 'Unexpected error sending EOD email');
