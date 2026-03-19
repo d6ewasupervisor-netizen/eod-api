@@ -220,27 +220,35 @@ async function uploadPhoto(visitId, resetId, photoBase64, slot, filename, filety
 // ─── JOB PROCESSOR ────────────────────────────────────────────────────────────
 
 async function processUploadJob(job) {
-  const { storeNumber, date, leadName, photoBase64, slot, targetReset, filename } = job;
+  const { storeNumber, date, leadName, photoBase64, slot, targetReset, filename, visitId } = job;
 
-  logger.info(`Processing upload: store=${storeNumber} date=${date} lead=${leadName} slot=${slot}`);
+  logger.info(`Processing upload: store=${storeNumber} date=${date} lead=${leadName || ''} slot=${slot} visitId=${visitId || 'none'}`);
 
-  // Step 1: Find employee
-  const employee = await findEmployee(leadName);
-  if (!employee) {
-    return { success: false, error: `Employee not found: ${leadName}` };
+  let resolvedVisitId;
+
+  if (visitId) {
+    // Direct visitId provided — skip employee and visit lookup
+    resolvedVisitId = visitId;
+  } else {
+    // Existing employee-based flow
+    const employee = await findEmployee(leadName);
+    if (!employee) {
+      return { success: false, error: `Employee not found: ${leadName}` };
+    }
+
+    let visit = await findVisit(employee.id, date);
+    if (!visit) {
+      visit = await findVisitByStore(storeNumber, date);
+    }
+    if (!visit) {
+      return { success: false, error: `No visit found for store ${storeNumber} on ${date}` };
+    }
+
+    resolvedVisitId = visit.visitId;
   }
 
-  // Step 2: Find visit
-  let visit = await findVisit(employee.id, date);
-  if (!visit) {
-    visit = await findVisitByStore(storeNumber, date);
-  }
-  if (!visit) {
-    return { success: false, error: `No visit found for store ${storeNumber} on ${date}` };
-  }
-
-  // Step 3: Find target reset
-  const resets = await getCategoryResets(visit.visitId);
+  // Find target reset
+  const resets = await getCategoryResets(resolvedVisitId);
   let target;
 
   if (!targetReset || targetReset === 'MAINTENANCE') {
@@ -259,16 +267,16 @@ async function processUploadJob(job) {
     };
   }
 
-  // Step 4: Upload
+  // Upload
   const autoFilename = filename || `${slot}_store${storeNumber}_${date}.jpg`;
-  const result = await uploadPhoto(visit.visitId, target.id, photoBase64, slot, autoFilename);
+  const result = await uploadPhoto(resolvedVisitId, target.id, photoBase64, slot, autoFilename);
 
   return {
     ...result,
-    visitId: visit.visitId,
+    visitId: resolvedVisitId,
     resetId: target.id,
     resetName: target.name,
-    storeNumber: visit.storeNumber,
+    storeNumber,
   };
 }
 
@@ -287,6 +295,7 @@ async function initQueue(pool) {
       slot TEXT NOT NULL DEFAULT 'before',
       target_reset TEXT DEFAULT 'MAINTENANCE',
       filename TEXT,
+      visit_id TEXT DEFAULT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       result JSONB,
       error TEXT,
@@ -299,10 +308,10 @@ async function initQueue(pool) {
 
 async function enqueueUpload(pool, job) {
   const { rows } = await pool.query(
-    `INSERT INTO sas_upload_queue (store_number, date, lead_name, photo_base64, slot, target_reset, filename)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO sas_upload_queue (store_number, date, lead_name, photo_base64, slot, target_reset, filename, visit_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id`,
-    [job.storeNumber, job.date, job.leadName, job.photoBase64, job.slot || 'before', job.targetReset || 'MAINTENANCE', job.filename || null]
+    [job.storeNumber, job.date, job.leadName || '', job.photoBase64, job.slot || 'before', job.targetReset || 'MAINTENANCE', job.filename || null, job.visitId || null]
   );
   const jobId = rows[0].id;
   logger.info(`Enqueued upload job #${jobId} for store ${job.storeNumber}`);
@@ -339,6 +348,7 @@ async function processQueue(pool) {
         slot: job.slot,
         targetReset: job.target_reset,
         filename: job.filename,
+        visitId: job.visit_id,
       });
 
       const status = result.success ? 'completed' : 'failed';
@@ -443,19 +453,25 @@ function registerRoutes(app, pool) {
 
   // Accept upload jobs from the EOD frontend
   app.post('/sas-upload', async (req, res) => {
-    const { storeNumber, date, leadName, photoBase64, slot, targetReset, filename } = req.body;
+    const { storeNumber, date, leadName, photoBase64, slot, targetReset, filename, visitId } = req.body;
 
-    if (!storeNumber || !date || !leadName || !photoBase64) {
+    const missingFields = [];
+    if (!storeNumber) missingFields.push('storeNumber');
+    if (!date) missingFields.push('date');
+    if (!photoBase64) missingFields.push('photoBase64');
+    if (!visitId && !leadName) missingFields.push('leadName (required when visitId is not provided)');
+
+    if (missingFields.length > 0) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: storeNumber, date, leadName, photoBase64',
+        error: `Missing required fields: ${missingFields.join(', ')}`,
       });
     }
 
     if (!sasSession.alive) {
       // Queue it anyway — it'll be processed when session is restored
       try {
-        const jobId = await enqueueUpload(pool, { storeNumber, date, leadName, photoBase64, slot, targetReset, filename });
+        const jobId = await enqueueUpload(pool, { storeNumber, date, leadName, photoBase64, slot, targetReset, filename, visitId });
         return res.json({
           success: true,
           queued: true,
@@ -469,7 +485,7 @@ function registerRoutes(app, pool) {
 
     // Session is active — enqueue and it'll process within 10 seconds
     try {
-      const jobId = await enqueueUpload(pool, { storeNumber, date, leadName, photoBase64, slot, targetReset, filename });
+      const jobId = await enqueueUpload(pool, { storeNumber, date, leadName, photoBase64, slot, targetReset, filename, visitId });
       return res.json({ success: true, queued: true, jobId });
     } catch (err) {
       return res.status(500).json({ success: false, error: `Queue error: ${err.message}` });
@@ -493,6 +509,69 @@ function registerRoutes(app, pool) {
     } catch (err) {
       return res.status(500).json({ success: false, error: err.message });
     }
+  });
+
+  // Search shifts by store number and date
+  app.get('/sas-shifts', async (req, res) => {
+    const { store, date } = req.query;
+
+    if (!store || !date) {
+      return res.status(400).json({ success: false, error: 'Missing required query params: store, date' });
+    }
+
+    if (!sasSession.alive) {
+      return res.status(503).json({ success: false, error: 'SAS session not active' });
+    }
+
+    const allShifts = [];
+
+    for (const projectId of DEFAULT_PROJECT_IDS) {
+      try {
+        // Find project_store_id for this store/project combo
+        const storeResp = await sasGet('/api/v1/projects/store-numbers/', {
+          customer: CUSTOMER_ID,
+          program: DEFAULT_PROGRAM_ID,
+          project: projectId,
+          search: store,
+        });
+
+        const storeResults = storeResp.data;
+        if (!Array.isArray(storeResults) || storeResults.length === 0) continue;
+
+        const projectStoreId = storeResults[0].project_store_id || storeResults[0].id;
+        if (!projectStoreId) continue;
+
+        // Get shifts for this project_store_id on the given date
+        const shiftResp = await sasGet('/api/v1/operations/field-data/', {
+          customer_id: CUSTOMER_ID,
+          project_store_id: projectStoreId,
+          scheduled_dt_from: date,
+          scheduled_dt_to: date,
+          program_id: DEFAULT_PROGRAM_ID,
+          project_id: projectId,
+          page: 1,
+          page_size: 50,
+        });
+
+        const shifts = Array.isArray(shiftResp.data) ? shiftResp.data : [];
+        for (const shift of shifts) {
+          allShifts.push({
+            visitId: shift.id,
+            storeNumber: shift.store_name?.number,
+            projectId,
+            projectName: shift.project?.name || `Project ${projectId}`,
+            leadName: shift.lead_name || shift.merchandiser_name || '',
+            status: shift.current_status,
+            scheduledDate: shift.scheduled_dt,
+            employeeCount: shift.employee_count || null,
+          });
+        }
+      } catch (err) {
+        logger.error(`Shift search failed for project ${projectId}: ${err.message}`);
+      }
+    }
+
+    return res.json({ success: true, shifts: allShifts });
   });
 
   // Session status check
