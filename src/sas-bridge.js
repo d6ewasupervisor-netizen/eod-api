@@ -217,6 +217,65 @@ async function uploadPhoto(visitId, resetId, photoBase64, slot, filename, filety
   };
 }
 
+// ─── VISIT STATUS + RECOMPLETE ───────────────────────────────────────────────
+
+async function getVisitStatus(visitId) {
+  try {
+    const resp = await sasGet(`/api/v1/field-app/visits/${visitId}/`, { from_state: 'admin' });
+    return resp.data?.current_status || resp.data?.status || null;
+  } catch {
+    return null;
+  }
+}
+
+async function recompleteVisit(visitId) {
+  // Step 1: GET the current category resets (fresh, with updated photo counts)
+  const resp = await sasGet(`/api/v1/field-app/visits/${visitId}/category-resets/`);
+  const allResets = resp.data?.category_resets || [];
+
+  // Step 2: Find the MAINTENANCE reset
+  const maintenance = allResets.find(r => r.reset_type === 'MAINTENANCE' || r.name === 'KOMPASS MAINTENANCE');
+  if (!maintenance) {
+    logger.error(`recomplete: MAINTENANCE reset not found for visit ${visitId}`);
+    return { success: false, error: 'MAINTENANCE reset not found for recomplete' };
+  }
+
+  // Step 3: Build the recomplete payload
+  const resetPayload = {
+    ...maintenance,
+    filetype: 'image',
+    exceptionType: [],
+  };
+
+  const body = {
+    'category-reset': [resetPayload],
+    'complete_shift_final': {
+      team_lead_feedback: null,
+      allowed_truncation: false,
+      allowed_overlap: false,
+      allowed_missing_ques: false,
+    },
+  };
+
+  // Step 4: POST recomplete
+  const headers = getHeaders();
+  if (!headers) throw new Error('SAS session not active');
+  const recompleteResp = await axios.post(
+    `${BASE_URL}/api/v1/field-app/visits/${visitId}/recomplete/`,
+    body,
+    { headers, maxBodyLength: Infinity }
+  );
+
+  const success = recompleteResp.data?.success === true;
+  logger.info(`recomplete visit ${visitId}: ${success ? 'OK' : 'FAILED'} — ${recompleteResp.data?.message || ''}`);
+
+  return {
+    success,
+    message: recompleteResp.data?.message,
+    errors: recompleteResp.data?.errors,
+  };
+}
+
 // ─── JOB PROCESSOR ────────────────────────────────────────────────────────────
 
 async function processUploadJob(job) {
@@ -271,6 +330,17 @@ async function processUploadJob(job) {
   const autoFilename = filename || `${slot}_store${storeNumber}_${date}.jpg`;
   const result = await uploadPhoto(resolvedVisitId, target.id, photoBase64, slot, autoFilename);
 
+  // Step 5: If the visit was completed, recomplete it
+  const visitStatus = await getVisitStatus(resolvedVisitId);
+  if (visitStatus === 'completed') {
+    logger.info(`Visit ${resolvedVisitId} is completed — triggering recomplete...`);
+    const recompleteResult = await recompleteVisit(resolvedVisitId);
+    result.recomplete = recompleteResult;
+    if (!recompleteResult.success) {
+      logger.error(`recomplete failed for visit ${resolvedVisitId}: ${recompleteResult.error || recompleteResult.message}`);
+    }
+  }
+
   return {
     ...result,
     visitId: resolvedVisitId,
@@ -303,6 +373,8 @@ async function initQueue(pool) {
       processed_at TIMESTAMPTZ
     )
   `);
+  // Add visit_id column for existing deployments
+  await pool.query(`ALTER TABLE sas_upload_queue ADD COLUMN IF NOT EXISTS visit_id TEXT`);
   logger.info('Upload queue table ready');
 }
 
@@ -527,9 +599,11 @@ function registerRoutes(app, pool) {
 
     for (const projectId of DEFAULT_PROJECT_IDS) {
       try {
-        // Find project_store_id for this store/project combo
+        // Step 1: Find project_store_id via store-numbers lookup
         const storeResp = await sasGet('/api/v1/projects/store-numbers/', {
           customer: CUSTOMER_ID,
+          page: 1,
+          page_size: 8,
           program: DEFAULT_PROGRAM_ID,
           project: projectId,
           search: store,
@@ -538,19 +612,24 @@ function registerRoutes(app, pool) {
         const storeResults = storeResp.data;
         if (!Array.isArray(storeResults) || storeResults.length === 0) continue;
 
-        const projectStoreId = storeResults[0].project_store_id || storeResults[0].id;
+        // Find the entry where store__number matches exactly
+        const storeMatch = storeResults.find(s => String(s.store__number) === String(store));
+        if (!storeMatch) continue;
+
+        const projectStoreId = storeMatch.id;
         if (!projectStoreId) continue;
 
-        // Get shifts for this project_store_id on the given date
+        // Step 2: Get shifts for this project_store_id on the given date
         const shiftResp = await sasGet('/api/v1/operations/field-data/', {
           customer_id: CUSTOMER_ID,
+          merchandiser: '',
+          page: 1,
+          page_size: 50,
+          program_id: DEFAULT_PROGRAM_ID,
+          project_id: projectId,
           project_store_id: projectStoreId,
           scheduled_dt_from: date,
           scheduled_dt_to: date,
-          program_id: DEFAULT_PROGRAM_ID,
-          project_id: projectId,
-          page: 1,
-          page_size: 50,
         });
 
         const shifts = Array.isArray(shiftResp.data) ? shiftResp.data : [];
@@ -558,12 +637,14 @@ function registerRoutes(app, pool) {
           allShifts.push({
             visitId: shift.id,
             storeNumber: shift.store_name?.number,
-            projectId,
+            projectId: shift.project?.project_id || projectId,
             projectName: shift.project?.name || `Project ${projectId}`,
-            leadName: shift.lead_name || shift.merchandiser_name || '',
+            leadName: shift.visit_lead || '',
+            supervisor: shift.supervisor || '',
             status: shift.current_status,
-            scheduledDate: shift.scheduled_dt,
-            employeeCount: shift.employee_count || null,
+            scheduledDate: shift.scheduled_date,
+            employeeCount: shift.emp_count || null,
+            totalHours: shift.total_hours || null,
           });
         }
       } catch (err) {
