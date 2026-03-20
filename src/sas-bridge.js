@@ -655,6 +655,218 @@ function registerRoutes(app, pool) {
     return res.json({ success: true, shifts: allShifts });
   });
 
+  // Get employee roster for a specific visit
+  app.get('/sas-shift-employees', async (req, res) => {
+    const { visitId } = req.query;
+
+    if (!visitId) {
+      return res.status(400).json({ success: false, error: 'Missing required query param: visitId' });
+    }
+
+    if (!sasSession.alive) {
+      return res.status(503).json({ success: false, error: 'SAS session not active' });
+    }
+
+    try {
+      const resp = await sasGet('/api/v1/team-scheduling/shifts/', {
+        page: 1,
+        page_size: 50,
+        visit: visitId,
+      });
+
+      const shifts = Array.isArray(resp.data) ? resp.data : [];
+      const employees = shifts
+        .filter(s => s.current_status !== 'deleted')
+        .map(s => ({
+          shiftId: s.id,
+          employeeId: s.employee?.id,
+          name: s.employee?.person?.person_name || s.employee?.person_name || '',
+          title: s.employee?.person?.person_title || '',
+          workdayId: s.employee?.workday_given_id,
+          isLead: s.is_lead,
+          status: s.current_status,
+          shiftStartTime: s.shift_start_time,
+          shiftEndTime: s.shift_end_time,
+          noShow: s.no_show,
+        }));
+
+      return res.json({ success: true, employees });
+    } catch (err) {
+      logger.error(`Shift employees fetch failed for visit ${visitId}: ${err.message}`);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Get Kompass ISE employee pool for a store/date
+  app.get('/sas-kompass-pool', async (req, res) => {
+    const { store, date } = req.query;
+
+    if (!store || !date) {
+      return res.status(400).json({ success: false, error: 'Missing required query params: store, date' });
+    }
+
+    if (!sasSession.alive) {
+      return res.status(503).json({ success: false, error: 'SAS session not active' });
+    }
+
+    try {
+      // Step 1: Find the Kompass ISE (project 1) visit at this store
+      const storeResp = await sasGet('/api/v1/projects/store-numbers/', {
+        customer: CUSTOMER_ID,
+        page: 1,
+        page_size: 8,
+        program: DEFAULT_PROGRAM_ID,
+        project: 1,
+        search: store,
+      });
+
+      const storeResults = storeResp.data;
+      if (!Array.isArray(storeResults) || storeResults.length === 0) {
+        return res.json({ success: true, employees: [], message: 'No Kompass ISE visit found' });
+      }
+
+      const storeMatch = storeResults.find(s => String(s.store__number) === String(store));
+      if (!storeMatch) {
+        return res.json({ success: true, employees: [], message: 'No Kompass ISE visit found' });
+      }
+
+      const projectStoreId = storeMatch.id;
+
+      const fieldResp = await sasGet('/api/v1/operations/field-data/', {
+        customer_id: CUSTOMER_ID,
+        merchandiser: '',
+        page: 1,
+        page_size: 50,
+        program_id: DEFAULT_PROGRAM_ID,
+        project_id: 1,
+        project_store_id: projectStoreId,
+        scheduled_dt_from: date,
+        scheduled_dt_to: date,
+      });
+
+      const visits = Array.isArray(fieldResp.data) ? fieldResp.data : [];
+      if (visits.length === 0) {
+        return res.json({ success: true, employees: [], message: 'No Kompass ISE visit found' });
+      }
+
+      const kompassVisitId = visits[0].id;
+
+      // Step 2: Get employees from that visit
+      const shiftResp = await sasGet('/api/v1/team-scheduling/shifts/', {
+        page: 1,
+        page_size: 50,
+        visit: kompassVisitId,
+      });
+
+      const shifts = Array.isArray(shiftResp.data) ? shiftResp.data : [];
+      const employees = shifts
+        .filter(s => s.current_status !== 'deleted')
+        .map(s => ({
+          shiftId: s.id,
+          employeeId: s.employee?.id,
+          name: s.employee?.person?.person_name || s.employee?.person_name || '',
+          title: s.employee?.person?.person_title || '',
+          workdayId: s.employee?.workday_given_id,
+          isLead: s.is_lead,
+          status: s.current_status,
+          shiftStartTime: s.shift_start_time,
+          shiftEndTime: s.shift_end_time,
+          noShow: s.no_show,
+        }));
+
+      return res.json({ success: true, visitId: kompassVisitId, employees });
+    } catch (err) {
+      logger.error(`Kompass pool fetch failed for store ${store}: ${err.message}`);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Remove an employee from a shift
+  app.post('/sas-shift-remove', async (req, res) => {
+    const { shiftId } = req.body;
+
+    if (!shiftId) {
+      return res.status(400).json({ success: false, error: 'Missing required field: shiftId' });
+    }
+
+    if (!sasSession.alive) {
+      return res.status(503).json({ success: false, error: 'SAS session not active' });
+    }
+
+    try {
+      const resp = await sasPatch(`/api/v1/team-scheduling/shifts/${shiftId}/`, {
+        current_status: 'deleted',
+      });
+
+      return res.json({ success: true, message: resp.data?.message });
+    } catch (err) {
+      logger.error(`Shift remove failed for shiftId ${shiftId}: ${err.message}`);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Add an employee to a visit
+  app.post('/sas-shift-add', async (req, res) => {
+    const { visitId, employeeId } = req.body;
+
+    if (!visitId || !employeeId) {
+      return res.status(400).json({ success: false, error: 'Missing required fields: visitId, employeeId' });
+    }
+
+    if (!sasSession.alive) {
+      return res.status(503).json({ success: false, error: 'SAS session not active' });
+    }
+
+    try {
+      // Step 1: Fetch the target visit's details for cycle ID and shift times
+      const visitResp = await sasGet(`/api/v1/team-scheduling/visits/${visitId}/`);
+      const visitDetail = visitResp.data;
+
+      if (!visitDetail) {
+        return res.status(404).json({ success: false, error: 'Visit not found' });
+      }
+
+      const cycle = visitDetail.cycle;
+      const shiftStartTime = visitDetail.shift_start_time;
+      const shiftEndTime = visitDetail.shift_end_time;
+
+      // Step 2: POST the new shift assignment
+      const headers = getHeaders();
+      if (!headers) throw new Error('SAS session not active');
+
+      const body = {
+        visit: String(visitId),
+        employee: Number(employeeId),
+        cycle: Number(cycle),
+        shift_start_time: shiftStartTime,
+        shift_end_time: shiftEndTime,
+        current_status: 'active',
+        is_lead: 'false',
+        home_to_store: true,
+        store_to_store: true,
+        store_to_home: true,
+        calculate_mileage: true,
+        rate_type: {},
+        device_reimbursement: false,
+      };
+
+      const resp = await axios.post(
+        `${BASE_URL}/api/v1/team-scheduling/shifts/`,
+        body,
+        { headers, maxBodyLength: Infinity }
+      );
+
+      return res.json({
+        success: true,
+        shiftId: resp.data?.id,
+        employeeName: resp.data?.employee?.person_name,
+      });
+    } catch (err) {
+      logger.error(`Shift add failed for visit ${visitId}, employee ${employeeId}: ${err.message}`);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Session status check
   app.get('/sas-session/status', (req, res) => {
     res.json({
