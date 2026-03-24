@@ -3,6 +3,7 @@ const cors = require('cors');
 const { Resend } = require('resend');
 const { Pool } = require('pg');
 const sasBridge = require('./sas-bridge');
+const shiftManagement = require('./shift-management');
 
 const logger = {
   info: (...a) => console.log('[INFO]', ...a),
@@ -99,6 +100,9 @@ async function start() {
 
   // Initialize SAS bridge (session receiver, upload queue, worker)
   await sasBridge.init(app, pool);
+
+  // Initialize shift management endpoints
+  shiftManagement.registerRoutes(app, resend);
 
   app.post('/send-eod', async (req, res) => {
     const {
