@@ -885,4 +885,4 @@ async function init(app, pool) {
   logger.info('SAS bridge initialized. Waiting for session from morning-auth.');
 }
 
-module.exports = { init };
+module.exports = { init, getHeaders, sasGet, sasPatch, isSessionAlive: () => sasSession.alive };
