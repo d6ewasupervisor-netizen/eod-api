@@ -884,9 +884,77 @@ function registerRoutes(app, pool) {
     }
   });
 
-  // ─── TWO-WAY SYNC ENDPOINTS ──────────────────────────────────────────────
+  // ─── PER-SLOT PHOTO ENDPOINTS ─────────────────────────────────────────────
 
-  // GET /api/visit-photos — pull KOMPASS MAINTENANCE photos from PROD
+  // GET /api/visit-photos/:visitId/after-images — MAINTENANCE after slot images
+  app.get('/api/visit-photos/:visitId/after-images', async (req, res) => {
+    const { visitId } = req.params;
+
+    if (!sasSession.alive) {
+      return res.status(503).json({ success: false, error: 'SAS session not active' });
+    }
+
+    try {
+      const resp = await sasGet(`/api/v1/field-app/visits/${visitId}/category-resets/`);
+      const categoryResets = resp.data?.category_resets || [];
+
+      const maintenance = categoryResets.find(
+        r => r.name === 'KOMPASS MAINTENANCE' || r.number === 5555
+      );
+
+      if (!maintenance) {
+        return res.json({ categoryResetId: null, images: [] });
+      }
+
+      const images = (maintenance.state?.after?.images || []).map(img => ({
+        id: img.id,
+        url: img.url,
+        source: 'prod',
+      }));
+
+      return res.json({ categoryResetId: maintenance.id, images });
+    } catch (err) {
+      logger.error(`after-images fetch failed for visit ${visitId}: ${err.message}`);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // GET /api/visit-photos/:visitId/before-images — MAINTENANCE before slot images
+  app.get('/api/visit-photos/:visitId/before-images', async (req, res) => {
+    const { visitId } = req.params;
+
+    if (!sasSession.alive) {
+      return res.status(503).json({ success: false, error: 'SAS session not active' });
+    }
+
+    try {
+      const resp = await sasGet(`/api/v1/field-app/visits/${visitId}/category-resets/`);
+      const categoryResets = resp.data?.category_resets || [];
+
+      const maintenance = categoryResets.find(
+        r => r.name === 'KOMPASS MAINTENANCE' || r.number === 5555
+      );
+
+      if (!maintenance) {
+        return res.json({ categoryResetId: null, images: [] });
+      }
+
+      const images = (maintenance.state?.before?.images || []).map(img => ({
+        id: img.id,
+        url: img.url,
+        source: 'prod',
+      }));
+
+      return res.json({ categoryResetId: maintenance.id, images });
+    } catch (err) {
+      logger.error(`before-images fetch failed for visit ${visitId}: ${err.message}`);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ─── TWO-WAY SYNC ENDPOINTS (legacy — kept for backward compatibility) ────
+
+  // GET /api/visit-photos — pull KOMPASS MAINTENANCE photos from PROD (deprecated: use per-slot endpoints above)
   app.get('/api/visit-photos', async (req, res) => {
     const { visitId } = req.query;
 
