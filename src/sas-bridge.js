@@ -375,7 +375,24 @@ async function initQueue(pool) {
   `);
   // Add visit_id column for existing deployments
   await pool.query(`ALTER TABLE sas_upload_queue ADD COLUMN IF NOT EXISTS visit_id TEXT`);
-  logger.info('Upload queue table ready');
+
+  // Signoff photos table for two-way sync
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS signoff_photos (
+      id SERIAL PRIMARY KEY,
+      visit_id TEXT NOT NULL,
+      store_number TEXT,
+      date TEXT,
+      filename TEXT,
+      content_type TEXT DEFAULT 'image/jpeg',
+      photo_base64 TEXT NOT NULL,
+      uploaded_by TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_signoff_photos_visit ON signoff_photos (visit_id)`);
+
+  logger.info('Upload queue + signoff_photos tables ready');
 }
 
 async function enqueueUpload(pool, job) {
@@ -863,6 +880,174 @@ function registerRoutes(app, pool) {
       });
     } catch (err) {
       logger.error(`Shift add failed for visit ${visitId}, employee ${employeeId}: ${err.message}`);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ─── TWO-WAY SYNC ENDPOINTS ──────────────────────────────────────────────
+
+  // GET /api/visit-photos — pull KOMPASS MAINTENANCE photos from PROD
+  app.get('/api/visit-photos', async (req, res) => {
+    const { visitId } = req.query;
+
+    if (!visitId) {
+      return res.status(400).json({ success: false, error: 'Missing required query param: visitId' });
+    }
+
+    if (!sasSession.alive) {
+      return res.status(503).json({ success: false, error: 'SAS session not active' });
+    }
+
+    try {
+      const resp = await sasGet(`/api/v1/field-app/visits/${visitId}/category-resets/`);
+      const categoryResets = resp.data?.category_resets || [];
+
+      // Filter to KOMPASS MAINTENANCE (name or number 5555)
+      const maintenance = categoryResets.find(
+        r => r.name === 'KOMPASS MAINTENANCE' || r.number === 5555
+      );
+
+      const result = {
+        maintenance: null,
+        signoff: [],
+      };
+
+      if (maintenance) {
+        const beforeImages = (maintenance.state?.before?.images || []).map(img => ({
+          id: img.id,
+          url: img.url,
+          source: 'prod',
+        }));
+
+        const afterImages = (maintenance.state?.after?.images || []).map(img => ({
+          id: img.id,
+          url: img.url,
+          source: 'prod',
+        }));
+
+        result.maintenance = {
+          categoryResetId: maintenance.id,
+          before: beforeImages,
+          after: afterImages,
+        };
+      }
+
+      // Also fetch signoff photos from our DB
+      const { rows: signoffRows } = await pool.query(
+        `SELECT id, filename, uploaded_by, created_at FROM signoff_photos WHERE visit_id = $1 ORDER BY created_at ASC`,
+        [String(visitId)]
+      );
+
+      result.signoff = signoffRows.map(row => ({
+        id: `sig_${row.id}`,
+        url: `/api/signoff-photos/${row.id}/image`,
+        uploadedBy: row.uploaded_by || null,
+        uploadedAt: row.created_at,
+        source: 'prod',
+      }));
+
+      return res.json(result);
+    } catch (err) {
+      logger.error(`visit-photos fetch failed for visit ${visitId}: ${err.message}`);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // POST /api/signoff-photos — store signoff sheet photos
+  app.post('/api/signoff-photos', async (req, res) => {
+    const { visitId, storeNumber, date, photos, uploadedBy } = req.body;
+
+    if (!visitId || !Array.isArray(photos) || photos.length === 0) {
+      return res.status(400).json({ success: false, error: 'Missing required fields: visitId, photos (array)' });
+    }
+
+    try {
+      const savedPhotos = [];
+
+      for (const photo of photos) {
+        const { filename, dataUrl } = photo;
+
+        if (!dataUrl) continue;
+
+        // Extract content type and base64 data
+        const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/s);
+        const contentType = match ? match[1] : 'image/jpeg';
+        const base64Data = match ? match[2] : dataUrl;
+
+        const { rows } = await pool.query(
+          `INSERT INTO signoff_photos (visit_id, store_number, date, filename, content_type, photo_base64, uploaded_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id, created_at`,
+          [String(visitId), storeNumber || null, date || null, filename || null, contentType, base64Data, uploadedBy || null]
+        );
+
+        const row = rows[0];
+        savedPhotos.push({
+          id: `sig_${row.id}`,
+          url: `/api/signoff-photos/${row.id}/image`,
+          uploadedBy: uploadedBy || null,
+          uploadedAt: row.created_at,
+        });
+      }
+
+      logger.info(`Stored ${savedPhotos.length} signoff photo(s) for visit ${visitId}`);
+      return res.json({ success: true, photos: savedPhotos });
+    } catch (err) {
+      logger.error(`signoff-photos store failed: ${err.message}`);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // GET /api/signoff-photos — retrieve signoff photos for a visit
+  app.get('/api/signoff-photos', async (req, res) => {
+    const { visitId } = req.query;
+
+    if (!visitId) {
+      return res.status(400).json({ success: false, error: 'Missing required query param: visitId' });
+    }
+
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, filename, uploaded_by, created_at FROM signoff_photos WHERE visit_id = $1 ORDER BY created_at ASC`,
+        [String(visitId)]
+      );
+
+      const photos = rows.map(row => ({
+        id: `sig_${row.id}`,
+        url: `/api/signoff-photos/${row.id}/image`,
+        uploadedBy: row.uploaded_by || null,
+        uploadedAt: row.created_at,
+      }));
+
+      return res.json({ success: true, photos });
+    } catch (err) {
+      logger.error(`signoff-photos fetch failed: ${err.message}`);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // GET /api/signoff-photos/:photoId/image — serve a signoff photo as an image
+  app.get('/api/signoff-photos/:photoId/image', async (req, res) => {
+    const { photoId } = req.params;
+
+    try {
+      const { rows } = await pool.query(
+        `SELECT photo_base64, content_type FROM signoff_photos WHERE id = $1`,
+        [photoId]
+      );
+
+      if (!rows.length) {
+        return res.status(404).json({ success: false, error: 'Photo not found' });
+      }
+
+      const { photo_base64, content_type } = rows[0];
+      const buffer = Buffer.from(photo_base64, 'base64');
+
+      res.set('Content-Type', content_type || 'image/jpeg');
+      res.set('Cache-Control', 'public, max-age=86400');
+      return res.send(buffer);
+    } catch (err) {
+      logger.error(`signoff-photo image serve failed: ${err.message}`);
       return res.status(500).json({ success: false, error: err.message });
     }
   });
