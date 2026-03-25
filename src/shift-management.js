@@ -1,6 +1,7 @@
 /**
  * Shift Management Endpoints
- * - GET  /api/shifts              — find visits for a store/date via SAS cycles
+ * - GET  /api/shifts              — find visits for a store/date via operations/field-data
+ * - GET  /api/lead-info           — look up visit lead contact details by name
  * - GET  /api/shifts/:visitId/members — people assigned to a shift
  * - GET  /api/employees           — supervisor's direct reports (cached 1hr)
  * - POST /api/shifts/:visitId/add — add employees to a shift (immediate)
@@ -16,8 +17,9 @@ const { getHeaders, sasGet, sasPatch, isSessionAlive } = require('./sas-bridge')
 const BASE_URL = 'https://prod.sasretail.com';
 const SUPERVISOR_WORKDAY_ID = '800175315';
 const SUPERVISOR_EMAIL = 'tyson.gauthier@retailodyssey.com';
-const APP_BASE = 'https://eod-api-production.up.railway.app:8080';
-const PROJECT_IDS = [1, 1668];
+const APP_BASE = 'https://eod-api-production.up.railway.app';
+const CUSTOMER_ID = 2;
+const PROGRAM_ID = 1;
 const REQUEST_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const logger = {
@@ -157,7 +159,7 @@ function buildConfirmationEmail(request, results) {
 
 function registerRoutes(app, resend) {
 
-  // 1. GET /api/shifts — find visits for a store on a date
+  // 1. GET /api/shifts — find visits for a store on a date (operations-based)
   app.get('/api/shifts', async (req, res) => {
     const { store, date } = req.query;
     if (!store || !date) {
@@ -166,59 +168,117 @@ function registerRoutes(app, resend) {
     if (!checkSession(res)) return;
 
     try {
-      const allVisits = [];
+      // Step A: Resolve store number to account_store_id
+      const storeResp = await sasGet('/api/v1/projects/store-numbers/', {
+        customer: CUSTOMER_ID,
+        program: PROGRAM_ID,
+        search: store,
+        page: 1,
+        page_size: 8,
+      });
 
-      for (const projectId of PROJECT_IDS) {
-        try {
-          // Get active cycles for this project
-          const cycleResp = await sasGet('/api/v1/projects/project-cycles/', {
-            current_status: 'active',
-            project: projectId,
-            page_size: 10,
-            sort: 'start_date',
-          });
-
-          const cycles = Array.isArray(cycleResp.data) ? cycleResp.data : (cycleResp.data?.results || []);
-          if (cycles.length === 0) continue;
-
-          for (const cycle of cycles) {
-            try {
-              const visitResp = await sasGet('/api/v1/team-scheduling/visits/', {
-                cycle: cycle.id,
-                store_number: store,
-                page: 1,
-                page_size: 50,
-              });
-
-              const visits = Array.isArray(visitResp.data) ? visitResp.data : (visitResp.data?.results || []);
-
-              for (const v of visits) {
-                if (v.scheduled_date !== date) continue;
-                allVisits.push({
-                  visitId: v.id,
-                  cycleId: cycle.id,
-                  projectName: cycle.project_name || v.project_name || `Project ${projectId}`,
-                  teamName: v.team_name || v.team?.name || '',
-                  storeNumber: Number(store),
-                  scheduledDate: v.scheduled_date,
-                  shiftStartTime: v.shift_start_time || '',
-                  shiftEndTime: v.shift_end_time || '',
-                  totalEmployees: v.total_employees || v.employee_count || 0,
-                  status: v.current_status || 'active',
-                });
-              }
-            } catch (err) {
-              logger.error(`Visit search failed for cycle ${cycle.id}: ${err.message}`);
-            }
-          }
-        } catch (err) {
-          logger.error(`Cycle fetch failed for project ${projectId}: ${err.message}`);
-        }
+      const storeResults = Array.isArray(storeResp.data) ? storeResp.data : (storeResp.data?.results || []);
+      const exactMatch = storeResults.find(s => String(s.store__number) === String(store));
+      if (!exactMatch) {
+        return res.status(404).json({ error: `Store number ${store} not found` });
       }
 
-      return res.json(allVisits);
+      const accountStoreId = exactMatch.store__id;
+
+      // Step B: Get shifts via operations/field-data
+      const fieldResp = await sasGet('/api/v1/operations/field-data/', {
+        account_store_id: accountStoreId,
+        customer_id: CUSTOMER_ID,
+        program_id: PROGRAM_ID,
+        scheduled_dt_from: date,
+        scheduled_dt_to: date,
+        page: 1,
+        page_size: 20,
+        merchandiser: '',
+        supervisor_id: '',
+      });
+
+      const visits = Array.isArray(fieldResp.data) ? fieldResp.data : (fieldResp.data?.results || []);
+
+      const mapped = visits.map(v => {
+        const projectName = v.project?.name || v.project_name || '';
+        let kompassType;
+        if (projectName.includes('Cut In')) {
+          kompassType = 'Cut In Kompass ISE';
+        } else if (projectName.includes('Kompass ISE')) {
+          kompassType = 'Kompass ISE';
+        } else {
+          kompassType = projectName;
+        }
+
+        // Find the lead employee
+        const shifts = v.shifts || v.shift_set || [];
+        const leadShift = shifts.find(s => s.is_lead);
+        const leadName = leadShift?.employee?.person?.person_name
+          || leadShift?.employee?.person_name
+          || '';
+
+        // Count no-shows
+        const noShowCount = shifts.filter(s =>
+          s.current_status === 'no-show' || s.current_status === 'no_show'
+        ).length;
+
+        return {
+          visitId: v.id,
+          cycleId: v.cycle_id || v.cycle || null,
+          projectName,
+          projectId: v.project?.id || v.project_id || null,
+          storeNumber: Number(store),
+          storeName: v.store?.name || v.store_name || '',
+          scheduledDate: v.scheduled_date || v.scheduled_dt || date,
+          totalHours: v.total_hours || v.scheduled_hours || 0,
+          currentStatus: v.current_status || 'active',
+          visitLead: leadName,
+          empCount: v.total_employees || v.employee_count || shifts.length || 0,
+          noShowCount,
+          dueBy: v.due_date || v.scheduled_date || date,
+          kompassType,
+        };
+      });
+
+      return res.json(mapped);
     } catch (err) {
       return handleSasError(res, err, 'GET /api/shifts');
+    }
+  });
+
+  // GET /api/lead-info — look up visit lead contact details
+  app.get('/api/lead-info', async (req, res) => {
+    const { name } = req.query;
+    if (!name) {
+      return res.status(400).json({ error: 'Missing required query param: name' });
+    }
+    if (!checkSession(res)) return;
+
+    try {
+      const resp = await sasGet('/api/v1/human-resources/workday-employees/', {
+        page: 1,
+        page_size: 5,
+        person_name: name,
+        sort: 'person__person_name',
+      });
+
+      const results = Array.isArray(resp.data) ? resp.data : (resp.data?.results || []);
+      if (results.length === 0) {
+        return res.status(404).json({ error: `No employee found matching "${name}"` });
+      }
+
+      const e = results[0];
+      return res.json({
+        employeeId: e.id,
+        legalName: e.person?.person_name || '',
+        preferredName: e.person?.preferred_name || '',
+        email: e.person?.email || '',
+        phone: e.person?.phone_number || '',
+        title: e.person?.person_title || '',
+      });
+    } catch (err) {
+      return handleSasError(res, err, 'GET /api/lead-info');
     }
   });
 
