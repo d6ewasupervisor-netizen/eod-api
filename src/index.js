@@ -102,7 +102,8 @@ async function start() {
   await sasBridge.init(app, pool);
 
   // Initialize shift management endpoints
-  shiftManagement.registerRoutes(app, resend);
+  await shiftManagement.initShiftRequestsTable(pool);
+  shiftManagement.registerRoutes(app, resend, pool);
 
   app.post('/send-eod', async (req, res) => {
     const {

@@ -27,10 +27,7 @@ const logger = {
   error: (...a) => console.error('[shift-mgmt]', ...a),
 };
 
-// ─── IN-MEMORY STORES ──────────────────────────────────────────────────────
-
-// Pending shift-removal requests: Map<requestId, request>
-const pendingRequests = new Map();
+// ─── CACHES ────────────────────────────────────────────────────────────────
 
 // Direct reports cache
 let directReportsCache = { data: null, fetchedAt: 0 };
@@ -92,15 +89,6 @@ async function getDirectReports() {
   return employees;
 }
 
-function expireOldRequests() {
-  const now = Date.now();
-  for (const [id, req] of pendingRequests) {
-    if (req.status === 'pending' && (now - req.createdAt) > REQUEST_EXPIRY_MS) {
-      req.status = 'expired';
-    }
-  }
-}
-
 // ─── EMAIL ──────────────────────────────────────────────────────────────────
 
 async function sendEmail(resend, { to, subject, html }) {
@@ -155,9 +143,30 @@ function buildConfirmationEmail(request, results) {
 </body></html>`;
 }
 
+// ─── DB INIT ────────────────────────────────────────────────────────────────
+
+async function initShiftRequestsTable(pool) {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shift_requests (
+      id TEXT PRIMARY KEY,
+      visit_id TEXT NOT NULL,
+      cycle_id TEXT,
+      store_number TEXT NOT NULL,
+      team_name TEXT,
+      date TEXT NOT NULL,
+      remove JSONB NOT NULL,
+      requested_by TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      results JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      processed_at TIMESTAMPTZ
+    )
+  `);
+}
+
 // ─── ROUTES ─────────────────────────────────────────────────────────────────
 
-function registerRoutes(app, resend) {
+function registerRoutes(app, resend, pool) {
 
   // 1. GET /api/shifts — find visits for a store on a date (operations-based)
   app.get('/api/shifts', async (req, res) => {
@@ -211,32 +220,20 @@ function registerRoutes(app, resend) {
           kompassType = projectName;
         }
 
-        // Find the lead employee
-        const shifts = v.shifts || v.shift_set || [];
-        const leadShift = shifts.find(s => s.is_lead);
-        const leadName = leadShift?.employee?.person?.person_name
-          || leadShift?.employee?.person_name
-          || '';
-
-        // Count no-shows
-        const noShowCount = shifts.filter(s =>
-          s.current_status === 'no-show' || s.current_status === 'no_show'
-        ).length;
-
         return {
           visitId: v.id,
-          cycleId: v.cycle_id || v.cycle || null,
+          cycleId: v.cycle_id || null,
           projectName,
-          projectId: v.project?.id || v.project_id || null,
+          projectId: v.project?.project_id || null,
           storeNumber: Number(store),
-          storeName: v.store?.name || v.store_name || '',
-          scheduledDate: v.scheduled_date || v.scheduled_dt || date,
-          totalHours: v.total_hours || v.scheduled_hours || 0,
+          storeName: v.store_name?.name || '',
+          scheduledDate: v.scheduled_date || date,
+          totalHours: v.total_hours || 0,
           currentStatus: v.current_status || 'active',
-          visitLead: leadName,
-          empCount: v.total_employees || v.employee_count || shifts.length || 0,
-          noShowCount,
-          dueBy: v.due_date || v.scheduled_date || date,
+          visitLead: v.visit_lead || '',
+          empCount: v.emp_count || 0,
+          noShowCount: v.no_show_count || 0,
+          dueBy: v.due_by || v.scheduled_date || date,
           kompassType,
         };
       });
@@ -408,23 +405,20 @@ function registerRoutes(app, resend) {
       return res.status(400).json({ error: 'Missing required fields: visitId, storeNumber, date, remove, requestedBy' });
     }
 
-    expireOldRequests();
-
     const requestId = crypto.randomUUID();
-    const request = {
-      requestId,
-      visitId,
-      cycleId,
-      storeNumber,
-      teamName,
-      date,
-      remove,
-      requestedBy,
-      status: 'pending',
-      createdAt: Date.now(),
-    };
 
-    pendingRequests.set(requestId, request);
+    try {
+      await pool.query(
+        `INSERT INTO shift_requests (id, visit_id, cycle_id, store_number, team_name, date, remove, requested_by, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')`,
+        [requestId, String(visitId), cycleId || null, String(storeNumber), teamName || null, date, JSON.stringify(remove), requestedBy]
+      );
+    } catch (err) {
+      logger.error(`Failed to persist shift request: ${err.message}`);
+      return res.status(500).json({ error: 'Failed to create shift request' });
+    }
+
+    const request = { requestId, storeNumber, teamName, date, remove, requestedBy };
 
     // Send approval email
     try {
@@ -435,7 +429,6 @@ function registerRoutes(app, resend) {
       });
     } catch (err) {
       logger.error(`Failed to send approval email: ${err.message}`);
-      // Still return the request ID — the supervisor can be notified another way
     }
 
     return res.json({ requestId, status: 'pending' });
@@ -444,12 +437,24 @@ function registerRoutes(app, resend) {
   // 6. GET /api/shift-request/:requestId/approve — execute removals
   app.get('/api/shift-request/:requestId/approve', async (req, res) => {
     const { requestId } = req.params;
-    expireOldRequests();
 
-    const request = pendingRequests.get(requestId);
-    if (!request) {
-      return res.status(404).send('<html><body style="font-family:sans-serif;padding:40px;"><h1>Not Found</h1><p>Request not found.</p></body></html>');
+    let request;
+    try {
+      const { rows } = await pool.query('SELECT * FROM shift_requests WHERE id = $1', [requestId]);
+      if (!rows.length) {
+        return res.status(404).send('<html><body style="font-family:sans-serif;padding:40px;"><h1>Not Found</h1><p>Request not found.</p></body></html>');
+      }
+      request = rows[0];
+    } catch (err) {
+      return res.status(500).send('<html><body style="font-family:sans-serif;padding:40px;"><h1>Error</h1><p>Database error.</p></body></html>');
     }
+
+    // Expire if older than 24h
+    if (request.status === 'pending' && (Date.now() - new Date(request.created_at).getTime()) > REQUEST_EXPIRY_MS) {
+      await pool.query("UPDATE shift_requests SET status = 'expired', processed_at = NOW() WHERE id = $1", [requestId]);
+      request.status = 'expired';
+    }
+
     if (request.status !== 'pending') {
       return res.send(`<html><body style="font-family:sans-serif;padding:40px;"><h1>Already Processed</h1><p>This request has already been ${request.status}. No further action needed.</p></body></html>`);
     }
@@ -458,8 +463,9 @@ function registerRoutes(app, resend) {
       return res.status(503).send('<html><body style="font-family:sans-serif;padding:40px;"><h1>SAS Session Inactive</h1><p>Cannot process removals — SAS session is not active. Please try again later or contact the team.</p></body></html>');
     }
 
+    const removeList = request.remove;
     const results = [];
-    for (const person of request.remove) {
+    for (const person of removeList) {
       try {
         await sasPatch(`/api/v1/team-scheduling/shifts/${person.shiftId}/`, {
           current_status: 'deleted',
@@ -471,15 +477,21 @@ function registerRoutes(app, resend) {
       }
     }
 
-    request.status = 'approved';
-    request.results = results;
+    await pool.query(
+      "UPDATE shift_requests SET status = 'approved', results = $1, processed_at = NOW() WHERE id = $2",
+      [JSON.stringify(results), requestId]
+    );
 
     // Send confirmation email
     try {
       await sendEmail(resend, {
         to: SUPERVISOR_EMAIL,
-        subject: `Shift Removal Completed — Store #${request.storeNumber} ${request.date}`,
-        html: buildConfirmationEmail(request, results),
+        subject: `Shift Removal Completed — Store #${request.store_number} ${request.date}`,
+        html: buildConfirmationEmail({
+          storeNumber: request.store_number,
+          date: request.date,
+          requestedBy: request.requested_by,
+        }, results),
       });
     } catch (err) {
       logger.error(`Failed to send confirmation email: ${err.message}`);
@@ -488,32 +500,78 @@ function registerRoutes(app, resend) {
     const names = results.filter(r => r.success).map(r => r.name).join(', ');
     res.send(`<html><body style="font-family:sans-serif;padding:40px;">
 <h1>✅ Approved</h1>
-<p>Shift removals for Store #${request.storeNumber} on ${request.date} have been applied.</p>
+<p>Shift removals for Store #${request.store_number} on ${request.date} have been applied.</p>
 <p>Removed: ${names || 'None (all failed)'}</p>
-<p>Requested by: ${request.requestedBy}</p>
+<p>Requested by: ${request.requested_by}</p>
 </body></html>`);
   });
 
   // 7. GET /api/shift-request/:requestId/deny — deny removal
   app.get('/api/shift-request/:requestId/deny', async (req, res) => {
     const { requestId } = req.params;
-    expireOldRequests();
 
-    const request = pendingRequests.get(requestId);
-    if (!request) {
-      return res.status(404).send('<html><body style="font-family:sans-serif;padding:40px;"><h1>Not Found</h1><p>Request not found.</p></body></html>');
+    let request;
+    try {
+      const { rows } = await pool.query('SELECT * FROM shift_requests WHERE id = $1', [requestId]);
+      if (!rows.length) {
+        return res.status(404).send('<html><body style="font-family:sans-serif;padding:40px;"><h1>Not Found</h1><p>Request not found.</p></body></html>');
+      }
+      request = rows[0];
+    } catch (err) {
+      return res.status(500).send('<html><body style="font-family:sans-serif;padding:40px;"><h1>Error</h1><p>Database error.</p></body></html>');
     }
+
+    // Expire if older than 24h
+    if (request.status === 'pending' && (Date.now() - new Date(request.created_at).getTime()) > REQUEST_EXPIRY_MS) {
+      await pool.query("UPDATE shift_requests SET status = 'expired', processed_at = NOW() WHERE id = $1", [requestId]);
+      request.status = 'expired';
+    }
+
     if (request.status !== 'pending') {
       return res.send(`<html><body style="font-family:sans-serif;padding:40px;"><h1>Already Processed</h1><p>This request has already been ${request.status}. No further action needed.</p></body></html>`);
     }
 
-    request.status = 'denied';
+    await pool.query(
+      "UPDATE shift_requests SET status = 'denied', processed_at = NOW() WHERE id = $1",
+      [requestId]
+    );
 
     res.send(`<html><body style="font-family:sans-serif;padding:40px;">
 <h1>❌ Denied</h1>
-<p>Removal request for Store #${request.storeNumber} on ${request.date} has been denied. No changes were made.</p>
+<p>Removal request for Store #${request.store_number} on ${request.date} has been denied. No changes were made.</p>
 </body></html>`);
+  });
+
+  // 8. GET /api/shift-request/:requestId/status — poll for resolution
+  app.get('/api/shift-request/:requestId/status', async (req, res) => {
+    const { requestId } = req.params;
+
+    try {
+      const { rows } = await pool.query('SELECT id, status, results FROM shift_requests WHERE id = $1', [requestId]);
+      if (!rows.length) {
+        return res.status(404).json({ error: 'Request not found' });
+      }
+
+      const row = rows[0];
+
+      // Expire if older than 24h
+      if (row.status === 'pending') {
+        const { rows: fullRows } = await pool.query('SELECT created_at FROM shift_requests WHERE id = $1', [requestId]);
+        if ((Date.now() - new Date(fullRows[0].created_at).getTime()) > REQUEST_EXPIRY_MS) {
+          await pool.query("UPDATE shift_requests SET status = 'expired', processed_at = NOW() WHERE id = $1", [requestId]);
+          row.status = 'expired';
+        }
+      }
+
+      return res.json({
+        requestId: row.id,
+        status: row.status,
+        results: row.results || [],
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   });
 }
 
-module.exports = { registerRoutes };
+module.exports = { registerRoutes, initShiftRequestsTable };
