@@ -1,10 +1,12 @@
 const express = require('express');
 const cors = require('cors');
+const cron = require('node-cron');
 const { Resend } = require('resend');
 const { Pool } = require('pg');
 const { requireAuth } = require('./auth-middleware');
 const sasBridge = require('./sas-bridge');
 const shiftManagement = require('./shift-management');
+const { runFullSync } = require('./sas-sync');
 
 const logger = {
   info: (...a) => console.log('[INFO]', ...a),
@@ -22,6 +24,65 @@ async function initDb() {
       store_number TEXT PRIMARY KEY,
       manager_names JSONB DEFAULT '[]',
       recipient_emails JSONB DEFAULT '[]'
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS employees (
+      id SERIAL PRIMARY KEY,
+      sas_employee_id INTEGER UNIQUE NOT NULL,
+      workday_id TEXT,
+      name TEXT NOT NULL,
+      preferred_name TEXT,
+      title TEXT,
+      phone TEXT,
+      email TEXT,
+      supervisor_id TEXT,
+      supervisor_name TEXT,
+      department_code TEXT,
+      employee_type TEXT,
+      date_of_hire DATE,
+      termination_date DATE,
+      synced_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS schedules (
+      id SERIAL PRIMARY KEY,
+      visit_id INTEGER NOT NULL,
+      visit_id_full TEXT,
+      cycle_id INTEGER,
+      store_number INTEGER,
+      store_name TEXT,
+      project_name TEXT,
+      project_id INTEGER,
+      scheduled_date DATE NOT NULL,
+      shift_start_time TEXT,
+      shift_end_time TEXT,
+      total_hours TEXT,
+      current_status TEXT,
+      visit_lead TEXT,
+      supervisor TEXT,
+      emp_count INTEGER DEFAULT 0,
+      no_show_count INTEGER DEFAULT 0,
+      due_by DATE,
+      synced_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(visit_id, scheduled_date)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stores (
+      id SERIAL PRIMARY KEY,
+      store_number INTEGER UNIQUE NOT NULL,
+      name TEXT,
+      phone TEXT,
+      address TEXT,
+      city TEXT,
+      state TEXT,
+      postal_code TEXT,
+      synced_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
 }
@@ -100,7 +161,6 @@ async function start() {
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // ─── GLOBAL AUTH GATE ───────────────────────────────────────────────────────
-  // Routes that bypass user auth (bot endpoints, email approval links, image serving)
   const PUBLIC_PATHS = [
     '/sas-session',
     '/sas-session/status',
@@ -124,6 +184,36 @@ async function start() {
   // Initialize shift management endpoints
   await shiftManagement.initShiftRequestsTable(pool);
   shiftManagement.registerRoutes(app, resend, pool);
+
+  // ─── SYNC ROUTES ───────────────────────────────────────────────────────────
+  app.post('/api/sync/run', async (req, res) => {
+    if (req.user.role !== 'supervisor' && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Supervisor or admin role required' });
+    }
+
+    try {
+      const result = await runFullSync(pool);
+      return res.json(result);
+    } catch (err) {
+      logger.error('Manual sync failed:', err.message);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ─── 2AM CRON ──────────────────────────────────────────────────────────────
+  cron.schedule('0 2 * * *', async () => {
+    logger.info('2am cron triggered — starting sync...');
+    try {
+      const result = await runFullSync(pool);
+      logger.info('2am sync result:', JSON.stringify(result));
+    } catch (err) {
+      logger.error('2am sync failed:', err.message);
+    }
+  }, {
+    timezone: 'America/Los_Angeles',
+  });
+
+  logger.info('2am sync cron scheduled (America/Los_Angeles)');
 
   app.post('/send-eod', async (req, res) => {
     const {
