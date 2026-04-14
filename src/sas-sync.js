@@ -35,7 +35,6 @@ async function syncEmployees(pool) {
     person_title: SUPERVISOR_TITLE_ID,
     sort: 'person__person_name',
     supervisor_id: '',
-    radius: '? number:NaN ?',
   });
 
   const divisionSupervisors = allSupervisors.filter(
@@ -65,7 +64,6 @@ async function syncEmployees(pool) {
       const reports = await paginateAll('/api/v1/human-resources/workday-employees/', {
         supervisor_id: supWorkdayId,
         sort: 'person__person_name',
-        radius: '? number:NaN ?',
       });
 
       for (const emp of reports) {
