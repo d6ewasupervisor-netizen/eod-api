@@ -4,6 +4,14 @@ const CUSTOMER_ID = 2;
 const DIVISION_DEPT_CODE = '200250';
 const SUPERVISOR_TITLE_ID = 60916;
 
+// Root manager/director workday IDs — people above supervisors whose full trees we need
+const ROOT_MANAGER_IDS = [
+  '800241993',  // Joshua Parker
+  '800249884',  // Andrew Mascott
+  '800263453',  // Seth Newman
+  '800166436',  // Kevin Gingrasso
+];
+
 const logger = {
   info: (...a) => console.log('[sas-sync]', ...a),
   error: (...a) => console.error('[sas-sync]', ...a),
@@ -27,10 +35,53 @@ async function paginateAll(urlPath, params, pageSize = 50) {
 
 // ─── EMPLOYEE SYNC ────────────────────────────────────────────────────────────
 
+// Titles that indicate someone may have direct reports worth pulling
+const MANAGER_TITLES = [
+  'Supervisor Retail',
+  'Manager Retail Operations',
+  'Manager Retail Accounts E',
+  'Program Manager Field',
+];
+
+async function fetchReportsRecursive(workdayId, name, seenIds, allEmployees, depth = 0) {
+  if (depth > 3) return; // safety limit
+
+  try {
+    const reports = await paginateAll('/api/v1/human-resources/workday-employees/', {
+      supervisor_id: workdayId,
+      sort: 'person__person_name',
+    });
+
+    let added = 0;
+    for (const emp of reports) {
+      if (!seenIds.has(emp.id)) {
+        seenIds.add(emp.id);
+        allEmployees.push(emp);
+        added++;
+
+        // If this person has a manager/supervisor title, recurse to get their reports
+        const title = emp.person?.person_title || '';
+        if (MANAGER_TITLES.includes(title) && emp.workday_given_id) {
+          await fetchReportsRecursive(emp.workday_given_id, emp.person?.person_name || '', seenIds, allEmployees, depth + 1);
+        }
+      }
+    }
+
+    const indent = '  '.repeat(depth + 1);
+    logger.info(`${indent}${name || workdayId}: ${reports.length} reports (${added} new)`);
+  } catch (err) {
+    logger.error(`  Failed to fetch reports for ${workdayId}: ${err.message}`);
+  }
+}
+
 async function syncEmployees(pool) {
   logger.info('Starting employee sync...');
 
-  // Step 1: Get all "Supervisor Retail" employees, filter to our division
+  const allEmployees = [];
+  const seenIds = new Set();
+
+  // ── Phase 1: Division supervisors (original approach) ───────────────
+  logger.info('Phase 1: Pulling division supervisors (title filter)...');
   const allSupervisors = await paginateAll('/api/v1/human-resources/workday-employees/', {
     person_title: SUPERVISOR_TITLE_ID,
     sort: 'person__person_name',
@@ -43,11 +94,7 @@ async function syncEmployees(pool) {
 
   logger.info(`Found ${divisionSupervisors.length} supervisors in division ${DIVISION_DEPT_CODE}`);
 
-  // Collect all employees (supervisors + their direct reports)
-  const allEmployees = [];
-  const seenIds = new Set();
-
-  // Add the supervisors themselves
+  // Add supervisors themselves and pull their reports
   for (const sup of divisionSupervisors) {
     if (!seenIds.has(sup.id)) {
       seenIds.add(sup.id);
@@ -55,33 +102,42 @@ async function syncEmployees(pool) {
     }
   }
 
-  // Step 2: For each supervisor, pull their direct reports
   for (const sup of divisionSupervisors) {
     const supWorkdayId = sup.workday_given_id;
     if (!supWorkdayId) continue;
+    await fetchReportsRecursive(supWorkdayId, sup.person?.person_name || '', seenIds, allEmployees);
+  }
 
+  // ── Phase 2: Root managers and their full trees ─────────────────────
+  logger.info('Phase 2: Pulling root manager trees...');
+
+  for (const managerId of ROOT_MANAGER_IDS) {
+    // First, try to fetch the manager themselves
     try {
-      const reports = await paginateAll('/api/v1/human-resources/workday-employees/', {
-        supervisor_id: supWorkdayId,
+      const managerResults = await paginateAll('/api/v1/human-resources/workday-employees/', {
         sort: 'person__person_name',
+        supervisor_id: '',
+        workday_given_id: managerId,
       });
 
-      for (const emp of reports) {
-        if (!seenIds.has(emp.id)) {
-          seenIds.add(emp.id);
-          allEmployees.push(emp);
+      // If direct lookup doesn't work, the manager will be found as a report of someone else
+      // Either way, pull their tree
+      for (const mgr of managerResults) {
+        if (mgr.workday_given_id === managerId && !seenIds.has(mgr.id)) {
+          seenIds.add(mgr.id);
+          allEmployees.push(mgr);
         }
       }
-
-      logger.info(`  ${sup.person?.person_name || supWorkdayId}: ${reports.length} reports`);
-    } catch (err) {
-      logger.error(`  Failed to fetch reports for ${supWorkdayId}: ${err.message}`);
+    } catch {
+      // Not critical — we still pull their reports below
     }
+
+    await fetchReportsRecursive(managerId, `Root manager ${managerId}`, seenIds, allEmployees);
   }
 
   logger.info(`Total unique employees: ${allEmployees.length}`);
 
-  // Step 3: Upsert into Postgres
+  // ── Phase 3: Upsert into Postgres ───────────────────────────────────
   let upserted = 0;
   for (const emp of allEmployees) {
     try {
@@ -135,7 +191,6 @@ async function syncEmployees(pool) {
 async function syncSchedules(pool) {
   logger.info('Starting schedule sync...');
 
-  // Pull schedules for next 7 days
   const today = new Date();
   const endDate = new Date(today);
   endDate.setDate(endDate.getDate() + 7);
@@ -156,7 +211,6 @@ async function syncSchedules(pool) {
 
   logger.info(`Fetched ${allVisits.length} visits`);
 
-  // Upsert into Postgres
   let upserted = 0;
   for (const v of allVisits) {
     try {
@@ -218,7 +272,6 @@ async function syncSchedules(pool) {
 async function syncStores(pool) {
   logger.info('Starting store sync (from schedule data)...');
 
-  // Pull stores from existing schedule records
   const { rows } = await pool.query(`
     SELECT DISTINCT store_number, store_name
     FROM schedules
