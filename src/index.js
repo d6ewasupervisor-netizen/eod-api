@@ -164,6 +164,7 @@ async function start() {
   const PUBLIC_PATHS = [
     '/sas-session',
     '/sas-session/status',
+    '/api/auth-status',
   ];
 
   const PUBLIC_PREFIXES = [
@@ -214,6 +215,38 @@ async function start() {
   });
 
   logger.info('2am sync cron scheduled (America/Los_Angeles)');
+
+  // ─── Auth Status Notification ────────────────────────────────────────────────
+
+  app.post('/api/auth-status', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || authHeader !== `Bearer ${process.env.SAS_AUTH_SECRET}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { status, error, time } = req.body;
+    const subject = status === 'success'
+      ? `SAS Auth ✓ — ${new Date(time).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}`
+      : `SAS Auth FAILED — ${new Date(time).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}`;
+
+    const html = status === 'success'
+      ? `<p>Morning auth completed successfully at ${time}.</p><p>SAS session has been refreshed.</p>`
+      : `<p>Morning auth <strong>failed</strong> at ${time}.</p><p><strong>Error:</strong> ${error || 'Unknown'}</p><p>The SAS session was NOT refreshed. Manual intervention may be required.</p>`;
+
+    try {
+      await resend.emails.send({
+        from: 'EOD System <onboarding@resend.dev>',
+        to: 'tyson.gauthier@retailodyssey.com',
+        subject,
+        html,
+      });
+      console.log(`[auth-status] ${status} notification email sent`);
+      return res.json({ success: true, notified: true });
+    } catch (err) {
+      console.error(`[auth-status] Failed to send email: ${err.message}`);
+      return res.json({ success: true, notified: false, emailError: err.message });
+    }
+  });
 
   app.post('/send-eod', async (req, res) => {
     const {
