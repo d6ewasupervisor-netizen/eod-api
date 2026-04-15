@@ -328,19 +328,32 @@ function registerRoutes(app, resend, pool) {
   // 4. POST /api/shifts/:visitId/add — add employees (immediate, no approval)
   app.post('/api/shifts/:visitId/add', async (req, res) => {
     const { visitId } = req.params;
-    const { cycleId, shiftStartTime, shiftEndTime, employees, requestedBy } = req.body;
+    const { employees, requestedBy } = req.body;
 
-    if (!cycleId || !shiftStartTime || !shiftEndTime || !Array.isArray(employees) || employees.length === 0) {
-      return res.status(400).json({ error: 'Missing required fields: cycleId, shiftStartTime, shiftEndTime, employees' });
+    if (!Array.isArray(employees) || employees.length === 0) {
+      return res.status(400).json({ error: 'Missing required field: employees' });
     }
     if (!checkSession(res)) return;
 
     try {
-      // Validate visit is not completed
+      // Fetch visit detail to get cycleId, shiftStartTime, shiftEndTime
       const visitResp = await sasGet(`/api/v1/team-scheduling/visits/${visitId}/`);
-      const visitStatus = visitResp.data?.current_status;
-      if (visitStatus === 'completed') {
+      const visitDetail = visitResp.data;
+
+      if (!visitDetail) {
+        return res.status(404).json({ error: 'Visit not found' });
+      }
+
+      if (visitDetail.current_status === 'completed') {
         return res.status(400).json({ error: 'Cannot modify a completed shift' });
+      }
+
+      const cycleId = visitDetail.cycle;
+      const shiftStartTime = visitDetail.shift_start_time;
+      const shiftEndTime = visitDetail.shift_end_time;
+
+      if (!cycleId || !shiftStartTime || !shiftEndTime) {
+        return res.status(400).json({ error: 'Visit is missing cycle or shift time data' });
       }
 
       // Validate all employees are direct reports
