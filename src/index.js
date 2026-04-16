@@ -166,15 +166,16 @@ async function start() {
     '/sas-session/status',
     '/api/auth-status',
   ];
-
   const PUBLIC_PREFIXES = [
     '/api/shift-request/',
-    '/api/signoff-photos/',
   ];
-
+  const PUBLIC_REGEXES = [
+    /^\/api\/signoff-photos\/[^\/]+\/image\/?$/,
+  ];
   app.use((req, res, next) => {
     if (PUBLIC_PATHS.includes(req.path)) return next();
     if (PUBLIC_PREFIXES.some(p => req.path.startsWith(p))) return next();
+    if (PUBLIC_REGEXES.some(r => r.test(req.path))) return next();
     return requireAuth(req, res, next);
   });
 
