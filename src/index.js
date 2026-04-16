@@ -169,7 +169,6 @@ async function start() {
 
   const PUBLIC_PREFIXES = [
     '/api/shift-request/',
-    '/sas-shift-request/',
     '/api/signoff-photos/',
   ];
 

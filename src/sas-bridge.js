@@ -8,8 +8,6 @@
 
 const axios = require('axios');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
-
 const BASE_URL = 'https://prod.sasretail.com';
 const SUPERVISOR_WORKDAY_ID = '800175315';
 const SUPERVISOR_EMAIL = 'tyson.gauthier@retailodyssey.com';
@@ -25,34 +23,10 @@ const logger = {
   error: (...a) => console.error('[sas-bridge]', ...a),
 };
 
-// ─── NODEMAILER SETUP ─────────────────────────────────────────────────────────
-
-const mailTransporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
-
 // ─── EMPLOYEE CACHE ──────────────────────────────────────────────────────────
 
 let employeeCache = { data: null, fetchedAt: 0 };
 const EMPLOYEE_CACHE_TTL = 60 * 60 * 1000; // 1 hour
-
-// ─── PENDING REMOVAL REQUESTS (in-memory) ────────────────────────────────────
-
-const pendingRequests = new Map();
-
-// Auto-expire requests older than 24 hours (runs every hour)
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, req] of pendingRequests) {
-    if (now - req.createdAt > 24 * 60 * 60 * 1000) {
-      pendingRequests.delete(id);
-    }
-  }
-}, 60 * 60 * 1000);
 
 // ─── IN-MEMORY SESSION ────────────────────────────────────────────────────────
 
@@ -980,176 +954,6 @@ function registerRoutes(app, pool) {
       logger.error(`Shift add failed for visit ${visitId}, employee ${employeeId}: ${err.message}`);
       return res.status(500).json({ success: false, error: err.message });
     }
-  });
-
-  // ─── POST /sas-shift-request — queue removal, send approval email ──────────
-
-  app.post('/sas-shift-request', async (req, res) => {
-    const { visitId, storeNumber, teamName, date, remove, requestedBy } = req.body;
-
-    if (!visitId || !Array.isArray(remove) || remove.length === 0 || !requestedBy) {
-      return res.status(400).json({ success: false, error: 'Missing required fields: visitId, remove, requestedBy' });
-    }
-
-    const requestId = crypto.randomUUID();
-    const request = { ...req.body, requestId, status: 'pending', createdAt: Date.now() };
-    pendingRequests.set(requestId, request);
-
-    // Send notification email
-    const removeList = remove.map(r => `<li style="color: #e74c3c; font-size: 16px;">${r.name}</li>`).join('');
-    const emailHtml = `<div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-  <h2 style="color: #e74c3c;">Shift Removal Request</h2>
-  <p><strong>Store:</strong> #${storeNumber} — ${teamName || ''}</p>
-  <p><strong>Date:</strong> ${date}</p>
-  <p><strong>Requested by:</strong> ${requestedBy}</p>
-  <h3>Remove:</h3>
-  <ul>${removeList}</ul>
-  <br/>
-  <p>
-    <a href="https://eod-api-production.up.railway.app:8080/sas-shift-request/${requestId}/approve"
-       style="display: inline-block; padding: 14px 28px; background: #27ae60; color: white; text-decoration: none; border-radius: 6px; font-size: 18px; font-weight: bold; margin-right: 12px;">
-      ✅ APPROVE
-    </a>
-    <a href="https://eod-api-production.up.railway.app:8080/sas-shift-request/${requestId}/deny"
-       style="display: inline-block; padding: 14px 28px; background: #e74c3c; color: white; text-decoration: none; border-radius: 6px; font-size: 18px; font-weight: bold;">
-      ❌ DENY
-    </a>
-  </p>
-</div>`;
-
-    try {
-      await mailTransporter.sendMail({
-        from: process.env.GMAIL_USER,
-        to: SUPERVISOR_EMAIL,
-        subject: `Shift Removal Request — Store #${storeNumber} ${date}`,
-        html: emailHtml,
-      });
-    } catch (err) {
-      logger.error(`Failed to send approval email: ${err.message}`);
-    }
-
-    return res.json({ success: true, requestId, status: 'pending' });
-  });
-
-  // ─── GET /sas-shift-request/:requestId/approve — execute removals ─────────
-
-  app.get('/sas-shift-request/:requestId/approve', async (req, res) => {
-    const { requestId } = req.params;
-    const request = pendingRequests.get(requestId);
-
-    if (!request) {
-      return res.send(`<!DOCTYPE html>
-<html><head><title>Not Found</title>
-<style>body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #1a1a2e; color: #e0e0e0; } h1 { color: #f87171; }</style>
-</head><body><h1>Not Found</h1><p>Request not found or expired.</p></body></html>`);
-    }
-
-    if (request.status !== 'pending') {
-      return res.send(`<!DOCTYPE html>
-<html><head><title>Already Processed</title>
-<style>body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #1a1a2e; color: #e0e0e0; } h1 { color: #f87171; }</style>
-</head><body><h1>Already Processed</h1><p>This request has already been ${request.status}.</p></body></html>`);
-    }
-
-    const results = [];
-    for (const person of request.remove) {
-      try {
-        await sasPatch(`/api/v1/team-scheduling/shifts/${person.shiftId}/`, {
-          current_status: 'deleted',
-        });
-        results.push({ name: person.name, success: true });
-      } catch (err) {
-        const errMsg = err.response?.data?.message || err.message;
-        results.push({ name: person.name, success: false, error: errMsg });
-      }
-    }
-
-    // Only mark as approved if at least one removal succeeded
-    const anySuccess = results.some(r => r.success);
-    if (anySuccess) {
-      request.status = 'approved';
-    }
-
-    // Send confirmation email
-    const confirmList = results.map(r =>
-      `<li>${r.name}: ${r.success ? '<span style="color:green;">Removed</span>' : `<span style="color:red;">Failed — ${r.error}</span>`}</li>`
-    ).join('');
-    try {
-      await mailTransporter.sendMail({
-        from: process.env.GMAIL_USER,
-        to: SUPERVISOR_EMAIL,
-        subject: `Shift Removals Applied — Store #${request.storeNumber} ${request.date}`,
-        html: `<div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-  <h2>Shift Removals Applied — Store #${request.storeNumber} ${request.date}</h2>
-  <p><strong>Requested by:</strong> ${request.requestedBy}</p>
-  <h3>Results:</h3>
-  <ul>${confirmList}</ul>
-</div>`,
-      });
-    } catch (err) {
-      logger.error(`Failed to send confirmation email: ${err.message}`);
-    }
-
-    const resultsList = results.map(r => `<li class="${r.success ? 'success' : 'fail'}">${r.name}: ${r.success ? 'Removed' : 'Failed — ' + r.error}</li>`).join('');
-
-    return res.send(`<!DOCTYPE html>
-<html>
-<head><title>Shift Removal Approved</title>
-<style>
-  body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #1a1a2e; color: #e0e0e0; }
-  h1 { color: #4ade80; }
-  .name { font-weight: bold; }
-  .success { color: #4ade80; }
-  .fail { color: #f87171; }
-</style>
-</head>
-<body>
-  <h1>✅ Approved</h1>
-  <p>Shift removals for Store #${request.storeNumber} on ${request.date} have been applied.</p>
-  <p>Requested by: ${request.requestedBy}</p>
-  <h3>Results:</h3>
-  <ul>${resultsList}</ul>
-</body>
-</html>`);
-  });
-
-  // ─── GET /sas-shift-request/:requestId/deny — discard request ─────────────
-
-  app.get('/sas-shift-request/:requestId/deny', async (req, res) => {
-    const { requestId } = req.params;
-    const request = pendingRequests.get(requestId);
-
-    if (!request) {
-      return res.send(`<!DOCTYPE html>
-<html><head><title>Not Found</title>
-<style>body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #1a1a2e; color: #e0e0e0; } h1 { color: #f87171; }</style>
-</head><body><h1>Not Found</h1><p>Request not found or expired.</p></body></html>`);
-    }
-
-    if (request.status !== 'pending') {
-      return res.send(`<!DOCTYPE html>
-<html><head><title>Already Processed</title>
-<style>body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #1a1a2e; color: #e0e0e0; } h1 { color: #f87171; }</style>
-</head><body><h1>Already Processed</h1><p>This request has already been ${request.status}.</p></body></html>`);
-    }
-
-    request.status = 'denied';
-
-    return res.send(`<!DOCTYPE html>
-<html>
-<head><title>Shift Removal Denied</title>
-<style>
-  body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #1a1a2e; color: #e0e0e0; }
-  h1 { color: #f87171; }
-</style>
-</head>
-<body>
-  <h1>❌ Denied</h1>
-  <p>Removal request for Store #${request.storeNumber} on ${request.date} has been denied.</p>
-  <p>No changes were made.</p>
-  <p>Requested by: ${request.requestedBy}</p>
-</body>
-</html>`);
   });
 
   // ─── PER-SLOT PHOTO ENDPOINTS ─────────────────────────────────────────────
