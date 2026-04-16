@@ -13,6 +13,7 @@
 const crypto = require('crypto');
 const axios = require('axios');
 const { getHeaders, sasGet, sasPatch, isSessionAlive } = require('./sas-bridge');
+const { requireRole } = require('./auth-middleware');
 
 const BASE_URL = 'https://prod.sasretail.com';
 const SUPERVISOR_WORKDAY_ID = '800175315';
@@ -314,7 +315,7 @@ function registerRoutes(app, resend, pool) {
   });
 
   // 3. GET /api/employees — supervisor's direct reports (cached 1hr)
-  app.get('/api/employees', async (req, res) => {
+  app.get('/api/employees', requireRole('lead', 'supervisor', 'admin', 'hr'), async (req, res) => {
     if (!checkSession(res)) return;
 
     try {
@@ -326,7 +327,7 @@ function registerRoutes(app, resend, pool) {
   });
 
   // 4. POST /api/shifts/:visitId/add — add employees (immediate, no approval)
-  app.post('/api/shifts/:visitId/add', async (req, res) => {
+  app.post('/api/shifts/:visitId/add', requireRole('lead', 'supervisor', 'admin'), async (req, res) => {
     const { visitId } = req.params;
     const { employees, requestedBy } = req.body;
 
@@ -411,7 +412,7 @@ function registerRoutes(app, resend, pool) {
   });
 
   // 5. POST /api/shift-request — removal request (requires approval)
-  app.post('/api/shift-request', async (req, res) => {
+  app.post('/api/shift-request', requireRole('lead', 'supervisor', 'admin'), async (req, res) => {
     const { visitId, cycleId, storeNumber, teamName, date, remove, requestedBy } = req.body;
 
     if (!visitId || !storeNumber || !date || !Array.isArray(remove) || remove.length === 0 || !requestedBy) {

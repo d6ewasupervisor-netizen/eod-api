@@ -3,7 +3,7 @@ const cors = require('cors');
 const cron = require('node-cron');
 const { Resend } = require('resend');
 const { Pool } = require('pg');
-const { requireAuth } = require('./auth-middleware');
+const { requireAuth, requireRole } = require('./auth-middleware');
 const sasBridge = require('./sas-bridge');
 const shiftManagement = require('./shift-management');
 const { runFullSync } = require('./sas-sync');
@@ -187,10 +187,7 @@ async function start() {
   shiftManagement.registerRoutes(app, resend, pool);
 
   // ─── SYNC ROUTES ───────────────────────────────────────────────────────────
-  app.post('/api/sync/run', async (req, res) => {
-    if (req.user.role !== 'supervisor' && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Supervisor or admin role required' });
-    }
+  app.post('/api/sync/run', requireRole('supervisor', 'admin'), async (req, res) => {
 
     try {
       const result = await runFullSync(pool);
@@ -250,7 +247,7 @@ async function start() {
 
   // ─── Trigger SAS Auth via GitHub Actions ─────────────────────────────────────
 
-  app.post('/api/trigger-auth', async (req, res) => {
+  app.post('/api/trigger-auth', requireRole('supervisor', 'admin'), async (req, res) => {
     const githubPat = process.env.GITHUB_PAT;
     if (!githubPat) {
       console.error('[trigger-auth] GITHUB_PAT not configured');
