@@ -248,6 +248,40 @@ async function start() {
     }
   });
 
+  // ─── Trigger SAS Auth via GitHub Actions ─────────────────────────────────────
+
+  app.post('/api/trigger-auth', async (req, res) => {
+    const githubPat = process.env.GITHUB_PAT;
+    if (!githubPat) {
+      console.error('[trigger-auth] GITHUB_PAT not configured');
+      return res.status(500).json({ error: 'Auth trigger not configured' });
+    }
+
+    try {
+      const resp = await fetch('https://api.github.com/repos/d6ewasupervisor-netizen/sas-auth/actions/workflows/daily-auth.yml/dispatches', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${githubPat}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ref: 'main' }),
+      });
+
+      if (resp.status === 204) {
+        console.log('[trigger-auth] GitHub Actions workflow triggered successfully');
+        return res.json({ success: true, message: 'Auth workflow triggered. Session will be active within ~60 seconds.' });
+      } else {
+        const body = await resp.text();
+        console.error(`[trigger-auth] GitHub API returned ${resp.status}: ${body}`);
+        return res.status(resp.status).json({ error: `GitHub API error: ${resp.status}`, details: body });
+      }
+    } catch (err) {
+      console.error('[trigger-auth] Failed to trigger workflow:', err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post('/send-eod', async (req, res) => {
     const {
       storeNumber,
