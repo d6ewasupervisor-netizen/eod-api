@@ -235,7 +235,7 @@ async function start() {
 
     try {
       await resend.emails.send({
-        from: 'EOD System <onboarding@resend.dev>',
+        from: 'EOD System <noreply@retail-odyssey.com>',
         to: 'tyson.gauthier@retailodyssey.com',
         subject,
         html,
