@@ -1,6 +1,15 @@
 const { supabase } = require('./supabase');
 
+const PUBLIC_PATHS = new Set([
+  '/rebotics-auth-update',
+  '/rebotics-token-internal',
+]);
+
 async function requireAuth(req, res, next) {
+  if (PUBLIC_PATHS.has(req.path)) {
+    return next();
+  }
+
   const authHeader = req.headers.authorization || '';
   const token = authHeader.replace('Bearer ', '');
 
