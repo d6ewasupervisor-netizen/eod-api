@@ -5,6 +5,7 @@ const { Resend } = require('resend');
 const { Pool } = require('pg');
 const { requireAuth, requireRole } = require('./auth-middleware');
 const sasBridge = require('./sas-bridge');
+const reboticsBridge = require('./rebotics-bridge');
 const shiftManagement = require('./shift-management');
 const { runFullSync } = require('./sas-sync');
 
@@ -164,6 +165,8 @@ async function start() {
   const PUBLIC_PATHS = [
     '/sas-session',
     '/sas-session/status',
+    '/rebotics-auth-update',
+    '/rebotics-token-internal',
     '/api/auth-status',
   ];
   const PUBLIC_PREFIXES = [
@@ -181,6 +184,26 @@ async function start() {
 
   // Initialize SAS bridge (session receiver, upload queue, worker)
   await sasBridge.init(app, pool);
+
+  await reboticsBridge.init(app, pool, { resend });
+
+  app.get('/api/me', requireAuth, (req, res) => {
+    const raw = process.env.KOMPASS_ADMIN_USERNAMES || 'Tyson.Gauthier';
+    const admins = raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    const email = (req.user?.email || '').trim().toLowerCase();
+    const local = email.includes('@') ? email.slice(0, email.indexOf('@')) : email;
+    const isReboticsAdmin = admins.some((a) => a === email || a === local);
+    const districts = (process.env.KOMPASS_D8_REBOTICS_STORES || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return res.json({
+      ok: true,
+      email: req.user?.email || null,
+      isReboticsAdmin,
+      reboticsDistrictStoreIds: districts.length ? districts : null,
+    });
+  });
 
   // Initialize shift management endpoints
   await shiftManagement.initShiftRequestsTable(pool);
