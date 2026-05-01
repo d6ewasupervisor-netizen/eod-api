@@ -5,6 +5,15 @@
 		},
 		{
 			"path": "."
+		},
+		{
+			"path": "../rebotics-carry-forward"
+		},
+		{
+			"path": "../sas-auth"
+		},
+		{
+			"path": "../flow-automation"
 		}
 	],
 	"settings": {}
