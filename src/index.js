@@ -157,7 +157,25 @@ async function start() {
   logger.info('Database initialized');
 
   const app = express();
-  app.use(cors());
+
+  // Cloudflare Access fronts both the-dump-bin.com (frontend) and
+  // eod-api.the-dump-bin.com (this API). Cookies are scoped to the parent
+  // zone, so we just need to echo the origin and allow credentials.
+  const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://the-dump-bin.com')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  app.use(
+    cors({
+      origin(origin, cb) {
+        if (!origin) return cb(null, true); // server-to-server / curl
+        if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+        return cb(new Error(`Origin ${origin} not allowed`));
+      },
+      credentials: true,
+    })
+  );
+
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -200,6 +218,7 @@ async function start() {
     return res.json({
       ok: true,
       email: req.user?.email || null,
+      roles: req.user?.roles || [],
       isReboticsAdmin,
       reboticsDistrictStoreIds: districts.length ? districts : null,
     });
