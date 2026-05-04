@@ -3,6 +3,7 @@
  * - GET  /api/shifts              — find visits for a store/date via operations/field-data
  * - GET  /api/lead-info           — look up visit lead contact details by name
  * - GET  /api/shifts/:visitId/members — people assigned to a shift
+ * - GET  /api/shifts/:visitId/sets    — category-resets (set names) on a shift, MAINTENANCE excluded
  * - GET  /api/employees           — supervisor's direct reports (cached 1hr)
  * - POST /api/shifts/:visitId/add — add employees to a shift (immediate)
  * - POST /api/shift-request       — request removal (pending approval)
@@ -311,6 +312,41 @@ function registerRoutes(app, resend, pool) {
       return res.json(members);
     } catch (err) {
       return handleSasError(res, err, 'GET /api/shifts/:visitId/members');
+    }
+  });
+
+  // GET /api/shifts/:visitId/sets — category-resets on the shift (the "sets")
+  // Used by the EOD form so the lead can pick which sets weren't in the
+  // store / weren't in SI from a dropdown sourced from the actual shift.
+  // The KOMPASS MAINTENANCE reset is filtered out — that's the cart, not a
+  // planogram set the lead would mark as missing.
+  app.get('/api/shifts/:visitId/sets', async (req, res) => {
+    const { visitId } = req.params;
+    if (!checkSession(res)) return;
+
+    try {
+      const resp = await sasGet(`/api/v1/field-app/visits/${visitId}/category-resets/`);
+      const categoryResets = resp.data?.category_resets || [];
+
+      const sets = categoryResets
+        .filter(r => {
+          const isMaint = r.reset_type === 'MAINTENANCE'
+            || r.name === 'KOMPASS MAINTENANCE'
+            || r.number === 5555;
+          return !isMaint;
+        })
+        .map(r => ({
+          id: r.id,
+          name: r.name || '',
+          number: r.number || null,
+          planogramId: r.planogram_id || null,
+          resetType: r.reset_type || null,
+        }))
+        .filter(s => s.name);
+
+      return res.json({ visitId, sets });
+    } catch (err) {
+      return handleSasError(res, err, 'GET /api/shifts/:visitId/sets');
     }
   });
 
