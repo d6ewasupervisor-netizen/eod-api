@@ -5,6 +5,7 @@ const { Resend } = require('resend');
 const { Pool } = require('pg');
 const { requireAuth, requireRole } = require('./auth-middleware');
 const sasBridge = require('./sas-bridge');
+const sasAutoRefresh = require('./sas-auto-refresh');
 const reboticsBridge = require('./rebotics-bridge');
 const shiftManagement = require('./shift-management');
 const { runFullSync } = require('./sas-sync');
@@ -255,6 +256,41 @@ async function start() {
 
   logger.info('2am sync cron scheduled (America/Los_Angeles)');
 
+  // ─── SAS AUTO-REFRESH CRON ─────────────────────────────────────────────────
+  //
+  // Re-mint the SAS session every 60 minutes regardless of user activity.
+  // Combined with the lazy refresh kicked off from /sas-auth-status, this
+  // guarantees the SAS dot is green for every user without anyone clicking.
+  // The single-flight + cooldown guard inside sas-auto-refresh deduplicates
+  // any overlap between this cron and a stale-poll-driven kick.
+  if (sasAutoRefresh.isConfigured()) {
+    cron.schedule('*/60 * * * *', async () => {
+      try {
+        const result = await sasAutoRefresh.runAutoRefresh({ reason: 'cron:hourly' });
+        if (!result.ok && !result.skipped) {
+          logger.error('Hourly SAS refresh failed:', result.error);
+        }
+      } catch (err) {
+        logger.error('Hourly SAS refresh threw:', err.message);
+      }
+    }, { timezone: 'America/Los_Angeles' });
+    logger.info('Hourly SAS auto-refresh cron scheduled (America/Los_Angeles)');
+
+    // Run one refresh shortly after boot so a cold-started Railway instance
+    // doesn't leave the SAS dot red for the first hour.  Defer slightly so
+    // the listener is up first and we don't hold the boot path on Okta.
+    setTimeout(() => {
+      sasAutoRefresh.runAutoRefresh({ reason: 'startup', force: true })
+        .then((r) => logger.info('Startup SAS refresh:', JSON.stringify(r)))
+        .catch((err) => logger.error('Startup SAS refresh threw:', err.message));
+    }, 3000);
+  } else {
+    logger.info(
+      `SAS auto-refresh DISABLED (missing ${sasAutoRefresh.missingEnvVars().join(', ')}). ` +
+      'Falling back to external morning-auth.js + GH Actions cron.'
+    );
+  }
+
   // ─── Auth Status Notification ────────────────────────────────────────────────
 
   app.post('/api/auth-status', async (req, res) => {
@@ -287,13 +323,56 @@ async function start() {
     }
   });
 
-  // ─── Trigger SAS Auth via GitHub Actions ─────────────────────────────────────
+  // ─── Trigger SAS Auth ────────────────────────────────────────────────────────
+  //
+  // Any signed-in user can hit this — there's no role gate.  The auto-refresh
+  // module's single-flight + cooldown guard makes it safe to call as often as
+  // anyone wants; back-to-back calls coalesce into one Okta login.
+  //
+  // Preferred path: the in-process auto-refresher logs in directly using
+  // SAS_USER / SAS_PASS / SAS_TOTP_SECRET on Railway.  This is what
+  // /sas-auth-status also kicks lazily on every stale poll.
+  //
+  // Legacy fallback: if those secrets aren't configured (e.g. on a fresh
+  // deploy that hasn't been wired up yet), dispatch the GitHub Actions
+  // workflow_dispatch as before.  This keeps the endpoint working during a
+  // staged rollout.
 
-  app.post('/api/trigger-auth', requireRole('supervisor', 'admin'), async (req, res) => {
+  app.post('/api/trigger-auth', async (req, res) => {
+    if (sasAutoRefresh.isConfigured()) {
+      try {
+        const result = await sasAutoRefresh.runAutoRefresh({
+          reason: 'manual:/api/trigger-auth',
+          force: req.query.force === '1',
+        });
+        if (result.skipped) {
+          return res.json({
+            success: true,
+            message: `Refresh skipped (${result.reason}). Existing session is still valid.`,
+            ...result,
+          });
+        }
+        if (result.ok) {
+          return res.json({
+            success: true,
+            message: `Session refreshed in-process (${result.elapsed_ms}ms).`,
+          });
+        }
+        return res.status(502).json({ success: false, error: result.error });
+      } catch (err) {
+        console.error('[trigger-auth] In-process refresh threw:', err.message);
+        return res.status(500).json({ success: false, error: err.message });
+      }
+    }
+
+    // Fallback path: dispatch the GH Actions workflow.
     const githubPat = process.env.GITHUB_PAT;
     if (!githubPat) {
-      console.error('[trigger-auth] GITHUB_PAT not configured');
-      return res.status(500).json({ error: 'Auth trigger not configured' });
+      console.error('[trigger-auth] In-process refresh not configured AND GITHUB_PAT missing');
+      return res.status(500).json({
+        error: 'Auth trigger not configured',
+        hint: 'Set SAS_USER + SAS_PASS + SAS_TOTP_SECRET on Railway to enable in-process refresh',
+      });
     }
 
     try {
@@ -308,13 +387,11 @@ async function start() {
       });
 
       if (resp.status === 204) {
-        console.log('[trigger-auth] GitHub Actions workflow triggered successfully');
-        return res.json({ success: true, message: 'Auth workflow triggered. Session will be active within ~60 seconds.' });
-      } else {
-        const body = await resp.text();
-        console.error(`[trigger-auth] GitHub API returned ${resp.status}: ${body}`);
-        return res.status(resp.status).json({ error: `GitHub API error: ${resp.status}`, details: body });
+        return res.json({ success: true, message: 'Auth workflow triggered (legacy GH Actions path). Session will be active within ~60 seconds.' });
       }
+      const body = await resp.text();
+      console.error(`[trigger-auth] GitHub API returned ${resp.status}: ${body}`);
+      return res.status(resp.status).json({ error: `GitHub API error: ${resp.status}`, details: body });
     } catch (err) {
       console.error('[trigger-auth] Failed to trigger workflow:', err.message);
       return res.status(500).json({ error: err.message });

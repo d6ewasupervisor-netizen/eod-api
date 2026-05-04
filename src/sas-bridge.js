@@ -8,6 +8,7 @@
 
 const axios = require('axios');
 const crypto = require('crypto');
+const autoRefresh = require('./sas-auto-refresh');
 const BASE_URL = 'https://prod.sasretail.com';
 const SUPERVISOR_WORKDAY_ID = '800175315';
 const SUPERVISOR_EMAIL = 'tyson.gauthier@retailodyssey.com';
@@ -36,7 +37,47 @@ let sasSession = {
   receivedAt: null,
   lastHeartbeat: null,
   alive: false,
+  source: null,
 };
+
+// Pool reference captured during init() so applySession() can start the queue
+// worker without re-threading the pool through every caller.
+let dbPool = null;
+
+/**
+ * Install a freshly-validated SAS session into in-memory state and (re)start
+ * the heartbeat and queue worker.
+ *
+ * Called from two places:
+ *   - the legacy `POST /sas-session` route, which receives a session that
+ *     was minted by an external runner (GitHub Actions / Tyson's local
+ *     morning-auth.js)
+ *   - the in-process auto-refresh module, which mints the session itself
+ *     using SAS_USER / SAS_PASS / SAS_TOTP_SECRET on Railway
+ *
+ * Either way the cookies are already validated by the caller before we get
+ * here, so this function just commits the new state and lights the workers.
+ */
+function applySession({ cookieHeader, csrfToken, source = 'unknown' }) {
+  if (!cookieHeader || !csrfToken) {
+    throw new Error('applySession: cookieHeader and csrfToken are required');
+  }
+
+  sasSession = {
+    cookieHeader,
+    csrfToken,
+    receivedAt: new Date().toISOString(),
+    lastHeartbeat: new Date().toISOString(),
+    alive: true,
+    source,
+  };
+
+  startHeartbeat();
+  if (dbPool) startQueueWorker(dbPool);
+
+  logger.info(`Session applied (source=${source}). Heartbeat + queue worker (re)started.`);
+  return sasSession;
+}
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -550,22 +591,9 @@ function registerRoutes(app, pool) {
       });
     }
 
-    // Store session
-    sasSession = {
-      cookieHeader,
-      csrfToken,
-      receivedAt: new Date().toISOString(),
-      lastHeartbeat: new Date().toISOString(),
-      alive: true,
-    };
+    applySession({ cookieHeader, csrfToken, source: 'POST /sas-session' });
 
     const expiresAt = new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString();
-
-    // Start heartbeat + queue worker
-    startHeartbeat();
-    startQueueWorker(pool);
-
-    logger.info('Session received and validated. Heartbeat + queue worker started.');
 
     return res.json({
       success: true,
@@ -1210,11 +1238,22 @@ function registerRoutes(app, pool) {
       minutesSinceRefresh = Math.floor((Date.now() - new Date(receivedAt).getTime()) / 60000);
       stale = !sasSession.alive || minutesSinceRefresh > SAS_STALE_MINUTES;
     }
+
+    // Lazy self-heal: if the session is stale (or never existed), kick a
+    // background refresh now and let it land before the next 30-s poll.
+    // The single-flight + cooldown guard inside auto-refresh makes this
+    // safe to call from every poll regardless of who's logged in.
+    if (stale && autoRefresh.isConfigured()) {
+      autoRefresh.runAutoRefresh({ reason: 'sas-auth-status:stale' })
+        .catch((err) => logger.error(`Background refresh threw: ${err.message}`));
+    }
+
     res.json({
       ok: sasSession.alive && !stale,
       stale,
       refreshed_at: receivedAt || null,
       minutes_since_refresh: minutesSinceRefresh,
+      auto_refresh: autoRefresh.getStatus(),
     });
   });
 }
@@ -1222,9 +1261,29 @@ function registerRoutes(app, pool) {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
 async function init(app, pool) {
+  dbPool = pool;
   await initQueue(pool);
   registerRoutes(app, pool);
-  logger.info('SAS bridge initialized. Waiting for session from morning-auth.');
+
+  // Let sas-auto-refresh install minted sessions directly into our state.
+  autoRefresh.setApplyCallback(applySession);
+
+  if (autoRefresh.isConfigured()) {
+    logger.info('SAS bridge initialized with in-process auto-refresh enabled.');
+  } else {
+    const missing = autoRefresh.missingEnvVars();
+    logger.info(
+      `SAS bridge initialized. Auto-refresh DISABLED — set ${missing.join(', ')} on Railway to enable. ` +
+      'Falling back to inbound POST /sas-session from morning-auth.js.'
+    );
+  }
 }
 
-module.exports = { init, getHeaders, sasGet, sasPatch, isSessionAlive: () => sasSession.alive };
+module.exports = {
+  init,
+  getHeaders,
+  sasGet,
+  sasPatch,
+  isSessionAlive: () => sasSession.alive,
+  applySession,
+};
