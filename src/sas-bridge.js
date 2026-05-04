@@ -1200,6 +1200,23 @@ function registerRoutes(app, pool) {
       lastHeartbeat: sasSession.lastHeartbeat,
     });
   });
+
+  const SAS_STALE_MINUTES = parseInt(process.env.SAS_STALE_MINUTES || '720', 10); // 12 hours
+  app.get('/sas-auth-status', (req, res) => {
+    const receivedAt = sasSession.receivedAt;
+    let minutesSinceRefresh = null;
+    let stale = true;
+    if (receivedAt) {
+      minutesSinceRefresh = Math.floor((Date.now() - new Date(receivedAt).getTime()) / 60000);
+      stale = !sasSession.alive || minutesSinceRefresh > SAS_STALE_MINUTES;
+    }
+    res.json({
+      ok: sasSession.alive && !stale,
+      stale,
+      refreshed_at: receivedAt || null,
+      minutes_since_refresh: minutesSinceRefresh,
+    });
+  });
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
