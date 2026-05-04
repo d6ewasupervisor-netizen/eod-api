@@ -6,9 +6,6 @@
 
 const express = require('express');
 const fs = require('fs').promises;
-const path = require('path');
-
-const { getPeriodWeekForDate, formatPeriodWeekUnpadded } = require('./lib/fiscal-calendar');
 const { deliverInstaworkImage, graphConfigured, parseEmailRecipients } = require('./lib/instawork-delivery');
 
 function parseWorkDate(input) {
@@ -86,19 +83,13 @@ function createInstaworkRouter({ resend, logger }) {
         return res.status(400).json({ success: false, error: 'imageBase64 decoded to empty buffer' });
       }
 
-      const folderName = formatPeriodWeekUnpadded(pw.period, pw.week);
-      const fileName = `FM${paddedStoreNumber(storeNumber)} ${formatMmDdYyyyUnderscored(date)}.jpg`;
-
-      const targetDir = path.join(rootDir, folderName);
-      const desiredPath = path.join(targetDir, fileName);
-
       const periodWeekLabel = `P${pw.periodStr}W${pw.weekStr}`;
+      const fileName = `FM${paddedStoreNumber(storeNumber)} ${formatMmDdYyyyUnderscored(date)}.jpg`;
 
       const result = await deliverInstaworkImage({
         rootDir,
-        targetDir,
-        desiredPath,
-        periodWeekFolder: folderName,
+        period: pw.period,
+        week: pw.week,
         periodWeekLabel,
         fileName,
         storeNumber,
@@ -107,6 +98,9 @@ function createInstaworkRouter({ resend, logger }) {
         resend,
         log: logger,
       });
+
+      const folderName =
+        result.resolvedFolderBasename || formatPeriodWeekUnpadded(pw.period, pw.week);
 
       logger.info(
         {

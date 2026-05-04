@@ -8,6 +8,12 @@
  */
 
 const fs = require('fs').promises;
+const path = require('path');
+
+const {
+  formatPeriodWeekUnpadded,
+  pickExistingPeriodWeekFolderName,
+} = require('./fiscal-calendar');
 
 function graphEnv() {
   const tenant =
@@ -51,16 +57,25 @@ async function getGraphAccessToken() {
   return j.access_token;
 }
 
-async function getOrCreateChildFolder(token, driveId, parentItemId, folderName) {
+/**
+ * Finds `P4W2` vs `P04W2` siblings under the SharePoint Sign Out root, else creates unpadded basename.
+ */
+async function getOrCreatePeriodWeekSharePointFolder(token, driveId, parentItemId, period, week) {
   const listUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${parentItemId}/children`;
   const listR = await fetch(listUrl, { headers: { Authorization: `Bearer ${token}` } });
   const data = await listR.json();
   if (!listR.ok) {
     throw new Error(data.error?.message || JSON.stringify(data));
   }
-  const existing = (data.value || []).find((c) => c.name === folderName && c.folder);
-  if (existing) return existing.id;
+  const childFolders = (data.value || []).filter((c) => c.folder);
+  const siblingNames = childFolders.map((c) => c.name);
+  const matchBasename = pickExistingPeriodWeekFolderName(siblingNames, period, week);
+  if (matchBasename) {
+    const hit = childFolders.find((c) => c.name.toLowerCase() === matchBasename.toLowerCase());
+    if (hit) return { folderItemId: hit.id, basename: hit.name };
+  }
 
+  const newName = formatPeriodWeekUnpadded(period, week);
   const createR = await fetch(listUrl, {
     method: 'POST',
     headers: {
@@ -68,7 +83,7 @@ async function getOrCreateChildFolder(token, driveId, parentItemId, folderName) 
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      name: folderName,
+      name: newName,
       folder: {},
       '@microsoft.graph.conflictBehavior': 'fail',
     }),
@@ -77,7 +92,15 @@ async function getOrCreateChildFolder(token, driveId, parentItemId, folderName) 
   if (!createR.ok) {
     throw new Error(created.error?.message || JSON.stringify(created));
   }
-  return created.id;
+  return { folderItemId: created.id, basename: created.name };
+}
+
+async function resolveInstaworkWeekFolderBasenameOnDisk(rootDir, period, week) {
+  const dirents = await fs.readdir(rootDir, { withFileTypes: true });
+  const dirs = dirents.filter((d) => d.isDirectory()).map((d) => d.name);
+  return (
+    pickExistingPeriodWeekFolderName(dirs, period, week) ?? formatPeriodWeekUnpadded(period, week)
+  );
 }
 
 async function uploadJpegToFolder(token, driveId, folderItemId, fileName, buffer) {
@@ -95,25 +118,35 @@ async function uploadJpegToFolder(token, driveId, folderItemId, fileName, buffer
   return meta;
 }
 
-async function deliverViaGraph({ periodWeekFolder, fileName, buffer, log }) {
+async function deliverViaGraph({ period, week, fileName, buffer, log }) {
   const token = await getGraphAccessToken();
   const { driveId, baseFolderId } = graphEnv();
-  const weekFolderId = await getOrCreateChildFolder(token, driveId, baseFolderId, periodWeekFolder);
+  const { folderItemId: weekFolderId, basename } = await getOrCreatePeriodWeekSharePointFolder(
+    token,
+    driveId,
+    baseFolderId,
+    period,
+    week,
+  );
   const item = await uploadJpegToFolder(token, driveId, weekFolderId, fileName, buffer);
   const webUrl = item.webUrl || null;
-  const logical = webUrl || `SharePoint:${periodWeekFolder}/${fileName}`;
-  log.info({ webUrl, periodWeekFolder, fileName }, 'InstaWork image uploaded via SharePoint');
+  const logical = webUrl || `SharePoint:${basename}/${fileName}`;
+  log.info({ webUrl, folder: basename, fileName }, 'InstaWork image uploaded via SharePoint');
   return {
     delivery: 'sharepoint',
     filePath: logical,
+    resolvedFolderBasename: basename,
   };
 }
 
-async function deliverViaLocalDisk({ targetDir, desiredPath, buffer, logger }) {
+async function deliverViaLocalDisk({ rootDir, period, week, fileName, buffer, logger }) {
   const { writeFileVersioned } = require('./file-utils');
+  const basename = await resolveInstaworkWeekFolderBasenameOnDisk(rootDir, period, week);
+  const targetDir = path.join(rootDir, basename);
   await fs.mkdir(targetDir, { recursive: true });
+  const desiredPath = path.join(targetDir, fileName);
   const writtenPath = await writeFileVersioned(desiredPath, buffer, logger);
-  return { delivery: 'local', filePath: writtenPath };
+  return { delivery: 'local', filePath: writtenPath, resolvedFolderBasename: basename };
 }
 
 function parseEmailRecipients() {
@@ -124,7 +157,7 @@ function parseEmailRecipients() {
   return list.length ? list : ['d6ewa.supervisor@gmail.com'];
 }
 
-async function deliverViaEmail({ resend, fileName, periodWeekLabel, storeNumber, workDate, buffer, log }) {
+async function deliverViaEmail({ resend, fileName, periodWeekLabel, period, week, storeNumber, workDate, buffer, log }) {
   const to = parseEmailRecipients();
   const from = process.env.INSTAWORK_EMAIL_FROM || 'InstaWork <instawork@retail-odyssey.com>';
   const subject = `[InstaWork sign-out] ${periodWeekLabel} FM${String(storeNumber).replace(/\D/g, '').padStart(3, '0')} ${workDate} ${fileName}`;
@@ -156,15 +189,15 @@ async function deliverViaEmail({ resend, fileName, periodWeekLabel, storeNumber,
     delivery: 'email',
     filePath: `email:${fileName}`,
     resendId: data?.id,
+    resolvedFolderBasename: formatPeriodWeekUnpadded(period, week),
   };
 }
 
 async function deliverInstaworkImage(opts) {
   const {
     rootDir,
-    targetDir,
-    desiredPath,
-    periodWeekFolder,
+    period,
+    week,
     periodWeekLabel,
     fileName,
     storeNumber,
@@ -179,6 +212,8 @@ async function deliverInstaworkImage(opts) {
       resend,
       fileName,
       periodWeekLabel,
+      period,
+      week,
       storeNumber,
       workDate,
       buffer,
@@ -187,13 +222,13 @@ async function deliverInstaworkImage(opts) {
   }
 
   if (graphConfigured()) {
-    return deliverViaGraph({ periodWeekFolder, fileName, buffer, log });
+    return deliverViaGraph({ period, week, fileName, buffer, log });
   }
 
   if (rootDir) {
     try {
       await fs.access(rootDir);
-      return deliverViaLocalDisk({ targetDir, desiredPath, buffer, logger: log });
+      return deliverViaLocalDisk({ rootDir, period, week, fileName, buffer, logger: log });
     } catch {
       /* fall through */
     }

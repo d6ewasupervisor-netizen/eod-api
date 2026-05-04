@@ -633,6 +633,44 @@ function formatPeriodWeekUnpadded(period, week) {
 }
 
 /**
+ * Parses an InstaWork / dump-bin-style folder basename (e.g. `P04W2`, `P4W2`).
+ * @returns {{ period: number, week: number } | null}
+ */
+function parsePeriodWeekFolderLabel(label) {
+  const m = /^P(\d+)W(\d+)$/i.exec(String(label || '').trim());
+  if (!m) return null;
+  return { period: parseInt(m[1], 10), week: parseInt(m[2], 10) };
+}
+
+/**
+ * Plausible spellings for the same fiscal week folder (team uses `P4W2` vs `P04W2`).
+ * Week stays numeric (fiscal weeks are 1–4); periods use short vs two-digit form when they differ (e.g. P9 vs P09).
+ */
+function getInstaworkFolderNameVariants(period, week) {
+  const p = parseInt(period, 10);
+  const w = parseInt(week, 10);
+  if (Number.isNaN(p) || Number.isNaN(w)) return [];
+  const short = `P${p}W${w}`;
+  const paddedP = `P${String(p).padStart(2, '0')}W${w}`;
+  return short === paddedP ? [short] : [short, paddedP];
+}
+
+/**
+ * @param {string[]} dirBasenames Immediate child folders under Sign Out root (SharePoint sibling names work too)
+ * @returns {string | null} The existing name preserving server casing when a variant matches
+ */
+function pickExistingPeriodWeekFolderName(dirBasenames, period, week) {
+  const variants = getInstaworkFolderNameVariants(period, week);
+  if (!variants.length) return null;
+  const byLower = new Map(dirBasenames.map((n) => [String(n).toLowerCase(), n]));
+  for (const v of variants) {
+    const hit = byLower.get(v.toLowerCase());
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/**
  * Check if the fiscal calendar has data for a given year
  * 
  * @param {number} fiscalYear - Fiscal year to check
@@ -668,6 +706,9 @@ module.exports = {
   getDumpBinAgendaFileUrl,
   formatPeriodWeek,
   formatPeriodWeekUnpadded,
+  parsePeriodWeekFolderLabel,
+  getInstaworkFolderNameVariants,
+  pickExistingPeriodWeekFolderName,
   getCurrentPeriodWeek,
   getPeriodWeekForDate,
   hasCalendar,
