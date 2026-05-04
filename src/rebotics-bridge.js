@@ -413,10 +413,11 @@ function registerReboticsRoutes(app, pool, resend) {
   });
 
   // INTERNAL: returns the raw Rebotics token to authorized scripts only.
-  // Protected exclusively by X-Auth-Secret (Railway shared secret) — NOT a
-  // Supabase Bearer endpoint. Reserved for trusted server-side / local CLI
-  // tools (e.g. carry-forward.js) that need to call Rebotics directly without
-  // re-authenticating the user. Do NOT expose to the frontend.
+  // Protected exclusively by X-Auth-Secret (Railway shared secret) — bypasses
+  // Cloudflare Access entirely. Reserved for trusted server-side / local CLI
+  // tools (e.g. carry-forward.js) that hit the Railway origin directly and
+  // need the Rebotics token without going through the user-auth flow. Do NOT
+  // expose to the frontend.
   app.get('/rebotics-token-internal', (req, res) => {
     if (!checkBridgeSecret(req, res)) return;
     if (!reboticsToken) {
