@@ -1,0 +1,12 @@
+---
+description: InstaWork EOD saves must work on mobile (hosted API only)
+alwaysApply: true
+---
+
+# InstaWork sign-out sheets
+
+- **Never** serve or reintroduce `127.0.0.1` / localhost InstaWork save URLs for the EOD web app.
+- **Production delivery:** `POST /instawork/save-image` on **eod-api.the-dump-bin.com** → **Resend** defaults: **InstaWork &lt;instawork@retail-odyssey.com&gt;** → **d6ewa.supervisor@gmail.com**, subject `[InstaWork sign-out] ...` (see `src/lib/instawork-delivery.js`). Override with `INSTAWORK_EMAIL_RECIPIENTS` / `INSTAWORK_EMAIL_FROM` if needed.
+- **flow-automation** Gmail poller routes `[InstaWork sign-out]` to `src/flows/instawork-signout-inbox.js`, which writes the attachment into `INSTAWORK_SIGNOUT_ROOT` / P#W# with versioned filenames — keep that subject format stable.
+- Secondary paths (only if email unavailable): SharePoint Graph, or local `INSTAWORK_SIGNOUT_ROOT` on the API host.
+- **Fiscal calendar** in `src/lib/fiscal-calendar.js` must stay aligned with `flow-automation/src/lib/fiscal-calendar.js`.

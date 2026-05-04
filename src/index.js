@@ -9,10 +9,12 @@ const sasAutoRefresh = require('./sas-auto-refresh');
 const reboticsBridge = require('./rebotics-bridge');
 const shiftManagement = require('./shift-management');
 const extensionBridge = require('./extension-bridge');
+const { createInstaworkRouter } = require('./instawork-router');
 const { runFullSync } = require('./sas-sync');
 
 const logger = {
   info: (...a) => console.log('[INFO]', ...a),
+  warn: (...a) => console.warn('[WARN]', ...a),
   error: (...a) => console.error('[ERROR]', ...a),
 };
 
@@ -240,6 +242,8 @@ async function start() {
   // Initialize shift management endpoints
   await shiftManagement.initShiftRequestsTable(pool);
   shiftManagement.registerRoutes(app, resend, pool);
+
+  app.use('/instawork', createInstaworkRouter({ resend, logger }));
 
   // ─── SYNC ROUTES ───────────────────────────────────────────────────────────
   app.post('/api/sync/run', requireRole('supervisor', 'admin'), async (req, res) => {
