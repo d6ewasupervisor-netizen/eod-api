@@ -258,26 +258,27 @@ async function start() {
 
   // ─── SAS AUTO-REFRESH CRON ─────────────────────────────────────────────────
   //
-  // Re-mint the SAS session every 60 minutes regardless of user activity.
-  // Combined with the lazy refresh kicked off from /sas-auth-status, this
-  // guarantees the SAS dot is green for every user without anyone clicking.
-  // The single-flight + cooldown guard inside sas-auto-refresh deduplicates
+  // Re-mint the SAS session every 4 hours regardless of user activity.
+  // SAS sessions are good for ~24h, so 4-hour cadence gives us plenty of
+  // headroom while leaving long quiet windows where Tyson can use his
+  // TOTP code on other devices without colliding with the server.  The
+  // single-flight + 4h cooldown guard inside sas-auto-refresh deduplicates
   // any overlap between this cron and a stale-poll-driven kick.
   if (sasAutoRefresh.isConfigured()) {
-    cron.schedule('*/60 * * * *', async () => {
+    cron.schedule('0 */4 * * *', async () => {
       try {
-        const result = await sasAutoRefresh.runAutoRefresh({ reason: 'cron:hourly' });
+        const result = await sasAutoRefresh.runAutoRefresh({ reason: 'cron:4h' });
         if (!result.ok && !result.skipped) {
-          logger.error('Hourly SAS refresh failed:', result.error);
+          logger.error('4h SAS refresh failed:', result.error);
         }
       } catch (err) {
-        logger.error('Hourly SAS refresh threw:', err.message);
+        logger.error('4h SAS refresh threw:', err.message);
       }
     }, { timezone: 'America/Los_Angeles' });
-    logger.info('Hourly SAS auto-refresh cron scheduled (America/Los_Angeles)');
+    logger.info('4-hour SAS auto-refresh cron scheduled (America/Los_Angeles)');
 
     // Run one refresh shortly after boot so a cold-started Railway instance
-    // doesn't leave the SAS dot red for the first hour.  Defer slightly so
+    // doesn't leave the SAS dot red until the next 4-hour tick.  Defer slightly so
     // the listener is up first and we don't hold the boot path on Okta.
     setTimeout(() => {
       sasAutoRefresh.runAutoRefresh({ reason: 'startup', force: true })

@@ -13,7 +13,10 @@ const logger = {
 const REBOTICS_API = process.env.REBOTICS_API_BASE || 'https://krcs.rebotics.net';
 const BRIDGE_SECRET = process.env.REBOTICS_AUTH_SECRET || process.env.SAS_AUTH_SECRET || '';
 const DEFAULT_USER_ID = parseInt(process.env.REBOTICS_DEFAULT_USER_ID || '211', 10);
-const STALE_MINUTES = 6 * 60;
+// Rebotics tokens are good for ~24h; staying within that window matches
+// the SAS side and avoids prompting the user for re-auth more often than
+// the credential actually requires.
+const STALE_MINUTES = 24 * 60;
 const REAUTH_EMAIL_TO = process.env.REBOTICS_REAUTH_NOTIFY_EMAIL || 'tyson.gauthier@retailodyssey.com';
 const TASK_PAUSE_MS = 250;
 
@@ -133,16 +136,16 @@ async function waitFreshToken(pool, baselineIso, timeoutMs) {
   return false;
 }
 
-async function triggerReboticsReauth(pathThatFailed) {
+async function triggerReboticsReauth(pathThatFailed, { force = false } = {}) {
   const now = Date.now();
-  if (now - lastReauthTriggerAt < 60_000) {
+  if (!force && now - lastReauthTriggerAt < 60_000) {
     logger.info('Rebotics re-auth email debounced (within 60s)');
-    return;
+    return { ok: true, skipped: true, reason: 'debounced' };
   }
   lastReauthTriggerAt = now;
   if (!_resend || !process.env.RESEND_API_KEY) {
     logger.error('Cannot trigger Rebotics re-auth email: Resend not configured');
-    return;
+    return { ok: false, error: 'Resend not configured' };
   }
   try {
     await _resend.emails.send({
@@ -153,8 +156,10 @@ async function triggerReboticsReauth(pathThatFailed) {
         <p>Your local Gmail poller should run <code>morning-auth-rebotics.js</code> and push a fresh token.</p>`,
     });
     logger.info('Sent KOMPASS REBOTICS AUTH email via Resend');
+    return { ok: true };
   } catch (e) {
     logger.error('Rebotics re-auth email send failed:', e.message);
+    return { ok: false, error: e.message };
   }
 }
 
@@ -410,6 +415,29 @@ function registerReboticsRoutes(app, pool, resend) {
 
   app.get('/rebotics-auth-status', requireAuth, (req, res) => {
     res.json(authStatusPayload());
+  });
+
+  // User-initiated Rebotics re-auth.  Unlike SAS (which Railway can refresh
+  // entirely in-process via Okta + TOTP), Rebotics auth is owned by Tyson's
+  // local Gmail poller running `morning-auth-rebotics.js` — so all this
+  // endpoint can do is email the trigger subject `KOMPASS REBOTICS AUTH`
+  // that the poller is already listening for.  We pass force:true so a
+  // manual click isn't blocked by the 60-second debounce that protects the
+  // automatic 401-driven retry path.
+  app.post('/rebotics-trigger-auth', requireAuth, async (req, res) => {
+    try {
+      const result = await triggerReboticsReauth('manual:/rebotics-trigger-auth', { force: true });
+      if (result?.ok === false) {
+        return res.status(502).json({ success: false, error: result.error });
+      }
+      return res.json({
+        success: true,
+        message: 'Rebotics re-auth email dispatched. Token will refresh once the local Gmail poller runs morning-auth-rebotics.js (typically within ~60 seconds).',
+      });
+    } catch (e) {
+      logger.error('rebotics-trigger-auth failed:', e.message);
+      return res.status(500).json({ success: false, error: e.message });
+    }
   });
 
   // INTERNAL: returns the raw Rebotics token to authorized scripts only.

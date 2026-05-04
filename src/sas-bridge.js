@@ -1229,7 +1229,7 @@ function registerRoutes(app, pool) {
     });
   });
 
-  const SAS_STALE_MINUTES = parseInt(process.env.SAS_STALE_MINUTES || '720', 10); // 12 hours
+  const SAS_STALE_MINUTES = parseInt(process.env.SAS_STALE_MINUTES || '1440', 10); // 24 hours
   app.get('/sas-auth-status', (req, res) => {
     const receivedAt = sasSession.receivedAt;
     let minutesSinceRefresh = null;

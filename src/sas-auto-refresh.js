@@ -17,9 +17,13 @@
  *
  * Concurrency: a single in-flight refresh is shared across every caller.
  * Two thirty-second polls landing simultaneously will share the same login,
- * not race two parallel logins against Okta.  A short cooldown (default 60s)
- * protects against tight retry loops if the heartbeat detects a dead session
- * back-to-back.
+ * not race two parallel logins against Okta.  A long cooldown (default 4h)
+ * keeps automatic refreshes (cron + lazy stale-poll) from burning TOTP
+ * codes back-to-back.  Tyson logs into Okta directly from various devices
+ * throughout the day with the same TOTP secret, so every server refresh
+ * inside a 30-second window invalidates a code he might be trying to use.
+ * Manual user-initiated refreshes pass `force: true` to bypass the
+ * cooldown.
  */
 
 const axios = require('axios');
@@ -32,7 +36,7 @@ const TOTP_FACTOR_ID = 'uft1bhcligi8gUuxx1t8';
 const SAS_CLIENT_ID = '0oapmlehafULkV0GI1t7';
 const REDIRECT_URI = `${SAS_BASE}/en/okta/callback/`;
 
-const REFRESH_COOLDOWN_MS = 60 * 1000;
+const REFRESH_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 
 const REQUIRED_ENV = ['SAS_USER', 'SAS_PASS', 'SAS_TOTP_SECRET'];
 
