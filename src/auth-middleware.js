@@ -37,6 +37,16 @@ const ADMIN_EMAILS = parseEmailList(process.env.KOMPASS_ADMIN_EMAILS);
 const SUPERVISOR_EMAILS = parseEmailList(process.env.KOMPASS_SUPERVISOR_EMAILS);
 const LEAD_EMAILS = parseEmailList(process.env.KOMPASS_LEAD_EMAILS);
 
+// When non-empty, only these emails may call authenticated EOD API routes (JWT must
+// still validate). Set on Railway to match the EOD SPA allowlist in the-dump-bin.
+const EOD_APP_ALLOWED_EMAILS = new Set(parseEmailList(process.env.EOD_APP_ALLOWED_EMAILS));
+
+if (EOD_APP_ALLOWED_EMAILS.size === 0) {
+  console.warn(
+    '[auth] EOD_APP_ALLOWED_EMAILS is unset — any valid Cloudflare Access JWT may use authenticated EOD API routes'
+  );
+}
+
 function rolesForEmail(email) {
   const e = (email || '').trim().toLowerCase();
   const roles = [];
@@ -64,6 +74,11 @@ async function requireAuth(req, res, next) {
     });
 
     const email = (payload.email || '').toString();
+    const emailLower = email.trim().toLowerCase();
+    if (EOD_APP_ALLOWED_EMAILS.size > 0 && !EOD_APP_ALLOWED_EMAILS.has(emailLower)) {
+      return res.status(403).json({ error: 'EOD API access is not enabled for this account' });
+    }
+
     req.user = {
       id: payload.sub || email,
       email,
