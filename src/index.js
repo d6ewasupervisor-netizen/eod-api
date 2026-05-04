@@ -8,6 +8,7 @@ const sasBridge = require('./sas-bridge');
 const sasAutoRefresh = require('./sas-auto-refresh');
 const reboticsBridge = require('./rebotics-bridge');
 const shiftManagement = require('./shift-management');
+const extensionBridge = require('./extension-bridge');
 const { runFullSync } = require('./sas-sync');
 
 const logger = {
@@ -187,9 +188,16 @@ async function start() {
     '/rebotics-auth-update',
     '/rebotics-token-internal',
     '/api/auth-status',
+    // Extension distribution: /extension/publish gates itself on
+    // SAS_AUTH_SECRET, /extension/manifest + /extension/download are
+    // intentionally public (the bundle has no secrets).
+    '/extension/manifest',
+    '/extension/download',
+    '/extension/publish',
   ];
   const PUBLIC_PREFIXES = [
     '/api/shift-request/',
+    '/extension/download/',
   ];
   const PUBLIC_REGEXES = [
     /^\/api\/signoff-photos\/[^\/]+\/image\/?$/,
@@ -205,6 +213,10 @@ async function start() {
   await sasBridge.init(app, pool);
 
   await reboticsBridge.init(app, pool, { resend });
+
+  // Extension distribution endpoints (publish from personal computer,
+  // download onto the office USB stick).
+  await extensionBridge.init(app, pool);
 
   app.get('/api/me', requireAuth, (req, res) => {
     const raw = process.env.KOMPASS_ADMIN_USERNAMES || 'Tyson.Gauthier';
