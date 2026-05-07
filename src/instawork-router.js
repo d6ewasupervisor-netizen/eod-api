@@ -43,7 +43,7 @@ function paddedStoreNumber(storeNumber) {
   return String(storeNumber || '').replace(/\D/g, '').padStart(3, '0');
 }
 
-function createInstaworkRouter({ resend, logger }) {
+function createInstaworkRouter({ resend, logger, saveImageGate }) {
   const router = express.Router();
   const rootDir =
     process.env.INSTAWORK_SIGNOUT_ROOT ||
@@ -58,7 +58,11 @@ function createInstaworkRouter({ resend, logger }) {
     });
   });
 
-  router.post('/save-image', async (req, res) => {
+  // Optional gate (e.g. requireDayConfirm) — applied only to the mutating
+  // save route so /health stays trivially reachable.
+  const gates = typeof saveImageGate === 'function' ? [saveImageGate] : [];
+
+  router.post('/save-image', ...gates, async (req, res) => {
     try {
       const { storeNumber, workDate, imageBase64 } = req.body || {};
 

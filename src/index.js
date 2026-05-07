@@ -8,6 +8,7 @@ const sasBridge = require('./sas-bridge');
 const sasAutoRefresh = require('./sas-auto-refresh');
 const reboticsBridge = require('./rebotics-bridge');
 const shiftManagement = require('./shift-management');
+const storeConfirmation = require('./store-confirmation');
 const extensionBridge = require('./extension-bridge');
 const { createInstaworkRouter } = require('./instawork-router');
 const { runFullSync } = require('./sas-sync');
@@ -231,6 +232,11 @@ async function start() {
   ];
   const PUBLIC_REGEXES = [
     /^\/api\/signoff-photos\/[^\/]+\/image\/?$/,
+    // Supervisor APPROVE/DENY links land here from email — must work without
+    // a Cloudflare Access JWT. Auth is the random UUID in the URL. The
+    // /status endpoint stays gated so only the requesting lead can read the
+    // minted day-confirm token.
+    /^\/api\/store-confirm-request\/[^\/]+\/(approve|deny)\/?$/,
   ];
   app.use((req, res, next) => {
     if (PUBLIC_PATHS.includes(req.path)) return next();
@@ -271,7 +277,21 @@ async function start() {
   await shiftManagement.initShiftRequestsTable(pool);
   shiftManagement.registerRoutes(app, resend, pool);
 
-  app.use('/instawork', createInstaworkRouter({ resend, logger }));
+  // Initialize daily store confirmation gate (verify-store + override flow)
+  await storeConfirmation.initStoreConfirmRequestsTable(pool);
+  storeConfirmation.registerRoutes(app, resend, pool);
+
+  // /instawork/save-image mutates the InstaWork sign-out artifact, so it
+  // must carry a valid day-confirm token. /instawork/health stays open for
+  // simple connectivity checks.
+  app.use(
+    '/instawork',
+    createInstaworkRouter({
+      resend,
+      logger,
+      saveImageGate: storeConfirmation.requireDayConfirm,
+    })
+  );
 
   // ─── SYNC ROUTES ───────────────────────────────────────────────────────────
   app.post('/api/sync/run', requireRole('supervisor', 'admin'), async (req, res) => {
@@ -443,7 +463,7 @@ async function start() {
     }
   });
 
-  app.post('/send-eod', async (req, res) => {
+  app.post('/send-eod', storeConfirmation.requireDayConfirm, async (req, res) => {
     const {
       storeNumber,
       subject,
