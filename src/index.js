@@ -28,8 +28,14 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS store_data (
       store_number TEXT PRIMARY KEY,
       manager_names JSONB DEFAULT '[]',
-      recipient_emails JSONB DEFAULT '[]'
+      recipient_emails JSONB DEFAULT '[]',
+      fredmeyer_emails JSONB DEFAULT '[]'
     )
+  `);
+
+  // Non-destructive migration: add fredmeyer_emails if the table already exists
+  await pool.query(`
+    ALTER TABLE store_data ADD COLUMN IF NOT EXISTS fredmeyer_emails JSONB DEFAULT '[]'
   `);
 
   await pool.query(`
@@ -97,26 +103,48 @@ async function getStoreData(storeNumber) {
     'SELECT * FROM store_data WHERE store_number = $1',
     [storeNumber]
   );
-  if (!rows.length) return { managerNames: [], recipientEmails: [] };
+  if (!rows.length) return { managerNames: [], recipientEmails: [], fredmeyerEmails: [] };
   return {
     managerNames: rows[0].manager_names ?? [],
     recipientEmails: rows[0].recipient_emails ?? [],
+    fredmeyerEmails: rows[0].fredmeyer_emails ?? [],
   };
 }
 
-async function upsertStoreData(storeNumber, { managerNames = [], recipientEmails = [] }) {
+async function upsertStoreData(storeNumber, {
+  managerNames = [],
+  recipientEmails = [],
+  fredmeyerEmails = [],
+} = {}) {
   const existing = await getStoreData(storeNumber);
-  const mergedManagers = [...new Set([...existing.managerNames, ...managerNames])];
-  const mergedEmails = [...new Set([...existing.recipientEmails, ...recipientEmails])];
+  const mergedManagers = [...new Set([...existing.managerNames, ...managerNames.filter(Boolean)])];
+  const mergedEmails = [...new Set([...existing.recipientEmails, ...recipientEmails.filter(Boolean)])];
+  const mergedFredmeyer = [...new Set([...existing.fredmeyerEmails, ...fredmeyerEmails.filter(Boolean)])];
   await pool.query(
-    `INSERT INTO store_data (store_number, manager_names, recipient_emails)
-     VALUES ($1, $2, $3)
+    `INSERT INTO store_data (store_number, manager_names, recipient_emails, fredmeyer_emails)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT (store_number) DO UPDATE
-       SET manager_names = $2,
-           recipient_emails = $3`,
-    [storeNumber, JSON.stringify(mergedManagers), JSON.stringify(mergedEmails)]
+       SET manager_names   = $2,
+           recipient_emails = $3,
+           fredmeyer_emails = $4`,
+    [storeNumber, JSON.stringify(mergedManagers), JSON.stringify(mergedEmails), JSON.stringify(mergedFredmeyer)]
   );
-  return { managerNames: mergedManagers, recipientEmails: mergedEmails };
+  return { managerNames: mergedManagers, recipientEmails: mergedEmails, fredmeyerEmails: mergedFredmeyer };
+}
+
+async function removeFromStoreData(storeNumber, { managerName, fredmeyerEmail } = {}) {
+  const existing = await getStoreData(storeNumber);
+  const managerNames = managerName
+    ? existing.managerNames.filter((n) => n !== managerName)
+    : existing.managerNames;
+  const fredmeyerEmails = fredmeyerEmail
+    ? existing.fredmeyerEmails.filter((e) => e !== fredmeyerEmail)
+    : existing.fredmeyerEmails;
+  await pool.query(
+    `UPDATE store_data SET manager_names = $2, fredmeyer_emails = $3 WHERE store_number = $1`,
+    [storeNumber, JSON.stringify(managerNames), JSON.stringify(fredmeyerEmails)]
+  );
+  return { managerNames, recipientEmails: existing.recipientEmails, fredmeyerEmails };
 }
 
 function buildFromAddress(storeNumber) {
@@ -464,14 +492,20 @@ async function start() {
 
     const html = buildHtml({ body, signoffPhotos, userName, userEmail });
 
+    const emailPayload = {
+      from,
+      to: Array.isArray(recipients) ? recipients : [recipients],
+      subject,
+      html,
+      attachments,
+    };
+
+    if (userEmail) {
+      emailPayload.reply_to = userEmail;
+    }
+
     try {
-      const { data, error } = await resend.emails.send({
-        from,
-        to: Array.isArray(recipients) ? recipients : [recipients],
-        subject,
-        html,
-        attachments,
-      });
+      const { data, error } = await resend.emails.send(emailPayload);
 
       if (error) {
         logger.error({ error, storeNumber }, 'Resend API error sending EOD email');
@@ -482,9 +516,13 @@ async function start() {
 
       logger.info('Attempting store data upsert for store:', storeNumber);
       try {
+        const allRecipients = Array.isArray(recipients) ? recipients : [];
+        const fredmeyerEmails = allRecipients.filter(
+          (e) => typeof e === 'string' && e.toLowerCase().endsWith('@fredmeyer.com')
+        );
         await upsertStoreData(storeNumber, {
           managerNames: [checkInManager, checkOutManager].filter(Boolean),
-          recipientEmails: recipients || []
+          fredmeyerEmails,
         });
         logger.info('Store data upserted successfully for store:', storeNumber);
       } catch (err) {
@@ -509,15 +547,40 @@ async function start() {
   });
 
   app.post('/store-data/:storeNumber', async (req, res) => {
-    const { managerNames, recipientEmails } = req.body;
+    const { managerNames, recipientEmails, fredmeyerEmails } = req.body;
     try {
       const data = await upsertStoreData(req.params.storeNumber, {
         managerNames,
         recipientEmails,
+        fredmeyerEmails,
       });
       return res.json({ success: true, ...data });
     } catch (err) {
       logger.error({ err }, 'Error upserting store data');
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete('/store-data/:storeNumber/manager-name', async (req, res) => {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ success: false, error: 'name is required' });
+    try {
+      const data = await removeFromStoreData(req.params.storeNumber, { managerName: name });
+      return res.json({ success: true, ...data });
+    } catch (err) {
+      logger.error({ err }, 'Error removing manager name');
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete('/store-data/:storeNumber/fredmeyer-email', async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, error: 'email is required' });
+    try {
+      const data = await removeFromStoreData(req.params.storeNumber, { fredmeyerEmail: email });
+      return res.json({ success: true, ...data });
+    } catch (err) {
+      logger.error({ err }, 'Error removing fredmeyer email');
       return res.status(500).json({ success: false, error: err.message });
     }
   });
