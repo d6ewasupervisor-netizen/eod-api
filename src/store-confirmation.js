@@ -190,7 +190,7 @@ async function lookupRosterMatchLocal(pool, { email, store, date }) {
   // Find any schedule row for that store/date and inspect freshness.
   const { rows } = await pool.query(
     `SELECT
-       MAX(synced_at) AS latest_sync,
+       MAX(s.synced_at) AS latest_sync,
        BOOL_OR(
          LOWER(s.visit_lead) = LOWER(e.name)
          OR LOWER(s.visit_lead) = LOWER(e.preferred_name)
