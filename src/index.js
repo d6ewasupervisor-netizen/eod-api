@@ -517,8 +517,9 @@ async function start() {
       logger.info('Attempting store data upsert for store:', storeNumber);
       try {
         const allRecipients = Array.isArray(recipients) ? recipients : [];
+        // Only save canonical @stores.fredmeyer.com addresses to the pool.
         const fredmeyerEmails = allRecipients.filter(
-          (e) => typeof e === 'string' && e.toLowerCase().endsWith('@fredmeyer.com')
+          (e) => typeof e === 'string' && e.toLowerCase().endsWith('@stores.fredmeyer.com')
         );
         await upsertStoreData(storeNumber, {
           managerNames: [checkInManager, checkOutManager].filter(Boolean),
