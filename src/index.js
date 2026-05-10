@@ -11,6 +11,7 @@ const shiftManagement = require('./shift-management');
 const storeConfirmation = require('./store-confirmation');
 const extensionBridge = require('./extension-bridge');
 const { createInstaworkRouter } = require('./instawork-router');
+const { createAiRouter } = require('./ai-router');
 const { runFullSync } = require('./sas-sync');
 
 const logger = {
@@ -292,6 +293,11 @@ async function start() {
       saveImageGate: storeConfirmation.requireDayConfirm,
     })
   );
+
+  // AI chat proxy for the SAS extension side panel. Auth is the global
+  // requireAuth gate above (Cloudflare Access JWT, forwarded by the
+  // extension from the CF_Authorization cookie).
+  app.use('/api/ai', createAiRouter({ logger }));
 
   // ─── SYNC ROUTES ───────────────────────────────────────────────────────────
   app.post('/api/sync/run', requireRole('supervisor', 'admin'), async (req, res) => {
