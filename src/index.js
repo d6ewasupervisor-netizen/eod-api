@@ -2,8 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const cron = require('node-cron');
 const { Resend } = require('resend');
-const { Pool } = require('pg');
-const { requireAuth, requireRole } = require('./auth-middleware');
+const { requireAuth, requireRole, AUTH_MODE } = require('./auth-middleware');
+const { pool, runMigrations } = require('./lib/db');
 const sasBridge = require('./sas-bridge');
 const sasAutoRefresh = require('./sas-auto-refresh');
 const reboticsBridge = require('./rebotics-bridge');
@@ -14,6 +14,17 @@ const { createInstaworkRouter } = require('./instawork-router');
 const { createAiRouter } = require('./ai-router');
 const { runFullSync } = require('./sas-sync');
 
+// New email-link + admin routes (Phase A of the Cloudflare Access removal).
+// These are wired in unconditionally so they exist even while AUTH_MODE is
+// still 'cf-access' -- the global gate below makes their paths public so they
+// work without a CF Access JWT.
+const requestLinkRouter = require('./routes/request-link');
+const verifyTokenRouter = require('./routes/verify-token');
+const adminSessionRouter = require('./routes/admin-session');
+const adminAllowedEmailsRouter = require('./routes/admin-allowed-emails');
+const accessRequestRouter = require('./routes/access-request');
+const accessRequestDecisionRouter = require('./routes/access-request-decision');
+
 const logger = {
   info: (...a) => console.log('[INFO]', ...a),
   warn: (...a) => console.warn('[WARN]', ...a),
@@ -23,7 +34,11 @@ const logger = {
 const resend = new Resend(process.env.RESEND_API_KEY);
 const PORT = process.env.PORT || 3001;
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// `pool` is the shared connection pool from ./lib/db. We re-export the same
+// instance throughout the app so we never end up with two pools fighting over
+// the same connection limit. New auth code (lib/db.js, lib/site-admin.js,
+// routes/*) imports it directly; legacy code receives it via the sub-module
+// init signatures below.
 
 async function initDb() {
   await pool.query(`
@@ -190,7 +205,24 @@ async function start() {
   await initDb();
   logger.info('Database initialized');
 
+  // Idempotent schema migrations for the new email-link / admin auth stack.
+  // Safe to run on every boot -- schema_migrations tracks which files have
+  // already been applied.
+  try {
+    await runMigrations();
+    logger.info('Auth migrations applied');
+  } catch (err) {
+    logger.error('Auth migrations failed:', err.message);
+    throw err;
+  }
+  logger.info(`Auth mode: ${AUTH_MODE}`);
+
   const app = express();
+
+  // Railway sits behind a proxy; trust the X-Forwarded-* headers so req.ip
+  // and express-rate-limit keys reflect the real client IP. Required by the
+  // /api/request-link + /api/access-request rate limiters.
+  app.set('trust proxy', 1);
 
   // Cloudflare Access fronts both the-dump-bin.com (frontend) and
   // eod-api.the-dump-bin.com (this API). Cookies are scoped to the parent
@@ -226,10 +258,23 @@ async function start() {
     '/extension/manifest',
     '/extension/download',
     '/extension/publish',
+    // Email-link / admin auth surface (Phase A migration off Cloudflare Access).
+    // These endpoints ARE the sign-in flow, so they cannot themselves require
+    // a session. They self-protect: /api/admin/* uses requireAdmin internally,
+    // request-link/access-request are rate-limited + allowlist-checked, and
+    // /api/verify-token only honors single-use JWTs signed by JWT_SECRET.
+    '/api/request-link',
+    '/api/verify-token',
   ];
   const PUBLIC_PREFIXES = [
     '/api/shift-request/',
     '/extension/download/',
+    // Whole /api/admin/* surface is public to the global gate (each subroute
+    // applies requireAdmin from lib/admin-auth.js where needed).
+    '/api/admin/',
+    // Self-serve access request submission and approve/deny landing URLs.
+    '/api/access-request',
+    '/api/access-requests/',
   ];
   const PUBLIC_REGEXES = [
     /^\/api\/signoff-photos\/[^\/]+\/image\/?$/,
@@ -245,6 +290,18 @@ async function start() {
     if (PUBLIC_REGEXES.some(r => r.test(req.path))) return next();
     return requireAuth(req, res, next);
   });
+
+  // ─── NEW AUTH ROUTERS ──────────────────────────────────────────────────────
+  // Mounted AFTER the global gate (which whitelisted them above), BEFORE any
+  // gated business route, so they're reachable without a CF Access JWT or a
+  // session token. The trailing slash on /api/access-requests vs the bare
+  // /api/access-request matches district6 -- distinct subtrees.
+  app.use('/api/request-link', requestLinkRouter);
+  app.use('/api/verify-token', verifyTokenRouter);
+  app.use('/api/admin/session', adminSessionRouter);
+  app.use('/api/admin/allowed-emails', adminAllowedEmailsRouter);
+  app.use('/api/access-request', accessRequestRouter);
+  app.use('/api/access-requests', accessRequestDecisionRouter);
 
   // Initialize SAS bridge (session receiver, upload queue, worker)
   await sasBridge.init(app, pool);
