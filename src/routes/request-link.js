@@ -48,7 +48,11 @@ router.post('/', limiter, async (req, res) => {
       [email, jti, ip, ua],
     );
 
-    const base = (process.env.FRONTEND_BASE_URL || 'https://the-dump-bin.com/EOD').replace(/\/+$/, '');
+    // FRONTEND_BASE_URL is the hub origin (no trailing /EOD now that the
+    // sign-in flow covers every app under the-dump-bin.com). The magic link
+    // lands the user on the hub home; from there they pick whichever tool
+    // they want.
+    const base = (process.env.FRONTEND_BASE_URL || 'https://the-dump-bin.com').replace(/\/+$/, '');
     const link = `${base}/index.html?token=${encodeURIComponent(token)}`;
 
     await sendLinkEmail({ to: email, link });

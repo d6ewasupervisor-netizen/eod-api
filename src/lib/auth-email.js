@@ -16,7 +16,7 @@ if (!process.env.RESEND_API_KEY) {
 
 const resend = new Resend(process.env.RESEND_API_KEY || 'unset');
 
-const FROM = process.env.AUTH_EMAIL_FROM || 'EOD Sign-In <noreply@retail-odyssey.com>';
+const FROM = process.env.AUTH_EMAIL_FROM || 'The Dump Bin <noreply@retail-odyssey.com>';
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
@@ -25,88 +25,90 @@ function escapeHtml(s) {
 }
 
 async function sendLinkEmail({ to, link }) {
-  const subject = 'Your EOD sign-in link';
+  const subject = 'Your sign-in link for The Dump Bin';
   const text = [
     'Hello,',
     '',
-    'Use the link below to sign in to the EOD app. It is unique to you and expires in 30 days,',
-    'and it can only be clicked once. Clicking it will keep you signed in for the next 45 days.',
+    'Use the link below to sign in to The Dump Bin. One link signs you in to every',
+    'Retail Odyssey tool on the site (EOD, claims, shirt orders, suncare lookup, etc.).',
+    'It is unique to you, expires in 30 days, and can only be clicked once. Clicking',
+    'it will keep you signed in for the next 45 days on this device.',
     '',
     link,
     '',
     'If you did not request this, you can ignore this message.',
     '',
-    '\u2014 Retail Odyssey EOD',
+    '\u2014 Retail Odyssey',
   ].join('\n');
   const safeLink = escapeHtml(link);
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 16px;color:#1f2937;">
-      <h2 style="color:#1a3a6e;margin:0 0 16px;">Sign in to EOD</h2>
-      <p style="margin:0 0 12px;">Use the button below to sign in to the EOD app.
+      <h2 style="color:#1a3a6e;margin:0 0 16px;">Sign in to The Dump Bin</h2>
+      <p style="margin:0 0 12px;">Use the button below to sign in. One link signs you in to every Retail Odyssey tool on the site (EOD cover sheet, claims, shirt orders, suncare lookup, and more).
          The link is unique to you, expires in 30 days, and can only be clicked once.
          After signing in you will stay signed in for the next 45 days on this device.</p>
       <p style="margin:0 0 24px;">
-        <a href="${safeLink}" style="display:inline-block;background:#1a3a6e;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Sign in to EOD</a>
+        <a href="${safeLink}" style="display:inline-block;background:#1a3a6e;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Sign in</a>
       </p>
       <p style="color:#6b7280;font-size:13px;margin:0;">Can&apos;t click the button? Copy and paste this link:<br>${safeLink}</p>
-      <p style="margin-top:24px;color:#9ca3af;font-size:12px;">If you did not request this, you can ignore this message. &mdash; Retail Odyssey EOD</p>
+      <p style="margin-top:24px;color:#9ca3af;font-size:12px;">If you did not request this, you can ignore this message. &mdash; Retail Odyssey</p>
     </div>
   `;
   return resend.emails.send({ from: FROM, to, subject, text, html });
 }
 
 async function sendAdminPasswordResetEmail({ to, resetUrl }) {
-  const subject = 'Reset your EOD admin password';
+  const subject = 'Reset your Dump Bin admin password';
   const safeUrl = escapeHtml(resetUrl);
   const text = [
     'Hello,',
     '',
-    'Someone requested a password reset for your EOD administrator account.',
+    'Someone requested a password reset for your Dump Bin administrator account.',
     'Open the secure link below. It expires in one hour.',
     '',
     resetUrl,
     '',
     'If you did not request this, you can safely ignore this message.',
     '',
-    '\u2014 Retail Odyssey EOD',
+    '\u2014 Retail Odyssey',
   ].join('\n');
   const html = `
     <p>Hello,</p>
-    <p>Someone requested a password reset for your EOD administrator account.
+    <p>Someone requested a password reset for your Dump Bin administrator account.
        Open the secure link below. It expires in <strong>one hour</strong>.</p>
     <p><a href="${safeUrl}">${safeUrl}</a></p>
     <p>If you did not request this, you can safely ignore this message.</p>
-    <p>&mdash; Retail Odyssey EOD</p>
+    <p>&mdash; Retail Odyssey</p>
   `;
   return resend.emails.send({ from: FROM, to, subject, text, html });
 }
 
 async function sendAccessApprovedEmail({ to, name, link }) {
-  const subject = 'You\'re approved \u2014 EOD access';
+  const subject = 'You\'re approved \u2014 The Dump Bin access';
   const greeting = name ? `Hi ${escapeHtml(name)},` : 'Hello,';
   const safeLink = escapeHtml(link);
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 16px;color:#1f2937;">
       <h2 style="color:#1a3a6e;margin:0 0 16px;">${greeting}</h2>
-      <p style="margin:0 0 12px;">Your access to the EOD app has been approved.</p>
+      <p style="margin:0 0 12px;">Your access to The Dump Bin has been approved.</p>
       <p style="margin:0 0 24px;">Click the button below to sign in. The link is unique to you, expires in 30 days,
          and signs you in for 45 days on this device.</p>
       <p style="margin:0 0 24px;">
-        <a href="${safeLink}" style="display:inline-block;background:#1a3a6e;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Sign in to EOD</a>
+        <a href="${safeLink}" style="display:inline-block;background:#1a3a6e;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Sign in</a>
       </p>
       <p style="color:#6b7280;font-size:13px;margin:0;">Can&apos;t click the button? Copy and paste this link:<br>${safeLink}</p>
-      <p style="margin-top:24px;color:#9ca3af;font-size:12px;">&mdash; Retail Odyssey EOD</p>
+      <p style="margin-top:24px;color:#9ca3af;font-size:12px;">&mdash; Retail Odyssey</p>
     </div>
   `;
   const text = [
     greeting,
     '',
-    'Your access to the EOD app has been approved.',
+    'Your access to The Dump Bin has been approved.',
     'Use the link below to sign in. It is unique to you and expires in 30 days.',
     '',
     link,
     '',
-    '\u2014 Retail Odyssey EOD',
+    '\u2014 Retail Odyssey',
   ].join('\n');
   return resend.emails.send({ from: FROM, to, subject, text, html });
 }
@@ -119,8 +121,8 @@ async function sendAccessRequestApprovalEmail({ record, approverEmail, approveUr
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f4f6fa;padding:32px 16px;">
     <div style="background:#fff;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.08);padding:32px;max-width:520px;margin:0 auto;border:1px solid #e5e7eb;">
-      <h2 style="margin:0 0 4px;color:#1a3a6e;font-size:18px;">Access request \u2014 EOD app</h2>
-      <p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Someone is asking for access to the EOD app.</p>
+      <h2 style="margin:0 0 4px;color:#1a3a6e;font-size:18px;">Access request \u2014 The Dump Bin</h2>
+      <p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Someone is asking for access to The Dump Bin (EOD, claims, suncare, and the other Retail Odyssey tools).</p>
       <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
         <tr>
           <td style="padding:6px 0;color:#6b7280;font-size:13px;vertical-align:top;">Name</td>
@@ -149,12 +151,12 @@ async function sendAccessRequestApprovalEmail({ record, approverEmail, approveUr
         </tr>
       </table>
       <p style="margin-top:16px;color:#9ca3af;font-size:12px;">
-        Approve adds this person to the EOD allowlist and sends them a sign-in link immediately.
+        Approve adds this person to the Dump Bin allowlist and sends them a sign-in link immediately.
       </p>
     </div></div>
   `;
   const text = [
-    `Access request \u2014 EOD app`,
+    `Access request \u2014 The Dump Bin`,
     '',
     `Name: ${record.name || '\u2014'}`,
     `Email: ${record.email}`,
@@ -166,7 +168,7 @@ async function sendAccessRequestApprovalEmail({ record, approverEmail, approveUr
   return resend.emails.send({
     from: FROM,
     to: approverEmail,
-    subject: `EOD access request: ${record.name || record.email} (${record.email})`,
+    subject: `Dump Bin access request: ${record.name || record.email} (${record.email})`,
     text,
     html,
   });
@@ -177,21 +179,21 @@ async function sendAccessRequestDenialEmail({ to, name }) {
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 16px;color:#1f2937;">
       <h2 style="color:#1a3a6e;margin:0 0 16px;">${greeting}</h2>
-      <p style="margin:0 0 12px;">Your request to access the EOD app has been reviewed and was not approved at this time.</p>
+      <p style="margin:0 0 12px;">Your request to access The Dump Bin has been reviewed and was not approved at this time.</p>
       <p style="margin:0 0 0;color:#6b7280;font-size:14px;">If you believe this is an error, please contact your supervisor directly.</p>
-      <p style="margin-top:24px;color:#9ca3af;font-size:12px;">&mdash; Retail Odyssey EOD</p>
+      <p style="margin-top:24px;color:#9ca3af;font-size:12px;">&mdash; Retail Odyssey</p>
     </div>
   `;
   const text = [
     greeting,
     '',
-    'Your request to access the EOD app has been reviewed and was not approved at this time.',
+    'Your request to access The Dump Bin has been reviewed and was not approved at this time.',
     '',
     'If you believe this is an error, please contact your supervisor directly.',
     '',
-    '\u2014 Retail Odyssey EOD',
+    '\u2014 Retail Odyssey',
   ].join('\n');
-  return resend.emails.send({ from: FROM, to, subject: 'EOD \u2014 access request update', text, html });
+  return resend.emails.send({ from: FROM, to, subject: 'The Dump Bin \u2014 access request update', text, html });
 }
 
 async function sendAccessRequestOtherApproverEmail({ to, decidedBy, action, record }) {
@@ -210,7 +212,7 @@ async function sendAccessRequestOtherApproverEmail({ to, decidedBy, action, reco
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f4f6fa;padding:32px 16px;">
     <div style="background:#fff;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.08);padding:32px;max-width:520px;margin:0 auto;border:1px solid #e5e7eb;">
-      <h2 style="margin:0 0 4px;color:#1a3a6e;font-size:18px;">Access request \u2014 EOD app</h2>
+      <h2 style="margin:0 0 4px;color:#1a3a6e;font-size:18px;">Access request \u2014 The Dump Bin</h2>
       <div style="background:${outcomeBg};border:1px solid ${outcomeBorder};border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:14px;color:${outcomeColor};">
         <strong>${escapeHtml(decidedBy)}</strong> already <strong>${label}</strong> this request. ${detail}
       </div>
@@ -222,7 +224,7 @@ async function sendAccessRequestOtherApproverEmail({ to, decidedBy, action, reco
     </div></div>
   `;
   const text = [
-    `[FYI] EOD access request ${label}`,
+    `[FYI] Dump Bin access request ${label}`,
     '',
     `${decidedBy} already ${label} this request. No action needed.`,
     '',
@@ -233,7 +235,7 @@ async function sendAccessRequestOtherApproverEmail({ to, decidedBy, action, reco
   return resend.emails.send({
     from: FROM,
     to,
-    subject: `[FYI] EOD access request ${label}: ${record.name || record.email}`,
+    subject: `[FYI] Dump Bin access request ${label}: ${record.name || record.email}`,
     text,
     html,
   });
