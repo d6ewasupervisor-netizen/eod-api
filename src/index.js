@@ -225,6 +225,12 @@ async function start() {
   // /api/request-link + /api/access-request rate limiters.
   app.set('trust proxy', 1);
 
+  // Approve/deny links in email open on the API host; the browser sends
+  // Origin: https://eod-api.the-dump-bin.com, which is not in ALLOWED_ORIGINS.
+  // These routes are direct GET/POST (not cross-origin XHR), so they must be
+  // registered before the global cors() middleware.
+  app.use('/api/access-requests', accessRequestDecisionRouter);
+
   // Cloudflare Access fronts both the-dump-bin.com (frontend) and
   // eod-api.the-dump-bin.com (this API). Cookies are scoped to the parent
   // zone, so we just need to echo the origin and allow credentials.
@@ -303,7 +309,6 @@ async function start() {
   app.use('/api/admin/allowed-emails', adminAllowedEmailsRouter);
   app.use('/api/admin/admins', adminAdminsRouter);
   app.use('/api/access-request', accessRequestRouter);
-  app.use('/api/access-requests', accessRequestDecisionRouter);
 
   // Initialize SAS bridge (session receiver, upload queue, worker)
   await sasBridge.init(app, pool);

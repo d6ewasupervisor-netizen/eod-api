@@ -71,13 +71,17 @@ function detailHtml(record) {
 function renderConfirmation(action, record, warning) {
   const label = action === 'approve' ? 'approved' : 'denied';
   const badge = action === 'approve' ? '<span class="ok">Approved</span>' : '<span class="deny">Denied</span>';
+  const title =
+    action === 'approve'
+      ? `Access approved for ${esc(record.email)}`
+      : `Access request denied for ${esc(record.email)}`;
   const note = action === 'approve'
     ? `<p>A sign-in link has been sent to <strong>${esc(record.email)}</strong>.</p>`
     : `<p>${esc(record.name || record.email)} has been notified that their request was not approved.</p>`;
   const warnHtml = warning ? `<div class="warn"><strong>Note:</strong> ${esc(warning)}</div>` : '';
-  return `<!DOCTYPE html><html><head>${PAGE_CSS}<title>Request ${label}</title></head>
+  return `<!DOCTYPE html><html><head>${PAGE_CSS}<title>${action === 'approve' ? 'Access approved' : 'Request denied'}</title></head>
 <body><div class="card">
-  <h1>Request ${label} ${badge}</h1>
+  <h1>${title} ${badge}</h1>
   ${detailHtml(record)}
   ${note}
   ${warnHtml}
@@ -167,82 +171,101 @@ async function validateDecisionRequest(req, res, action) {
 }
 
 async function showDecisionPrompt(req, res, action) {
-  const validated = await validateDecisionRequest(req, res, action);
-  if (!validated) return;
-  if (validated.existing.status !== 'pending') {
-    return res.send(renderAlreadyDecided(validated.existing));
+  try {
+    const validated = await validateDecisionRequest(req, res, action);
+    if (!validated) return;
+    if (validated.existing.status !== 'pending') {
+      return res.send(renderAlreadyDecided(validated.existing));
+    }
+    return res.send(renderDecisionPrompt(action, validated.existing, validated.token, validated.approverEmail));
+  } catch (err) {
+    console.error('[access-request-decision] showDecisionPrompt', err);
+    if (!res.headersSent) {
+      return res.status(500).send(
+        renderError('Could not load this page', 'Something went wrong. Please try again in a moment or ask your supervisor.'),
+      );
+    }
   }
-  return res.send(renderDecisionPrompt(action, validated.existing, validated.token, validated.approverEmail));
 }
 
 async function handleDecision(req, res, action) {
-  const validated = await validateDecisionRequest(req, res, action);
-  if (!validated) return;
-  const { id, approverEmail } = validated;
+  try {
+    const validated = await validateDecisionRequest(req, res, action);
+    if (!validated) return;
+    const { id, approverEmail } = validated;
 
-  const decided = await markAccessRequestDecided(id, action, approverEmail);
-  if (!decided) {
-    const current = await getAccessRequest(id);
-    return res.send(current ? renderAlreadyDecided(current) : renderError('Not found', 'This access request could not be found.'));
-  }
-
-  console.log(`[access-request-decision] ${action} by ${approverEmail} for request ${id} (${decided.email})`);
-
-  let warning = null;
-
-  if (action === 'approve') {
-    try {
-      await query(
-        `INSERT INTO allowed_emails (email, note)
-         VALUES ($1, $2)
-         ON CONFLICT (email) DO UPDATE SET note = EXCLUDED.note, updated_at = NOW()`,
-        [decided.email, `Approved via access request by ${approverEmail} on ${formatDatetime(decided.decided_at)}`],
-      );
-    } catch (err) {
-      console.error('[access-request-decision] failed to insert allowed_email:', err);
-      warning = 'The approval was recorded but the email could not be added to the allowlist automatically. Please add it manually via the admin page.';
+    const decided = await markAccessRequestDecided(id, action, approverEmail);
+    if (!decided) {
+      const current = await getAccessRequest(id);
+      if (current) return res.send(renderAlreadyDecided(current));
+      return res.status(404).send(renderError('Request not found', 'This access request could not be found. It may have expired or already been removed.'));
     }
 
-    if (!warning) {
+    console.log(`[access-request-decision] ${action} by ${approverEmail} for request ${id} (${decided.email})`);
+
+    let warning = null;
+
+    if (action === 'approve') {
       try {
-        const { token: linkJwt, jti } = issueLinkToken(decided.email);
         await query(
-          `INSERT INTO link_requests (email, jti, ip, user_agent) VALUES ($1, $2, $3, $4)`,
-          [decided.email, jti, null, 'access-request-auto-link'],
+          `INSERT INTO allowed_emails (email, note)
+           VALUES ($1, $2)
+           ON CONFLICT (email) DO UPDATE SET note = EXCLUDED.note, updated_at = NOW()`,
+          [decided.email, `Approved via access request by ${approverEmail} on ${formatDatetime(decided.decided_at)}`],
         );
-        // FRONTEND_BASE_URL is the hub origin (the sign-in flow covers every
-        // app under the-dump-bin.com, not just /EOD).
-        const base = (process.env.FRONTEND_BASE_URL || 'https://the-dump-bin.com').replace(/\/+$/, '');
-        const link = `${base}/index.html?token=${encodeURIComponent(linkJwt)}`;
-        await sendAccessApprovedEmail({ to: decided.email, name: decided.name, link });
-        console.log(`[access-request-decision] magic link sent to ${decided.email}`);
       } catch (err) {
-        console.error('[access-request-decision] failed to send magic link:', err);
-        warning = 'The approval was recorded but the sign-in link email failed to send. Please send them a link manually from the admin page.';
+        console.error('[access-request-decision] failed to insert allowed_email:', err);
+        warning = 'The approval was recorded but the email could not be added to the allowlist automatically. Please add it manually via the admin page.';
       }
-    }
-  } else {
-    try {
-      await sendAccessRequestDenialEmail({ to: decided.email, name: decided.name });
-    } catch (err) {
-      console.error('[access-request-decision] failed to send denial email:', err);
-    }
-  }
 
-  // With a single approver this loop is a no-op; left in so adding a second
-  // approver via ACCESS_REQUEST_APPROVERS "just works".
-  const approvers = getApprovers();
-  for (const other of approvers) {
-    if (other.toLowerCase() !== approverEmail.toLowerCase()) {
+      if (!warning) {
+        try {
+          const { token: linkJwt, jti } = issueLinkToken(decided.email);
+          await query(
+            `INSERT INTO link_requests (email, jti, ip, user_agent) VALUES ($1, $2, $3, $4)`,
+            [decided.email, jti, null, 'access-request-auto-link'],
+          );
+          // FRONTEND_BASE_URL is the hub origin (the sign-in flow covers every
+          // app under the-dump-bin.com, not just /EOD).
+          const base = (process.env.FRONTEND_BASE_URL || 'https://the-dump-bin.com').replace(/\/+$/, '');
+          const link = `${base}/index.html?token=${encodeURIComponent(linkJwt)}`;
+          await sendAccessApprovedEmail({ to: decided.email, name: decided.name, link });
+          console.log(`[access-request-decision] magic link sent to ${decided.email}`);
+        } catch (err) {
+          console.error('[access-request-decision] failed to send magic link:', err);
+          warning = 'The approval was recorded but the sign-in link email failed to send. Please send them a link manually from the admin page.';
+        }
+      }
+    } else {
       try {
-        await sendAccessRequestOtherApproverEmail({ to: other, decidedBy: approverEmail, action, record: decided });
+        await sendAccessRequestDenialEmail({ to: decided.email, name: decided.name });
       } catch (err) {
-        console.error(`[access-request-decision] failed to notify other approver ${other}:`, err);
+        console.error('[access-request-decision] failed to send denial email:', err);
       }
     }
-  }
 
-  return res.send(renderConfirmation(action, decided, warning));
+    // With a single approver this loop is a no-op; left in so adding a second
+    // approver via ACCESS_REQUEST_APPROVERS "just works".
+    const approvers = getApprovers();
+    for (const other of approvers) {
+      if (other.toLowerCase() !== approverEmail.toLowerCase()) {
+        try {
+          await sendAccessRequestOtherApproverEmail({ to: other, decidedBy: approverEmail, action, record: decided });
+        } catch (err) {
+          console.error(`[access-request-decision] failed to notify other approver ${other}:`, err);
+        }
+      }
+    }
+
+    return res.send(renderConfirmation(action, decided, warning));
+  } catch (err) {
+    console.error('[access-request-decision] handleDecision', err);
+    if (!res.headersSent) {
+      return res.status(500).send(
+        renderError('Could not complete this action', 'Something went wrong while processing your decision. Please try again or contact your supervisor.'),
+      );
+    }
+  }
 }
 
 router.get('/:id/approve', (req, res) => showDecisionPrompt(req, res, 'approve'));
