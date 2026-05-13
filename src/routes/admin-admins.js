@@ -72,6 +72,8 @@ router.post('/invite', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'You cannot invite yourself.' });
   }
 
+  /** Set inside the transaction; used after COMMIT for the outbound email URL. */
+  let inviteJwt = null;
   let jtiIssued;
 
   const client = await pool.connect();
@@ -109,12 +111,13 @@ router.post('/invite', async (req, res) => {
       [emailNorm],
     );
 
-    const { token: inviteJwt, jti } = issueAdminInviteToken(emailNorm);
-    jtiIssued = jti;
+    const issued = issueAdminInviteToken(emailNorm);
+    inviteJwt = issued.token;
+    jtiIssued = issued.jti;
     await client.query(
       `INSERT INTO site_admin_invites (email, jti, invited_by, note)
        VALUES ($1, $2, $3, $4)`,
-      [emailNorm, jti, inviter || null, note],
+      [emailNorm, jtiIssued, inviter || null, note],
     );
 
     await client.query('COMMIT');
@@ -124,6 +127,11 @@ router.post('/invite', async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Could not send invitation.' });
   } finally {
     client.release();
+  }
+
+  if (!inviteJwt || !jtiIssued) {
+    console.error('[admin-admins] invite: committed without jwt (unexpected)');
+    return res.status(500).json({ ok: false, error: 'Could not send invitation.' });
   }
 
   const base = frontendBaseUrl();
