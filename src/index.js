@@ -22,6 +22,7 @@ const requestLinkRouter = require('./routes/request-link');
 const verifyTokenRouter = require('./routes/verify-token');
 const adminSessionRouter = require('./routes/admin-session');
 const adminAllowedEmailsRouter = require('./routes/admin-allowed-emails');
+const adminAdminsRouter = require('./routes/admin-admins');
 const accessRequestRouter = require('./routes/access-request');
 const accessRequestDecisionRouter = require('./routes/access-request-decision');
 
@@ -300,6 +301,7 @@ async function start() {
   app.use('/api/verify-token', verifyTokenRouter);
   app.use('/api/admin/session', adminSessionRouter);
   app.use('/api/admin/allowed-emails', adminAllowedEmailsRouter);
+  app.use('/api/admin/admins', adminAdminsRouter);
   app.use('/api/access-request', accessRequestRouter);
   app.use('/api/access-requests', accessRequestDecisionRouter);
 

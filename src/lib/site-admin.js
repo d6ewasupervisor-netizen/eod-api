@@ -1,7 +1,6 @@
-// Admin-account helpers for /api/admin/session. There is exactly one row per
-// admin email in `site_admins`; password_hash is NULL until either:
-//   1. The primary admin completes /api/admin/session/setup with ADMIN_SETUP_TOKEN, OR
-//   2. An existing admin uses the (still-TODO) "add admin" flow -- not in scope yet.
+// Admin-account helpers for /api/admin/session. One row per admin in `site_admins`;
+// password_hash is NULL until `/setup` with ADMIN_SETUP_TOKEN (primary bootstrap),
+// or `/complete-invite` from an emailed invite JWT.
 
 const { query } = require('./db');
 

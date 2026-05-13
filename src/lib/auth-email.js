@@ -57,6 +57,47 @@ async function sendLinkEmail({ to, link }) {
   return resend.emails.send({ from: FROM, to, subject, text, html });
 }
 
+async function sendAdminInviteEmail({
+  to,
+  inviteUrl,
+  note,
+  invitedByEmail,
+}) {
+  const subject = 'You\'ve been invited as an admin for The Dump Bin';
+  const noteBlock = note
+    ? `\nNote from whoever invited you:\n${note}\n`
+    : '';
+  const byLine = invitedByEmail ? `\nInvitation sent by ${invitedByEmail}.\n` : '';
+  const text = [
+    'Hello,',
+    '',
+    'You\'ve been invited as an administrator for The Dump Bin (allowlist management, etc.).',
+    'Open the link below (valid 7 days, one-time use). You will choose your password.',
+    '',
+    inviteUrl,
+    '',
+    `${byLine}${noteBlock}`,
+    'If you did not expect this, ignore this email.',
+    '',
+    '\u2014 Retail Odyssey',
+  ].join('\n');
+  const safeUrl = escapeHtml(inviteUrl);
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 16px;color:#1f2937;">
+      <h2 style="color:#1a3a6e;margin:0 0 16px;">You've been invited as an admin</h2>
+      <p style="margin:0 0 12px;">You've been invited as an administrator for <strong>The Dump Bin</strong> (manage who may sign in, etc.). Click the button below — the link expires in seven days and can only be used once. You will choose your password on the next page.</p>
+      ${invitedByEmail ? `<p style="margin:0 0 8px;color:#6b7280;font-size:13px;">Invitation sent by <strong>${escapeHtml(invitedByEmail)}</strong>.</p>` : ''}
+      ${note ? `<p style="margin:0 0 12px;padding:12px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;"><span style="color:#6b7280;font-size:12px;display:block;margin-bottom:4px;">Note</span>${escapeHtml(note)}</p>` : ''}
+      <p style="margin:0 0 24px;">
+        <a href="${safeUrl}" style="display:inline-block;background:#1a3a6e;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Accept invitation</a>
+      </p>
+      <p style="color:#6b7280;font-size:13px;margin:0;">Can't click the button? Paste this link:<br>${safeUrl}</p>
+      <p style="margin-top:24px;color:#9ca3af;font-size:12px;">If you didn't expect this, you can ignore this message. \u2014 Retail Odyssey</p>
+    </div>
+  `;
+  return resend.emails.send({ from: FROM, to, subject, text, html });
+}
+
 async function sendAdminPasswordResetEmail({ to, resetUrl }) {
   const subject = 'Reset your Dump Bin admin password';
   const safeUrl = escapeHtml(resetUrl);
@@ -243,6 +284,7 @@ async function sendAccessRequestOtherApproverEmail({ to, decidedBy, action, reco
 
 module.exports = {
   sendLinkEmail,
+  sendAdminInviteEmail,
   sendAdminPasswordResetEmail,
   sendAccessApprovedEmail,
   sendAccessRequestApprovalEmail,

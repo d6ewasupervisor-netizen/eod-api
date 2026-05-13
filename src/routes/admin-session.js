@@ -18,6 +18,7 @@ const { issueAdminSessionToken } = require('../lib/admin-jwt');
 const { requireAdmin } = require('../lib/admin-auth');
 const { pool, query } = require('../lib/db');
 const { sendAdminPasswordResetEmail } = require('../lib/auth-email');
+const { verifyAdminInviteToken } = require('../lib/tokens');
 
 const router = express.Router();
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -255,6 +256,83 @@ router.post('/forgot-password', forgotPasswordLimiter, async (req, res) => {
   } catch (err) {
     console.error('[admin-session] forgot-password', err);
     return res.status(500).json({ ok: false, error: 'Could not process reset request.' });
+  }
+});
+
+router.post('/complete-invite', resetCompleteLimiter, async (req, res) => {
+  const genericErr =
+    'This invitation link is invalid or has expired. Ask an administrator for a new invitation.';
+  try {
+    const rawTok = req.body && req.body.token != null ? String(req.body.token).trim() : '';
+    if (rawTok.length < 20) {
+      return res.status(400).json({ ok: false, error: genericErr });
+    }
+
+    let decoded;
+    try {
+      decoded = verifyAdminInviteToken(rawTok);
+    } catch {
+      return res.status(400).json({ ok: false, error: genericErr });
+    }
+
+    const rawPw = req.body && req.body.password != null ? String(req.body.password) : '';
+    const rawConfirm = req.body && req.body.passwordConfirm != null ? String(req.body.passwordConfirm) : '';
+
+    const a = normalizePassword(rawPw);
+    const b = normalizePassword(rawConfirm);
+    if (a.needsTrimWarn || b.needsTrimWarn) {
+      return res.status(400).json({ ok: false, error: 'Password cannot start or end with spaces.' });
+    }
+    const v = validateTrimmedPassword(a.trimmed, b.trimmed);
+    if (v.error) return res.status(400).json({ ok: false, error: v.error });
+
+    const bcryptHash = bcrypt.hashSync(a.trimmed, bcrypt.genSaltSync(bcryptCost));
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const sel = await client.query(
+        `SELECT id, lower(trim(email)) AS email_norm
+         FROM site_admin_invites
+         WHERE jti = $1 AND used_at IS NULL
+         FOR UPDATE`,
+        [decoded.jti],
+      );
+      if (sel.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ ok: false, error: genericErr });
+      }
+      const { id: inviteId, email_norm: emailNorm } = sel.rows[0];
+      if (emailNorm !== decoded.email) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ ok: false, error: genericErr });
+      }
+
+      const up = await client.query(
+        `UPDATE site_admins SET password_hash = $1, password_set_at = NOW()
+         WHERE lower(trim(email)) = $2 AND password_hash IS NULL`,
+        [bcryptHash, emailNorm],
+      );
+      if (up.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ ok: false, error: genericErr });
+      }
+
+      await client.query(`UPDATE site_admin_invites SET used_at = NOW() WHERE id = $1`, [inviteId]);
+      await client.query('COMMIT');
+
+      const sessionToken = issueAdminSessionToken(emailNorm);
+      console.log(`[admin-session] invite completed for ${emailNorm}`);
+      return res.json({ ok: true, token: sessionToken, email: emailNorm });
+    } catch (txErr) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('[admin-session] complete-invite', err);
+    return res.status(500).json({ ok: false, error: 'Could not save password.' });
   }
 });
 
