@@ -154,10 +154,15 @@ async function verifySession(req, res) {
 }
 
 // ─── public requireAuth ──────────────────────────────────────────────────────
-async function requireAuth(req, res, next) {
+async function authenticateRequest(req, res) {
   const user = AUTH_MODE === 'session'
     ? await verifySession(req, res)
     : await verifyCfAccess(req, res);
+  return user;
+}
+
+async function requireAuth(req, res, next) {
+  const user = await authenticateRequest(req, res);
   if (!user) return; // response already sent
   req.user = user;
   next();
@@ -173,4 +178,4 @@ function requireRole(...allowed) {
   };
 }
 
-module.exports = { requireAuth, requireRole, rolesForEmail, AUTH_MODE };
+module.exports = { requireAuth, authenticateRequest, requireRole, rolesForEmail, AUTH_MODE };
