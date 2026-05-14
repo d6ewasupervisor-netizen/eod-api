@@ -25,6 +25,9 @@ const adminAllowedEmailsRouter = require('./routes/admin-allowed-emails');
 const adminAdminsRouter = require('./routes/admin-admins');
 const accessRequestRouter = require('./routes/access-request');
 const accessRequestDecisionRouter = require('./routes/access-request-decision');
+const { identityHandler } = require('./routes/_identity');
+const whoamiRouter = require('./routes/whoami');
+const weeksRouter = require('./routes/weeks');
 
 const logger = {
   info: (...a) => console.log('[INFO]', ...a),
@@ -309,6 +312,8 @@ async function start() {
   app.use('/api/admin/allowed-emails', adminAllowedEmailsRouter);
   app.use('/api/admin/admins', adminAdminsRouter);
   app.use('/api/access-request', accessRequestRouter);
+  app.use('/api/whoami', whoamiRouter);
+  app.use('/api/weeks', weeksRouter);
 
   // Initialize SAS bridge (session receiver, upload queue, worker)
   await sasBridge.init(app, pool);
@@ -319,24 +324,7 @@ async function start() {
   // download onto the office USB stick).
   await extensionBridge.init(app, pool);
 
-  app.get('/api/me', requireAuth, (req, res) => {
-    const raw = process.env.KOMPASS_ADMIN_USERNAMES || 'Tyson.Gauthier';
-    const admins = raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-    const email = (req.user?.email || '').trim().toLowerCase();
-    const local = email.includes('@') ? email.slice(0, email.indexOf('@')) : email;
-    const isReboticsAdmin = admins.some((a) => a === email || a === local);
-    const districts = (process.env.KOMPASS_D8_REBOTICS_STORES || '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    return res.json({
-      ok: true,
-      email: req.user?.email || null,
-      roles: req.user?.roles || [],
-      isReboticsAdmin,
-      reboticsDistrictStoreIds: districts.length ? districts : null,
-    });
-  });
+  app.get('/api/me', requireAuth, identityHandler);
 
   // Initialize shift management endpoints
   await shiftManagement.initShiftRequestsTable(pool);
