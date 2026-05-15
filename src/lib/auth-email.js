@@ -9,6 +9,7 @@
 // sends authentication-flow messages.
 
 const { Resend } = require('resend');
+const { addReplyTo } = require('./resend-reply-to');
 
 if (!process.env.RESEND_API_KEY) {
   console.warn('[auth-email] RESEND_API_KEY is not set; magic-link emails will throw.');
@@ -54,7 +55,9 @@ async function sendLinkEmail({ to, link }) {
       <p style="margin-top:24px;color:#9ca3af;font-size:12px;">If you did not request this, you can ignore this message. &mdash; Retail Odyssey</p>
     </div>
   `;
-  return resend.emails.send({ from: FROM, to, subject, text, html });
+  const payload = { from: FROM, to, subject, text, html };
+  addReplyTo(payload, {});
+  return resend.emails.send(payload);
 }
 
 async function sendAdminInviteEmail({
@@ -95,7 +98,9 @@ async function sendAdminInviteEmail({
       <p style="margin-top:24px;color:#9ca3af;font-size:12px;">If you didn't expect this, you can ignore this message. \u2014 Retail Odyssey</p>
     </div>
   `;
-  return resend.emails.send({ from: FROM, to, subject, text, html });
+  const payload = { from: FROM, to, subject, text, html };
+  addReplyTo(payload, { explicit: invitedByEmail });
+  return resend.emails.send(payload);
 }
 
 async function sendAdminPasswordResetEmail({ to, resetUrl }) {
@@ -121,7 +126,9 @@ async function sendAdminPasswordResetEmail({ to, resetUrl }) {
     <p>If you did not request this, you can safely ignore this message.</p>
     <p>&mdash; Retail Odyssey</p>
   `;
-  return resend.emails.send({ from: FROM, to, subject, text, html });
+  const payload = { from: FROM, to, subject, text, html };
+  addReplyTo(payload, {});
+  return resend.emails.send(payload);
 }
 
 async function sendAccessApprovedEmail({ to, name, link }) {
@@ -151,7 +158,9 @@ async function sendAccessApprovedEmail({ to, name, link }) {
     '',
     '\u2014 Retail Odyssey',
   ].join('\n');
-  return resend.emails.send({ from: FROM, to, subject, text, html });
+  const payload = { from: FROM, to, subject, text, html };
+  addReplyTo(payload, {});
+  return resend.emails.send(payload);
 }
 
 async function sendAccessRequestApprovalEmail({ record, approverEmail, approveUrl, denyUrl }) {
@@ -206,13 +215,15 @@ async function sendAccessRequestApprovalEmail({ record, approverEmail, approveUr
     `Approve: ${approveUrl}`,
     `Deny: ${denyUrl}`,
   ].filter((l) => l !== null).join('\n');
-  return resend.emails.send({
+  const payload = {
     from: FROM,
     to: approverEmail,
     subject: `Dump Bin access request: ${record.name || record.email} (${record.email})`,
     text,
     html,
-  });
+  };
+  addReplyTo(payload, { explicit: record.email });
+  return resend.emails.send(payload);
 }
 
 async function sendAccessRequestDenialEmail({ to, name }) {
@@ -234,7 +245,9 @@ async function sendAccessRequestDenialEmail({ to, name }) {
     '',
     '\u2014 Retail Odyssey',
   ].join('\n');
-  return resend.emails.send({ from: FROM, to, subject: 'The Dump Bin \u2014 access request update', text, html });
+  const payload = { from: FROM, to, subject: 'The Dump Bin \u2014 access request update', text, html };
+  addReplyTo(payload, {});
+  return resend.emails.send(payload);
 }
 
 async function sendAccessRequestOtherApproverEmail({ to, decidedBy, action, record }) {
@@ -273,13 +286,15 @@ async function sendAccessRequestOtherApproverEmail({ to, decidedBy, action, reco
     `Email: ${record.email}`,
     record.reason ? `Reason: ${record.reason}` : '',
   ].filter((l) => l !== null).join('\n');
-  return resend.emails.send({
+  const payload = {
     from: FROM,
     to,
     subject: `[FYI] Dump Bin access request ${label}: ${record.name || record.email}`,
     text,
     html,
-  });
+  };
+  addReplyTo(payload, { explicit: decidedBy });
+  return resend.emails.send(payload);
 }
 
 module.exports = {

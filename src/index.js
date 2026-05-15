@@ -13,6 +13,7 @@ const extensionBridge = require('./extension-bridge');
 const { createInstaworkRouter } = require('./instawork-router');
 const { createAiRouter } = require('./ai-router');
 const { runFullSync } = require('./sas-sync');
+const { addReplyTo } = require('./lib/resend-reply-to');
 
 // New email-link + admin routes (Phase A of the Cloudflare Access removal).
 // These are wired in unconditionally so they exist even while AUTH_MODE is
@@ -437,12 +438,14 @@ async function start() {
       : `<p>Morning auth <strong>failed</strong> at ${time}.</p><p><strong>Error:</strong> ${error || 'Unknown'}</p><p>The SAS session was NOT refreshed. Manual intervention may be required.</p>`;
 
     try {
-      await resend.emails.send({
+      const authStatusPayload = {
         from: 'EOD System <noreply@retail-odyssey.com>',
         to: 'tyson.gauthier@retailodyssey.com',
         subject,
         html,
-      });
+      };
+      addReplyTo(authStatusPayload, {});
+      await resend.emails.send(authStatusPayload);
       console.log(`[auth-status] ${status} notification email sent`);
       return res.json({ success: true, notified: true });
     } catch (err) {
@@ -583,9 +586,7 @@ async function start() {
       attachments,
     };
 
-    if (userEmail) {
-      emailPayload.reply_to = userEmail;
-    }
+    addReplyTo(emailPayload, { userEmail });
 
     try {
       const { data, error } = await resend.emails.send(emailPayload);

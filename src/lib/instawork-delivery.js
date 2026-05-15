@@ -14,6 +14,7 @@ const {
   formatPeriodWeekUnpadded,
   pickExistingPeriodWeekFolderName,
 } = require('./fiscal-calendar');
+const { addReplyTo } = require('./resend-reply-to');
 
 function graphEnv() {
   const tenant =
@@ -157,7 +158,7 @@ function parseEmailRecipients() {
   return list.length ? list : ['d6ewa.supervisor@gmail.com'];
 }
 
-async function deliverViaEmail({ resend, fileName, periodWeekLabel, period, week, storeNumber, workDate, buffer, log }) {
+async function deliverViaEmail({ resend, fileName, periodWeekLabel, period, week, storeNumber, workDate, buffer, log, userEmail }) {
   const to = parseEmailRecipients();
   const from = process.env.INSTAWORK_EMAIL_FROM || 'InstaWork <instawork@retail-odyssey.com>';
   const subject = `[InstaWork sign-out] ${periodWeekLabel} FM${String(storeNumber).replace(/\D/g, '').padStart(3, '0')} ${workDate} ${fileName}`;
@@ -168,7 +169,7 @@ async function deliverViaEmail({ resend, fileName, periodWeekLabel, period, week
 <strong>File:</strong> ${fileName}</p>
 <p>Subject line carries routing metadata for the flow-automation Gmail watcher.</p>`;
 
-  const { data, error } = await resend.emails.send({
+  const payload = {
     from,
     to,
     subject,
@@ -179,7 +180,10 @@ async function deliverViaEmail({ resend, fileName, periodWeekLabel, period, week
         content: buffer.toString('base64'),
       },
     ],
-  });
+  };
+  addReplyTo(payload, { userEmail });
+
+  const { data, error } = await resend.emails.send(payload);
 
   if (error) {
     throw new Error(error.message || String(error));
@@ -205,6 +209,7 @@ async function deliverInstaworkImage(opts) {
     buffer,
     resend,
     log,
+    userEmail,
   } = opts;
 
   if (resend && parseEmailRecipients().length) {
@@ -217,6 +222,7 @@ async function deliverInstaworkImage(opts) {
       storeNumber,
       workDate,
       buffer,
+      userEmail,
       log,
     });
   }

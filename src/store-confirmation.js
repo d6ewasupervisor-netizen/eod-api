@@ -25,6 +25,7 @@
  */
 
 const crypto = require('crypto');
+const { addReplyTo } = require('./lib/resend-reply-to');
 const { sasGet, isSessionAlive } = require('./sas-bridge');
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────
@@ -346,17 +347,19 @@ ${body}
 </body></html>`;
 }
 
-async function sendEmail(resend, { to, subject, html }) {
+async function sendEmail(resend, { to, subject, html, userEmail }) {
   if (!resend) {
     logger.warn('Resend not configured — skipping override approval email');
     return null;
   }
-  const { data, error } = await resend.emails.send({
+  const payload = {
     from: OVERRIDE_FROM_ADDRESS,
     to: Array.isArray(to) ? to : [to],
     subject,
     html,
-  });
+  };
+  addReplyTo(payload, { userEmail });
+  const { data, error } = await resend.emails.send(payload);
   if (error) {
     logger.error('Email send failed:', error);
     throw new Error(error.message || String(error));
@@ -549,6 +552,7 @@ function registerRoutes(app, resend, pool) {
           requestedBy: email,
           reason,
         }),
+        userEmail: email,
       });
     } catch (err) {
       logger.error(`Failed to send override email: ${err.message}`);
