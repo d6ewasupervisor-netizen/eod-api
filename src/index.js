@@ -28,7 +28,7 @@ const accessRequestDecisionRouter = require('./routes/access-request-decision');
 const { identityHandler } = require('./routes/_identity');
 const whoamiRouter = require('./routes/whoami');
 const weeksRouter = require('./routes/weeks');
-const dumpBinRouter = require('./routes/dump-bin');
+const createDumpBinRouter = require('./routes/dump-bin');
 
 const logger = {
   info: (...a) => console.log('[INFO]', ...a),
@@ -276,7 +276,7 @@ async function start() {
     // /api/verify-token only honors single-use JWTs signed by JWT_SECRET.
     '/api/request-link',
     '/api/verify-token',
-    // Dump bin file GET: Authorization Bearer OR short-lived ?t= JWT (anchors).
+    // Dump bin file GET: session Bearer OR short-lived ?t= JWT (typ dump_dl).
     '/api/download',
   ];
   const PUBLIC_PREFIXES = [
@@ -317,6 +317,7 @@ async function start() {
   app.use('/api/access-request', accessRequestRouter);
   app.use('/api/whoami', whoamiRouter);
   app.use('/api/weeks', weeksRouter);
+  const dumpBinRouter = createDumpBinRouter({ resend, logger });
   app.use('/api', dumpBinRouter);
 
   // Initialize SAS bridge (session receiver, upload queue, worker)
