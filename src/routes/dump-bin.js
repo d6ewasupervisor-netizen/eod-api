@@ -88,7 +88,11 @@ function createDumpBinRouter({ resend, logger }) {
     const prefix = String(req.query.prefix || '');
     try {
       const { prefix: normalizedPrefix, folders, files } = await r2.listByPrefix(prefix);
-      return res.json({ prefix: normalizedPrefix, folders, files });
+      const filesWithTokens = files.map((f) => ({
+        ...f,
+        t: issueDownloadLinkToken(f.key),
+      }));
+      return res.json({ prefix: normalizedPrefix, folders, files: filesWithTokens });
     } catch (err) {
       if (err.code === 'DUMP_BIN_NOT_CONFIGURED') {
         return res.status(503).json({ ok: false, error: err.message });
@@ -231,6 +235,13 @@ function createDumpBinRouter({ resend, logger }) {
         attachments,
       });
       if (error) {
+        log.error('[dump-bin print-at-store] Resend rejected', {
+          error,
+          from,
+          to: printRecipient,
+          fileCount: attachments.length,
+          totalBytes,
+        });
         const msg = error.message ?? String(error);
         return res.status(502).json({ error: `Resend error: ${msg}` });
       }
