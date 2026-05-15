@@ -33,7 +33,9 @@ router.get('/', requireAuth, (_req, res) => {
           const weekNum = parseInt(weekStr, 10);
           if (Number.isNaN(weekNum)) continue;
           const info = getFolderInfo(periodNum, weekNum, fy);
-          const prefix = `${info.relativePath.split(path.sep).join('/')}/`;
+          let prefix = `${info.relativePath.split(path.sep).join('/')}/`;
+          const dumpBinSeg = `${info.dumpBinPath}/`;
+          if (prefix.startsWith(dumpBinSeg)) prefix = prefix.slice(dumpBinSeg.length);
           weeks.push({
             start: info.startDate,
             end: info.endDate,
