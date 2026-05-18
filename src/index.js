@@ -13,6 +13,7 @@ const extensionBridge = require('./extension-bridge');
 const { createInstaworkRouter } = require('./instawork-router');
 const { createAiRouter } = require('./ai-router');
 const { runFullSync } = require('./sas-sync');
+const { addReplyTo } = require('./lib/resend-reply-to');
 
 // New email-link + admin routes (Phase A of the Cloudflare Access removal).
 // These are wired in unconditionally so they exist even while AUTH_MODE is
@@ -28,6 +29,7 @@ const accessRequestDecisionRouter = require('./routes/access-request-decision');
 const { identityHandler } = require('./routes/_identity');
 const whoamiRouter = require('./routes/whoami');
 const weeksRouter = require('./routes/weeks');
+const createDecideRouter = require('./routes/decide');
 const createDumpBinRouter = require('./routes/dump-bin');
 
 const logger = {
@@ -288,14 +290,12 @@ async function start() {
     // Self-serve access request submission and approve/deny landing URLs.
     '/api/access-request',
     '/api/access-requests/',
+    // Supervisor decide.html → read + POST decision (JWT in query/body).
+    '/api/decide',
   ];
   const PUBLIC_REGEXES = [
     /^\/api\/signoff-photos\/[^\/]+\/image\/?$/,
-    // Supervisor APPROVE/DENY links land here from email — must work without
-    // a Cloudflare Access JWT. Auth is the random UUID in the URL. The
-    // /status endpoint stays gated so only the requesting lead can read the
-    // minted day-confirm token.
-    /^\/api\/store-confirm-request\/[^\/]+\/(approve|deny)\/?$/,
+    // /status for store-confirm still requires auth (not under shift prefix alone)
   ];
   app.use((req, res, next) => {
     if (PUBLIC_PATHS.includes(req.path)) return next();
@@ -317,6 +317,7 @@ async function start() {
   app.use('/api/access-request', accessRequestRouter);
   app.use('/api/whoami', whoamiRouter);
   app.use('/api/weeks', weeksRouter);
+  app.use('/api/decide', createDecideRouter({ resend }));
   const dumpBinRouter = createDumpBinRouter({ resend, logger });
   app.use('/api', dumpBinRouter);
 
@@ -437,12 +438,14 @@ async function start() {
       : `<p>Morning auth <strong>failed</strong> at ${time}.</p><p><strong>Error:</strong> ${error || 'Unknown'}</p><p>The SAS session was NOT refreshed. Manual intervention may be required.</p>`;
 
     try {
-      await resend.emails.send({
+      const authStatusPayload = {
         from: 'EOD System <noreply@retail-odyssey.com>',
         to: 'tyson.gauthier@retailodyssey.com',
         subject,
         html,
-      });
+      };
+      addReplyTo(authStatusPayload, {});
+      await resend.emails.send(authStatusPayload);
       console.log(`[auth-status] ${status} notification email sent`);
       return res.json({ success: true, notified: true });
     } catch (err) {
@@ -583,9 +586,7 @@ async function start() {
       attachments,
     };
 
-    if (userEmail) {
-      emailPayload.reply_to = userEmail;
-    }
+    addReplyTo(emailPayload, { userEmail });
 
     try {
       const { data, error } = await resend.emails.send(emailPayload);

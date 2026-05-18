@@ -4,6 +4,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const { requireAuth, authenticateRequest } = require('../auth-middleware');
 const r2 = require('../lib/dump-bin-r2');
+const { addReplyTo } = require('../lib/resend-reply-to');
 
 const DUMP_DL_TYP = 'dump_dl';
 
@@ -226,14 +227,16 @@ function createDumpBinRouter({ resend, logger }) {
     const html = `<div style="font-family:Segoe UI,system-ui,sans-serif;color:#222;"><h2 style="color:#4a7fb5;margin:0 0 8px;">Print at Store — #${storeNumber}${storeCity ? ` (${escapeHtml(storeCity)})` : ''}</h2><p>Requested by: <strong>${escapeHtml(userEmail)}</strong></p><p><strong>${attachments.length}</strong> file(s) attached:</p><ul>${fileListHtml}</ul><p style="color:#888;font-size:.85em;margin-top:20px;">Sent via the Dump Bin print-at-store workflow.</p></div>`;
 
     try {
-      const { data, error } = await resend.emails.send({
+      const printPayload = {
         from: `Dump Bin <${from}>`,
         to: [printRecipient],
         cc: [userEmail],
         subject,
         html,
         attachments,
-      });
+      };
+      addReplyTo(printPayload, { userEmail });
+      const { data, error } = await resend.emails.send(printPayload);
       if (error) {
         log.error('[dump-bin print-at-store] Resend rejected', {
           error,

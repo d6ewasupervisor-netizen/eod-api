@@ -16,15 +16,16 @@
  * Routes:
  *   POST /api/verify-store                       — issue token if eligible
  *   POST /api/store-confirm-request              — kick off override email
- *   GET  /api/store-confirm-request/:id/approve  — supervisor approves
- *   GET  /api/store-confirm-request/:id/deny     — supervisor denies
  *   GET  /api/store-confirm-request/:id/status   — SPA polls until resolved
+ *   Supervisors approve/deny via the-dump-bin decide.html → POST /api/decide
  *
  * Middleware:
  *   requireDayConfirm — gates routes that mutate EOD state
  */
 
 const crypto = require('crypto');
+const { addReplyTo } = require('./lib/resend-reply-to');
+const { issueReviewToken } = require('./lib/decision-review-jwt');
 const { sasGet, isSessionAlive } = require('./sas-bridge');
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────
@@ -39,7 +40,7 @@ const SCHEDULES_STALE_MS = 12 * 60 * 60 * 1000; // 12h
 // How long an override request stays open before auto-expiring.
 const REQUEST_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24h
 
-const APP_BASE = process.env.APP_BASE || 'https://eod-api-production.up.railway.app';
+const DUMP_BIN_SITE = (process.env.DUMP_BIN_SITE || 'https://the-dump-bin.com').replace(/\/$/, '');
 
 // Supervisor receives override requests. Falls back to the same address used
 // by shift-management.js so behaviour stays consistent across the API.
@@ -306,9 +307,7 @@ async function isOnRoster(pool, { email, store, date }) {
 // ─── EMAIL TEMPLATES ────────────────────────────────────────────────────────
 
 function buildOverrideApprovalEmail(request) {
-  const { requestId, storeNumber, date, requestedBy, reason } = request;
-  const approveUrl = `${APP_BASE}/api/store-confirm-request/${requestId}/approve`;
-  const denyUrl = `${APP_BASE}/api/store-confirm-request/${requestId}/deny`;
+  const { requestId, storeNumber, date, requestedBy, reason, reviewUrl } = request;
 
   const reasonHtml = reason
     ? `<p><strong>Reason given:</strong></p><blockquote style="margin:8px 0 16px 0;padding:8px 12px;border-left:3px solid #88c4ed;background:#f3f4f6;">${escapeHtml(reason)}</blockquote>`
@@ -322,9 +321,9 @@ function buildOverrideApprovalEmail(request) {
 <p><strong>Work date:</strong> ${escapeHtml(date)}</p>
 ${reasonHtml}
 <p style="color:#6b7280;font-size:13px;">This lead does not appear on today's SAS roster for that store. Approving will let them submit an EOD for store #${escapeHtml(storeNumber)} on ${escapeHtml(date)}. The override is good for ~36 hours.</p>
+<p style="color:#374151;font-size:14px;margin-top:16px;">Open the review page to approve or deny — email scanners will not change the request.</p>
 <div style="margin-top:24px;">
-  <a href="${approveUrl}" style="display:inline-block;padding:14px 28px;background:#22c55e;color:white;text-decoration:none;border-radius:6px;font-size:16px;font-weight:bold;margin-right:16px;">APPROVE</a>
-  <a href="${denyUrl}" style="display:inline-block;padding:14px 28px;background:#ef4444;color:white;text-decoration:none;border-radius:6px;font-size:16px;font-weight:bold;">DENY</a>
+  <a href="${escapeHtml(reviewUrl)}" style="display:inline-block;padding:14px 28px;background:#0d4f8b;color:white;text-decoration:none;border-radius:6px;font-size:16px;font-weight:bold;">Review request</a>
 </div>
 </body></html>`;
 }
@@ -338,31 +337,105 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 
-function htmlPage(title, body) {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head>
-<body style="font-family:sans-serif;padding:40px;color:#111827;">
-<h1>${escapeHtml(title)}</h1>
-${body}
-</body></html>`;
-}
-
-async function sendEmail(resend, { to, subject, html }) {
+async function sendEmail(resend, { to, subject, html, userEmail }) {
   if (!resend) {
     logger.warn('Resend not configured — skipping override approval email');
     return null;
   }
-  const { data, error } = await resend.emails.send({
+  const payload = {
     from: OVERRIDE_FROM_ADDRESS,
     to: Array.isArray(to) ? to : [to],
     subject,
     html,
-  });
+  };
+  addReplyTo(payload, { userEmail });
+  const { data, error } = await resend.emails.send(payload);
   if (error) {
     logger.error('Email send failed:', error);
     throw new Error(error.message || String(error));
   }
   logger.info(`Override email sent: ${data?.id} to ${to}`);
   return data;
+}
+
+/**
+ * Supervisor decision for store confirmation override (POST /api/decide).
+ * @param {'approved'|'denied'} decision
+ */
+async function applyStoreConfirmDecision(pool, requestId, decision) {
+  let request;
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM store_confirm_requests WHERE id = $1',
+      [requestId]
+    );
+    if (!rows.length) {
+      return { ok: false, status: 'not_found', error: 'not_found' };
+    }
+    request = rows[0];
+  } catch (err) {
+    logger.error(`applyStoreConfirmDecision lookup: ${err.message}`);
+    return { ok: false, status: 'error', error: 'database' };
+  }
+
+  if (
+    request.status === 'pending' &&
+    Date.now() - new Date(request.created_at).getTime() > REQUEST_EXPIRY_MS
+  ) {
+    await pool.query(
+      "UPDATE store_confirm_requests SET status = 'expired', processed_at = NOW() WHERE id = $1",
+      [requestId]
+    );
+    return { ok: true, status: 'expired' };
+  }
+
+  if (request.status !== 'pending') {
+    return { ok: true, status: request.status };
+  }
+
+  if (decision === 'approved') {
+    let token;
+    try {
+      token = signDayConfirm({
+        email: request.requested_by_email,
+        store: request.store_number,
+        date: request.date,
+      });
+    } catch (err) {
+      logger.error(`Approve sign failed: ${err.message}`);
+      return { ok: false, status: 'error', error: err.message };
+    }
+
+    try {
+      await pool.query(
+        `UPDATE store_confirm_requests
+            SET status = 'approved',
+                approved_token = $1,
+                processed_at = NOW()
+          WHERE id = $2`,
+        [token, requestId]
+      );
+    } catch (err) {
+      logger.error(`Approve update failed: ${err.message}`);
+      return { ok: false, status: 'error', error: 'save_failed' };
+    }
+    return { ok: true, status: 'approved' };
+  }
+
+  if (decision === 'denied') {
+    try {
+      await pool.query(
+        "UPDATE store_confirm_requests SET status = 'denied', processed_at = NOW() WHERE id = $1",
+        [requestId]
+      );
+    } catch (err) {
+      logger.error(`Deny update failed: ${err.message}`);
+      return { ok: false, status: 'error', error: 'save_failed' };
+    }
+    return { ok: true, status: 'denied' };
+  }
+
+  return { ok: false, status: 'error', error: 'invalid_decision' };
 }
 
 // ─── DB INIT ────────────────────────────────────────────────────────────────
@@ -539,6 +612,13 @@ function registerRoutes(app, resend, pool) {
     }
 
     try {
+      const reviewToken = issueReviewToken({
+        requestId,
+        decisionType: 'store',
+        approverEmail: OVERRIDE_APPROVER_EMAIL,
+      });
+      const reviewUrl = `${DUMP_BIN_SITE}/decide.html?type=store&id=${encodeURIComponent(requestId)}&token=${encodeURIComponent(reviewToken)}`;
+
       await sendEmail(resend, {
         to: OVERRIDE_APPROVER_EMAIL,
         subject: `Store Confirmation Override — Store #${store} ${date}`,
@@ -548,7 +628,9 @@ function registerRoutes(app, resend, pool) {
           date,
           requestedBy: email,
           reason,
+          reviewUrl,
         }),
+        userEmail: email,
       });
     } catch (err) {
       logger.error(`Failed to send override email: ${err.message}`);
@@ -570,155 +652,7 @@ function registerRoutes(app, resend, pool) {
     });
   });
 
-  // 3. GET /api/store-confirm-request/:id/approve — supervisor clicks from email.
-  // PUBLIC (no CF Access JWT) so the email link works from any mail client.
-  app.get('/api/store-confirm-request/:requestId/approve', async (req, res) => {
-    const { requestId } = req.params;
-
-    let request;
-    try {
-      const { rows } = await pool.query(
-        'SELECT * FROM store_confirm_requests WHERE id = $1',
-        [requestId]
-      );
-      if (!rows.length) {
-        return res
-          .status(404)
-          .send(htmlPage('Not Found', '<p>Override request not found.</p>'));
-      }
-      request = rows[0];
-    } catch (err) {
-      logger.error(`approve lookup failed: ${err.message}`);
-      return res.status(500).send(htmlPage('Error', '<p>Database error.</p>'));
-    }
-
-    // Auto-expire stale pending rows.
-    if (
-      request.status === 'pending' &&
-      Date.now() - new Date(request.created_at).getTime() > REQUEST_EXPIRY_MS
-    ) {
-      await pool.query(
-        "UPDATE store_confirm_requests SET status = 'expired', processed_at = NOW() WHERE id = $1",
-        [requestId]
-      );
-      request.status = 'expired';
-    }
-
-    if (request.status !== 'pending') {
-      return res.send(
-        htmlPage(
-          'Already Processed',
-          `<p>This override request has already been <strong>${escapeHtml(request.status)}</strong>. No further action needed.</p>`
-        )
-      );
-    }
-
-    let token;
-    try {
-      token = signDayConfirm({
-        email: request.requested_by_email,
-        store: request.store_number,
-        date: request.date,
-      });
-    } catch (err) {
-      logger.error(`Approve sign failed: ${err.message}`);
-      return res
-        .status(500)
-        .send(
-          htmlPage(
-            'Error',
-            `<p>Could not mint the override token: ${escapeHtml(err.message)}</p>`
-          )
-        );
-    }
-
-    try {
-      await pool.query(
-        `UPDATE store_confirm_requests
-            SET status = 'approved',
-                approved_token = $1,
-                processed_at = NOW()
-          WHERE id = $2`,
-        [token, requestId]
-      );
-    } catch (err) {
-      logger.error(`Approve update failed: ${err.message}`);
-      return res
-        .status(500)
-        .send(htmlPage('Error', '<p>Could not save approval.</p>'));
-    }
-
-    return res.send(
-      htmlPage(
-        'Approved',
-        `<p style="color:#16a34a;font-size:18px;"><strong>Override approved.</strong></p>
-         <p>${escapeHtml(request.requested_by_email)} can now submit EOD for store #${escapeHtml(request.store_number)} on ${escapeHtml(request.date)}.</p>
-         <p style="color:#6b7280;">The lead's app will pick this up within ~10 seconds.</p>`
-      )
-    );
-  });
-
-  // 4. GET /api/store-confirm-request/:id/deny — supervisor denies.
-  // PUBLIC — same reasoning as /approve.
-  app.get('/api/store-confirm-request/:requestId/deny', async (req, res) => {
-    const { requestId } = req.params;
-    let request;
-    try {
-      const { rows } = await pool.query(
-        'SELECT * FROM store_confirm_requests WHERE id = $1',
-        [requestId]
-      );
-      if (!rows.length) {
-        return res
-          .status(404)
-          .send(htmlPage('Not Found', '<p>Override request not found.</p>'));
-      }
-      request = rows[0];
-    } catch (err) {
-      logger.error(`deny lookup failed: ${err.message}`);
-      return res.status(500).send(htmlPage('Error', '<p>Database error.</p>'));
-    }
-
-    if (
-      request.status === 'pending' &&
-      Date.now() - new Date(request.created_at).getTime() > REQUEST_EXPIRY_MS
-    ) {
-      await pool.query(
-        "UPDATE store_confirm_requests SET status = 'expired', processed_at = NOW() WHERE id = $1",
-        [requestId]
-      );
-      request.status = 'expired';
-    }
-
-    if (request.status !== 'pending') {
-      return res.send(
-        htmlPage(
-          'Already Processed',
-          `<p>This override request has already been <strong>${escapeHtml(request.status)}</strong>. No further action needed.</p>`
-        )
-      );
-    }
-
-    try {
-      await pool.query(
-        "UPDATE store_confirm_requests SET status = 'denied', processed_at = NOW() WHERE id = $1",
-        [requestId]
-      );
-    } catch (err) {
-      logger.error(`Deny update failed: ${err.message}`);
-      return res
-        .status(500)
-        .send(htmlPage('Error', '<p>Could not save denial.</p>'));
-    }
-
-    return res.send(
-      htmlPage(
-        'Denied',
-        `<p style="color:#dc2626;font-size:18px;"><strong>Override denied.</strong></p>
-         <p>${escapeHtml(request.requested_by_email)} will see a denial message in the EOD app.</p>`
-      )
-    );
-  });
+  // Legacy GET /approve and /deny removed — supervisors use the-dump-bin.com/decide.html + POST /api/decide
 
   // 5. GET /api/store-confirm-request/:id/status — SPA polls until resolved.
   // Authenticated; only the original requester can read the token.
@@ -781,6 +715,9 @@ module.exports = {
   requireDayConfirm,
   signDayConfirm,
   verifyDayConfirm,
+  applyStoreConfirmDecision,
+  STORE_CONFIRM_REQUEST_EXPIRY_MS: REQUEST_EXPIRY_MS,
+  TOKEN_TTL_MS,
   // Exposed for tests / introspection only.
   _internals: {
     normalizeStore,

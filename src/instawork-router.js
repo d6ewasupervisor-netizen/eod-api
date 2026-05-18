@@ -91,6 +91,7 @@ function createInstaworkRouter({ resend, logger, saveImageGate }) {
       const periodWeekLabel = `P${pw.periodStr}W${pw.weekStr}`;
       const fileName = `FM${paddedStoreNumber(storeNumber)} ${formatMmDdYyyyUnderscored(date)}.jpg`;
 
+      const userEmail = req.user?.email;
       const result = await deliverInstaworkImage({
         rootDir,
         period: pw.period,
@@ -101,6 +102,7 @@ function createInstaworkRouter({ resend, logger, saveImageGate }) {
         workDate: date.toISOString().slice(0, 10),
         buffer,
         resend,
+        userEmail,
         log: logger,
       });
 
