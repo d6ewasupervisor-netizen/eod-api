@@ -14,6 +14,15 @@ const { createInstaworkRouter } = require('./instawork-router');
 const { createAiRouter } = require('./ai-router');
 const { runFullSync } = require('./sas-sync');
 const { addReplyTo } = require('./lib/resend-reply-to');
+const {
+  HELPDESK_TO,
+  buildHelpdeskFromAddress,
+  resolveHelpdeskReplyTo,
+  buildHelpdeskCc,
+  buildHelpdeskSubject,
+  buildHelpdeskHtml,
+  enforceAttachmentBudget,
+} = require('./lib/helpdesk-email');
 
 // New email-link + admin routes (Phase A of the Cloudflare Access removal).
 // These are wired in unconditionally so they exist even while AUTH_MODE is
@@ -617,6 +626,132 @@ async function start() {
       return res.json({ success: true, id: data?.id });
     } catch (err) {
       logger.error({ err, storeNumber }, 'Unexpected error sending EOD email');
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ─── KOMPASS Help Desk ticket email ────────────────────────────────────────
+  // Sends a structured issue report to kompass@retail-odyssey.com.
+  // From address: FM###_C###@retail-odyssey.com
+  // Reply-To: lead email (Alexandra Wright → personal alias)
+  // CC: fixed team + lead (deduped)
+  app.post('/send-helpdesk-ticket', storeConfirmation.requireDayConfirm, async (req, res) => {
+    const {
+      storeNumber,
+      storeName,
+      workDate,
+      categoryNumber,
+      categoryName,
+      dbkey,
+      version,
+      source,
+      issueTypeId,
+      issueTypeLabel,
+      issueTemplateSentence,
+      issueDetails,
+      measurements,
+      additionalNotes,
+      photos,
+      photoCaptions,
+      userName,
+      userEmail,
+    } = req.body;
+
+    // Required fields
+    if (!storeNumber || !categoryNumber || !issueTypeId || !issueTypeLabel) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: storeNumber, categoryNumber, issueTypeId, issueTypeLabel',
+      });
+    }
+    if (!Array.isArray(photos) || photos.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'At least one photo is required.',
+      });
+    }
+    if (source === 'manual' && !dbkey && !version) {
+      return res.status(400).json({
+        success: false,
+        error: 'For manually entered categories, at least one of dbkey or version is required.',
+      });
+    }
+    if (photos.length > 12) {
+      return res.status(400).json({
+        success: false,
+        error: 'Maximum 12 photos per ticket.',
+      });
+    }
+
+    const from = buildHelpdeskFromAddress(storeNumber, categoryNumber);
+    const replyTo = resolveHelpdeskReplyTo({ userName, userEmail });
+    const cc = buildHelpdeskCc(userEmail);
+    const subject = buildHelpdeskSubject({
+      storeNumber,
+      categoryNumber,
+      dbkey,
+      version,
+      issueLabel: issueTypeLabel,
+    });
+
+    const attachments = photos.map((photo, i) => {
+      const match = photo.match(/^data:(image\/\w+);base64,/);
+      const contentType = match ? match[1] : 'image/jpeg';
+      const ext = contentType.split('/')[1] || 'jpg';
+      const rawBase64 = photo.replace(/^data:image\/\w+;base64,/, '');
+      return {
+        filename: `helpdesk_${i}.${ext}`,
+        content: rawBase64,
+        contentId: `helpdesk_${i}`,
+        content_type: contentType,
+      };
+    });
+
+    try {
+      enforceAttachmentBudget(attachments);
+    } catch (sizeErr) {
+      return res.status(413).json({ success: false, error: sizeErr.message });
+    }
+
+    const html = buildHelpdeskHtml({
+      storeName,
+      storeNumber,
+      workDate,
+      userName,
+      userEmail,
+      categoryName,
+      categoryNumber,
+      dbkey,
+      version,
+      issueTypeLabel,
+      issueTemplateSentence,
+      issueDetails,
+      measurements,
+      additionalNotes,
+      photoCount: photos.length,
+      photoCaptions,
+    });
+
+    const emailPayload = {
+      from,
+      to: [HELPDESK_TO],
+      cc,
+      subject,
+      html,
+      attachments,
+    };
+    if (replyTo) emailPayload.reply_to = replyTo;
+
+    try {
+      const { data, error } = await resend.emails.send(emailPayload);
+      if (error) {
+        logger.error({ error, storeNumber, categoryNumber }, 'Resend error sending helpdesk ticket');
+        return res.status(502).json({ success: false, error: error.message ?? String(error) });
+      }
+      logger.info({ id: data?.id, storeNumber, categoryNumber, from }, 'Help desk ticket sent');
+      return res.json({ success: true, id: data?.id });
+    } catch (err) {
+      logger.error({ err, storeNumber }, 'Unexpected error sending helpdesk ticket');
       return res.status(500).json({ success: false, error: err.message });
     }
   });

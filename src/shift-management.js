@@ -15,6 +15,7 @@ const axios = require('axios');
 const { getHeaders, sasGet, sasPatch, isSessionAlive } = require('./sas-bridge');
 const { requireRole } = require('./auth-middleware');
 const { resolveResendReplyTo, looksLikeEmail } = require('./lib/resend-reply-to');
+const { extractPlanogramMeta } = require('./lib/helpdesk-email');
 const { issueReviewToken } = require('./lib/decision-review-jwt');
 
 const BASE_URL = 'https://prod.sasretail.com';
@@ -418,13 +419,18 @@ function registerRoutes(app, resend, pool) {
             || r.number === 5555;
           return !isMaint;
         })
-        .map(r => ({
-          id: r.id,
-          name: r.name || '',
-          number: r.number || null,
-          planogramId: r.planogram_id || null,
-          resetType: r.reset_type || null,
-        }))
+        .map(r => {
+          const { dbkey, version } = extractPlanogramMeta(r.planogram_id);
+          return {
+            id: r.id,
+            name: r.name || '',
+            number: r.number || null,
+            planogramId: r.planogram_id || null,
+            dbkey,
+            version,
+            resetType: r.reset_type || null,
+          };
+        })
         .filter(s => s.name);
 
       return res.json({ visitId, sets });
