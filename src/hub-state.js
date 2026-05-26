@@ -1,6 +1,7 @@
 // Checklane Hub state — snapshot reads, dirty tracking, and write transitions.
 
 const { query } = require('./lib/db');
+const { resolveRank } = require('./hub-auth');
 
 const STATE_KEYS = [
   'not_started',
@@ -10,6 +11,12 @@ const STATE_KEYS = [
   'done_pending_signoff',
   'signed_off',
 ];
+
+const ACTION_SUMMARIES = {
+  help_request: 'Needs assistance',
+  missing_tag: 'Missing tag',
+  nis: 'Not in store',
+};
 
 /** @type {Set<number>} visit_ids with unsent hub changes */
 const dirtyVisits = new Set();
@@ -59,6 +66,7 @@ function emptyStats() {
     needsAttention: 0,
     donePendingSignoff: 0,
     signedOff: 0,
+    openTagFlags: 0,
   };
 }
 
@@ -94,18 +102,45 @@ function buildStats(sections) {
   return stats;
 }
 
-async function getSnapshot(visitId) {
+function summaryForPending(row) {
+  const payload = row.payload || {};
+  if (payload.summary) return payload.summary;
+  if (row.action_type === 'missing_tag' && payload.upc) {
+    return `Missing tag: ${payload.upc}`;
+  }
+  return ACTION_SUMMARIES[row.action_type] || row.action_type;
+}
+
+async function getSnapshot(visitId, options = {}) {
   const visitIdNum = parseVisitId(visitId);
+  const { user } = options;
 
-  const { rows } = await query(
-    `SELECT dbkey, state, assignee_id, reset_id, updated_at
-     FROM section_state
-     WHERE visit_id = $1
-     ORDER BY dbkey`,
-    [visitIdNum],
-  );
+  const [sectionResult, tagCountResult, pendingResult] = await Promise.all([
+    query(
+      `SELECT dbkey, state, assignee_id, reset_id, updated_at
+       FROM section_state
+       WHERE visit_id = $1
+       ORDER BY dbkey`,
+      [visitIdNum],
+    ),
+    query(
+      `SELECT COUNT(*)::int AS cnt
+       FROM tag_flags
+       WHERE visit_id = $1 AND status = 'flagged'`,
+      [visitIdNum],
+    ),
+    query(
+      `SELECT pa.id, pa.action_type, pa.dbkey, pa.payload, pa.raised_at, pa.status,
+              hu.name AS raised_by_name
+       FROM pending_actions pa
+       JOIN hub_users hu ON hu.id = pa.raised_by
+       WHERE pa.visit_id = $1 AND pa.status = 'pending'
+       ORDER BY pa.raised_at ASC`,
+      [visitIdNum],
+    ),
+  ]);
 
-  const sections = rows.map((row) => ({
+  const sections = sectionResult.rows.map((row) => ({
     dbkey: row.dbkey,
     state: STATE_KEYS.includes(row.state) ? row.state : 'not_started',
     assignee_id: row.assignee_id,
@@ -113,11 +148,32 @@ async function getSnapshot(visitId) {
     updated_at: row.updated_at ? row.updated_at.toISOString() : null,
   }));
 
+  const stats = buildStats(sections);
+  stats.openTagFlags = tagCountResult.rows[0]?.cnt ?? 0;
+
+  const pendingActions = pendingResult.rows.map((row) => ({
+    id: row.id,
+    action_type: row.action_type,
+    dbkey: row.dbkey,
+    sectionName: row.dbkey,
+    raised_by_name: row.raised_by_name,
+    raised_at: row.raised_at ? row.raised_at.toISOString() : null,
+    summary: summaryForPending(row),
+    status: row.status,
+  }));
+
+  let myRank = 1;
+  if (user) {
+    myRank = await resolveRank(user, visitIdNum);
+  }
+
   return {
     visitId: visitIdNum,
     generatedAt: new Date().toISOString(),
     sections,
-    stats: buildStats(sections),
+    stats,
+    myRank,
+    pendingActions,
   };
 }
 
@@ -129,4 +185,5 @@ module.exports = {
   isVisitDirty,
   getDirtyVisitIds,
   STATE_KEYS,
+  ACTION_SUMMARIES,
 };
