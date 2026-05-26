@@ -12,6 +12,7 @@ const {
 } = require('../hub-auth');
 const { addSubscriber, broadcastVisit, sendSnapshotToClient } = require('../hub-broadcast');
 const { sendBackup } = require('../hub-backup');
+const { getTagBatchPreview, sendTagBatch } = require('../hub-tag-batch');
 const { query } = require('../lib/db');
 
 const router = express.Router();
@@ -63,6 +64,40 @@ router.get('/:visitId/snapshot', requireAuth, async (req, res) => {
     }
     console.error('[hub] snapshot failed:', err.message);
     return res.status(500).json({ error: 'Failed to load hub snapshot' });
+  }
+});
+
+router.get('/:visitId/tag-batch/preview', requireAuth, requireHubRank(2), async (req, res) => {
+  try {
+    const preview = await getTagBatchPreview(req.params.visitId);
+    return res.json(preview);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('[hub] tag-batch preview failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load tag batch preview' });
+  }
+});
+
+router.post('/:visitId/send-tag-batch', requireAuth, requireHubRank(2), async (req, res) => {
+  try {
+    const result = await sendTagBatch(req.params.visitId, req.hubUser);
+    if (!result.ok) {
+      return res.status(result.status || 500).json({ error: result.error || 'Tag batch send failed' });
+    }
+    return res.json({
+      ok: true,
+      count: result.count,
+      resendId: result.resendId,
+      recipients: result.recipients,
+    });
+  } catch (err) {
+    if (err.message === 'Invalid visitId') {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('[hub] send-tag-batch failed:', err.message);
+    return res.status(500).json({ error: 'Failed to send tag batch' });
   }
 });
 

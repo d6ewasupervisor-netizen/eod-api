@@ -67,6 +67,7 @@ function emptyStats() {
     donePendingSignoff: 0,
     signedOff: 0,
     openTagFlags: 0,
+    verifiedUnsentTags: 0,
   };
 }
 
@@ -115,7 +116,7 @@ async function getSnapshot(visitId, options = {}) {
   const visitIdNum = parseVisitId(visitId);
   const { user } = options;
 
-  const [sectionResult, tagCountResult, pendingResult] = await Promise.all([
+  const [sectionResult, tagCountResult, verifiedTagResult, pendingResult] = await Promise.all([
     query(
       `SELECT dbkey, state, assignee_id, reset_id, updated_at
        FROM section_state
@@ -127,6 +128,12 @@ async function getSnapshot(visitId, options = {}) {
       `SELECT COUNT(*)::int AS cnt
        FROM tag_flags
        WHERE visit_id = $1 AND status = 'flagged'`,
+      [visitIdNum],
+    ),
+    query(
+      `SELECT COUNT(*)::int AS cnt
+       FROM tag_flags
+       WHERE visit_id = $1 AND status = 'verified'`,
       [visitIdNum],
     ),
     query(
@@ -150,6 +157,7 @@ async function getSnapshot(visitId, options = {}) {
 
   const stats = buildStats(sections);
   stats.openTagFlags = tagCountResult.rows[0]?.cnt ?? 0;
+  stats.verifiedUnsentTags = verifiedTagResult.rows[0]?.cnt ?? 0;
 
   const pendingActions = pendingResult.rows.map((row) => ({
     id: row.id,

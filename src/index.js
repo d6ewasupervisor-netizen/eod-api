@@ -42,6 +42,7 @@ const createDecideRouter = require('./routes/decide');
 const createDumpBinRouter = require('./routes/dump-bin');
 const hubRoutes = require('./routes/hub-routes');
 const { initHubBackup, startBackupIntervalJob } = require('./hub-backup');
+const { initHubTagBatch } = require('./hub-tag-batch');
 
 const logger = {
   info: (...a) => console.log('[INFO]', ...a),
@@ -236,6 +237,7 @@ async function start() {
   logger.info(`Auth mode: ${AUTH_MODE}`);
 
   initHubBackup({ resend });
+  initHubTagBatch({ resend });
   startBackupIntervalJob();
 
   const app = express();
