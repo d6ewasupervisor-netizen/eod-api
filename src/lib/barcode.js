@@ -55,15 +55,40 @@ async function renderSymbology(bcid, text) {
  * Validate a UPC string and classify symbology without rendering.
  * @returns {{ valid: boolean, reason?: string, normalized?: string, symbology?: string, displayDigits?: string, ean13Fallback?: string }}
  */
+/**
+ * Pad short Kroger/catalog UPC strings to 11 data digits (leading zeros dropped in POG data).
+ * @returns {string|null}
+ */
+function padToUpcDataDigits(digits) {
+  if (digits.length >= 8 && digits.length <= 10) {
+    return digits.padStart(11, '0');
+  }
+  return null;
+}
+
 function validateUpc(rawUpc) {
   const raw = String(rawUpc || '').trim();
-  const digits = digitsOnly(raw);
+  let digits = digitsOnly(raw);
 
   if (!digits.length) {
     return { valid: false, reason: 'empty or non-numeric' };
   }
   if (raw.replace(/\s/g, '') !== digits && /[^\d\s]/.test(raw)) {
     return { valid: false, reason: 'non-numeric characters', raw };
+  }
+
+  const paddedData = padToUpcDataDigits(digits);
+  if (paddedData && paddedData.length === 11 && digits.length !== 11) {
+    const check = upcCheckDigit(paddedData);
+    const upc12 = paddedData + String(check);
+    return {
+      valid: true,
+      symbology: 'UPC-A',
+      normalized: upc12,
+      displayDigits: upc12,
+      ean13Fallback: `0${upc12}`,
+      rawInput: digits,
+    };
   }
 
   if (digits.length === 11) {
@@ -154,6 +179,7 @@ async function generateBarcode(rawUpc) {
 
 module.exports = {
   digitsOnly,
+  padToUpcDataDigits,
   validateUpc,
   generateBarcode,
   upcCheckDigit,

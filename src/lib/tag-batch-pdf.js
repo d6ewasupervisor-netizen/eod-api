@@ -3,6 +3,7 @@
  */
 
 const PDFDocument = require('pdfkit');
+const { groupTagsByAisle } = require('./tag-location');
 
 const ROW_HEIGHT = 210;
 const PAGE_MARGIN = 48;
@@ -84,6 +85,13 @@ function drawValidRow(doc, item, y, contentWidth) {
  * @param {{ store?: string|null, visitId: number, dateLabel: string, items: Array<object> }} params
  * @returns {Promise<Buffer>}
  */
+function drawAisleHeader(doc, aisleLabel, y) {
+  const x = PAGE_MARGIN;
+  doc.fillColor('#374151').font('Helvetica-Bold').fontSize(11)
+    .text(aisleLabel, x, y);
+  return y + 18;
+}
+
 function buildTagBatchPdf({ store, visitId, dateLabel, items }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'LETTER', margin: PAGE_MARGIN, autoFirstPage: false });
@@ -103,29 +111,40 @@ function buildTagBatchPdf({ store, visitId, dateLabel, items }) {
 
     let rowIndex = 0;
     let y = contentTop;
+    const aisleGroups = groupTagsByAisle(items);
 
-    for (const item of items) {
-      if (rowIndex > 0 && rowIndex % rowsPerPage === 0) {
+    for (const group of aisleGroups) {
+      if (rowIndex > 0 && y + 30 > contentBottom) {
         doc.addPage();
         drawHeader(doc, { store, visitId, dateLabel, count: items.length });
         y = contentTop;
       }
+      y = drawAisleHeader(doc, group.aisleLabel, y);
 
-      if (rowIndex > 0 && rowIndex % rowsPerPage !== 0) {
-        doc.strokeColor('#e5e7eb')
-          .moveTo(PAGE_MARGIN, y - 8)
-          .lineTo(LETTER_WIDTH - PAGE_MARGIN, y - 8)
-          .stroke();
+      for (const item of group.tags) {
+        if (rowIndex > 0 && rowIndex % rowsPerPage === 0) {
+          doc.addPage();
+          drawHeader(doc, { store, visitId, dateLabel, count: items.length });
+          y = contentTop;
+          y = drawAisleHeader(doc, group.aisleLabel, y);
+        }
+
+        if (rowIndex > 0 && rowIndex % rowsPerPage !== 0) {
+          doc.strokeColor('#e5e7eb')
+            .moveTo(PAGE_MARGIN, y - 8)
+            .lineTo(LETTER_WIDTH - PAGE_MARGIN, y - 8)
+            .stroke();
+        }
+
+        if (item.valid && item.primary) {
+          drawValidRow(doc, item, y, contentWidth);
+        } else {
+          drawInvalidRow(doc, item, y, contentWidth);
+        }
+
+        y += ROW_HEIGHT;
+        rowIndex += 1;
       }
-
-      if (item.valid && item.primary) {
-        drawValidRow(doc, item, y, contentWidth);
-      } else {
-        drawInvalidRow(doc, item, y, contentWidth);
-      }
-
-      y += ROW_HEIGHT;
-      rowIndex += 1;
     }
 
     doc.end();

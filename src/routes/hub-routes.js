@@ -13,6 +13,15 @@ const {
 const { addSubscriber, broadcastVisit, sendSnapshotToClient } = require('../hub-broadcast');
 const { sendBackup, markVisitDirtyAndBackupNow } = require('../hub-backup');
 const { getTagBatchPreview, sendTagBatch } = require('../hub-tag-batch');
+const {
+  getSectionTagDrafts,
+  addSectionTagDraft,
+  removeSectionTagDraft,
+  bulkAddSectionTagDrafts,
+  submitSectionTagDrafts,
+  gatherMissingTags,
+  verifyMissingTagsBulk,
+} = require('../hub-missing-tags');
 const { query } = require('../lib/db');
 
 const router = express.Router();
@@ -98,6 +107,119 @@ router.post('/:visitId/send-tag-batch', requireAuth, requireHubRank(2), async (r
     }
     console.error('[hub] send-tag-batch failed:', err.message);
     return res.status(500).json({ error: 'Failed to send tag batch' });
+  }
+});
+
+router.get('/:visitId/missing-tags/gather', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const gather = await gatherMissingTags(req.params.visitId, {
+      statusFilter: req.query.status,
+    });
+    return res.json(gather);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('[hub] missing-tags gather failed:', err.message);
+    return res.status(500).json({ error: 'Failed to gather missing tags' });
+  }
+});
+
+router.post('/:visitId/missing-tags/verify-bulk', requireAuth, requireHubRank(2), async (req, res) => {
+  try {
+    const result = await verifyMissingTagsBulk(req.params.visitId, req.hubUser, {
+      dbkey: req.body?.dbkey,
+      tagIds: req.body?.tagIds,
+    });
+    if (!result.ok) {
+      return res.status(result.status || 500).json({ error: result.error || 'Bulk verify failed' });
+    }
+    return res.json(result);
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] missing-tags verify-bulk failed:', err.message);
+    return res.status(500).json({ error: 'Failed to bulk verify missing tags' });
+  }
+});
+
+router.get('/:visitId/sections/:dbkey/tag-drafts', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const drafts = await getSectionTagDrafts(req.params.visitId, req.params.dbkey);
+    return res.json(drafts);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] tag-drafts list failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load tag drafts' });
+  }
+});
+
+router.post('/:visitId/sections/:dbkey/tag-drafts', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const result = await addSectionTagDraft(
+      req.params.visitId,
+      req.params.dbkey,
+      req.hubUser,
+      req.body || {},
+    );
+    if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+    return res.json(result);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] tag-draft add failed:', err.message);
+    return res.status(500).json({ error: 'Failed to add tag draft' });
+  }
+});
+
+router.post('/:visitId/sections/:dbkey/tag-drafts/bulk', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const result = await bulkAddSectionTagDrafts(
+      req.params.visitId,
+      req.params.dbkey,
+      req.hubUser,
+      req.body?.tags,
+    );
+    if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+    return res.json(result);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] tag-draft bulk add failed:', err.message);
+    return res.status(500).json({ error: 'Failed to bulk add tag drafts' });
+  }
+});
+
+router.post('/:visitId/sections/:dbkey/tag-drafts/submit', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const result = await submitSectionTagDrafts(
+      req.params.visitId,
+      req.params.dbkey,
+      req.hubUser,
+    );
+    if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+    return res.json(result);
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] tag-drafts submit failed:', err.message);
+    return res.status(500).json({ error: 'Failed to submit tag drafts' });
+  }
+});
+
+router.delete('/:visitId/sections/:dbkey/tag-drafts/:tagId', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const result = await removeSectionTagDraft(
+      req.params.visitId,
+      req.params.dbkey,
+      req.params.tagId,
+      req.hubUser,
+    );
+    if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+    return res.json(result);
+  } catch (err) {
+    if (err.status === 404) return res.status(404).json({ error: err.message });
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] tag-draft remove failed:', err.message);
+    return res.status(500).json({ error: 'Failed to remove tag draft' });
   }
 });
 
@@ -430,39 +552,21 @@ router.post('/:visitId/sections/:dbkey/flag/missing-tag', requireAuth, attachHub
       return res.status(400).json({ error: 'UPC is required for missing-tag flags' });
     }
 
-    const raiser = req.hubUser;
-
-    const pendingId = await applyTransition(visitId, async (visitIdNum) => {
-      const tagInsert = await query(
-        `INSERT INTO tag_flags (visit_id, dbkey, upc, description, location, flagged_by, status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'flagged')
-         RETURNING id`,
-        [visitIdNum, dbkey, upc, description, location, raiser.id],
-      );
-      const tagFlagId = tagInsert.rows[0].id;
-
-      const summary = `Missing tag: ${upc}`;
-      const payload = { upc, description, location, tag_flag_id: tagFlagId, summary };
-
-      const inserted = await query(
-        `INSERT INTO pending_actions (visit_id, dbkey, action_type, payload, raised_by)
-         VALUES ($1, $2, 'missing_tag', $3, $4)
-         RETURNING id`,
-        [visitIdNum, dbkey, JSON.stringify(payload), raiser.id],
-      );
-
-      const id = inserted.rows[0].id;
-      await writeAuditLog(visitIdNum, raiser.id, 'flag_raised', dbkey, {
-        type: 'missing_tag',
-        pending_id: id,
-        tag_flag_id: tagFlagId,
-        upc,
-      });
-      return id;
+    const result = await addSectionTagDraft(visitId, dbkey, req.hubUser, {
+      upc,
+      description,
+      location,
     });
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ error: result.error });
+    }
 
-    await broadcastVisit(visitId);
-    return res.json({ ok: true, pendingId });
+    if (req.body?.submit) {
+      const submitResult = await submitSectionTagDrafts(visitId, dbkey, req.hubUser);
+      return res.json({ ok: true, tagId: result.id, submitted: submitResult.count });
+    }
+
+    return res.json({ ok: true, tagId: result.id, draft: true });
   } catch (err) {
     if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
     console.error('[hub] flag/missing-tag failed:', err.message);

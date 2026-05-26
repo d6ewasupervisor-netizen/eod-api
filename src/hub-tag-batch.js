@@ -15,6 +15,7 @@ const { buildTagBatchPdf } = require('./lib/tag-batch-pdf');
 const { writeAuditLog, parseVisitId } = require('./hub-auth');
 const { applyTransition } = require('./hub-state');
 const { broadcastVisit } = require('./hub-broadcast');
+const { sortTagsByAisle, groupTagsByAisle } = require('./lib/tag-location');
 const { resolveBackupRecipient } = require('./hub-backup');
 
 const TZ = 'America/Los_Angeles';
@@ -116,12 +117,14 @@ async function getTagBatchPreview(visitId) {
   const rows = await loadVerifiedUnsentTags(visitIdNum);
   const store = await resolveStore(visitIdNum);
   const tags = await Promise.all(rows.map(enrichTagForPreview));
+  const sorted = sortTagsByAisle(tags);
 
   return {
     visitId: visitIdNum,
     store,
-    count: tags.length,
-    tags,
+    count: sorted.length,
+    tags: sorted,
+    byAisle: groupTagsByAisle(sorted),
   };
 }
 
@@ -174,12 +177,14 @@ async function sendTagBatch(visitId, actor) {
     Promise.all(rows.map(enrichTagForPdf)),
   ]);
 
+  const sortedPdfItems = sortTagsByAisle(pdfItems);
+
   const dateLabel = formatLocalDate();
   const pdfBuffer = await buildTagBatchPdf({
     store,
     visitId: visitIdNum,
     dateLabel,
-    items: pdfItems,
+    items: sortedPdfItems,
   });
 
   const storeLabel = store || 'unknown';
