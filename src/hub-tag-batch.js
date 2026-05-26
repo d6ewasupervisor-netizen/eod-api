@@ -141,7 +141,6 @@ async function enrichTagForPdf(row) {
     reason: barcode.reason,
     displayDigits: barcode.displayDigits,
     primary: barcode.primary,
-    fallback: barcode.fallback,
   };
 }
 
@@ -199,7 +198,7 @@ async function sendTagBatch(visitId, actor) {
   <h2 style="margin:0 0 12px;font-size:18px;">Checklane tag print batch</h2>
   <p style="margin:0 0 8px;">${count} verified missing-tag item${count === 1 ? '' : 's'} for store ${storeLabel}, visit ${visitIdNum}.</p>
   <p style="margin:0 0 8px;">Sent by ${actor.name || actor.email}.</p>
-  <p style="margin:0;color:#6b7280;font-size:13px;">Print the attached PDF and scan barcodes with the spa gun to print shelf tags.</p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">The attached PDF is formatted for fax — scan barcodes with the spa gun to print shelf tags.</p>
 </body></html>`;
 
   const bodySummary = `store=${storeLabel} visit=${visitIdNum} count=${count} sender=${actor.email}`;

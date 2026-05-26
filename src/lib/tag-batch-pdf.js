@@ -1,16 +1,19 @@
 /**
- * Printable PDF sheet for verified Checklane missing-tag batch (spa gun scanning).
+ * Fax-oriented PDF sheet for verified Checklane missing-tag batches.
+ * Layout: 2 columns × 6 rows (12 UPCs per page) for email-to-fax delivery.
  */
 
 const PDFDocument = require('pdfkit');
-const { groupTagsByAisle } = require('./tag-location');
 
-const ROW_HEIGHT = 210;
-const PAGE_MARGIN = 48;
-const BARCODE_WIDTH = 220;
-const BARCODE_HEIGHT = 72;
+const PAGE_MARGIN = 36;
+const COLUMN_GUTTER = 14;
+const COLS = 2;
+const ROWS = 6;
+const ITEMS_PER_PAGE = COLS * ROWS;
+const BARCODE_HEIGHT = 38;
 const LETTER_WIDTH = 612;
 const LETTER_HEIGHT = 792;
+const BLACK = '#000000';
 
 function truncate(text, maxLen) {
   const s = String(text || '').trim();
@@ -19,131 +22,134 @@ function truncate(text, maxLen) {
 }
 
 function drawHeader(doc, meta) {
-  doc.font('Helvetica-Bold').fontSize(16).text('Checklane Tag Print Batch', PAGE_MARGIN, PAGE_MARGIN);
-  doc.font('Helvetica').fontSize(11);
-  doc.text(`Store: ${meta.store || 'unknown'}`, PAGE_MARGIN, doc.y + 6);
-  doc.text(`Visit: ${meta.visitId}`, PAGE_MARGIN, doc.y + 2);
-  doc.text(`Date: ${meta.dateLabel}`, PAGE_MARGIN, doc.y + 2);
-  doc.text(`Items: ${meta.count}`, PAGE_MARGIN, doc.y + 2);
-  doc.moveDown(0.6);
-  doc.strokeColor('#cccccc').moveTo(PAGE_MARGIN, doc.y).lineTo(LETTER_WIDTH - PAGE_MARGIN, doc.y).stroke();
-  doc.moveDown(0.8);
+  const y0 = PAGE_MARGIN;
+  doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(13)
+    .text('Checklane Tag Print Batch', PAGE_MARGIN, y0);
+  doc.font('Helvetica').fontSize(9)
+    .text(
+      `Store: ${meta.store || 'unknown'}  ·  Visit: ${meta.visitId}  ·  ${meta.dateLabel}  ·  Items: ${meta.count}`,
+      PAGE_MARGIN,
+      y0 + 16,
+      { width: LETTER_WIDTH - PAGE_MARGIN * 2 },
+    );
+  const ruleY = y0 + 32;
+  doc.lineWidth(1).strokeColor(BLACK)
+    .moveTo(PAGE_MARGIN, ruleY)
+    .lineTo(LETTER_WIDTH - PAGE_MARGIN, ruleY)
+    .stroke();
+  return ruleY + 8;
 }
 
-function drawInvalidRow(doc, item, y, contentWidth) {
-  const x = PAGE_MARGIN;
-  doc.fillColor('#b91c1c').font('Helvetica-Bold').fontSize(12)
-    .text('INVALID UPC — verify', x, y);
-  doc.fillColor('#111827').font('Helvetica-Bold').fontSize(11)
-    .text(`Raw value: ${item.rawUpc || item.upc || '—'}`, x, y + 18);
+function drawCellBorder(doc, x, y, cellWidth, cellHeight) {
+  doc.lineWidth(0.75).strokeColor(BLACK)
+    .rect(x, y, cellWidth, cellHeight)
+    .stroke();
+}
+
+function drawInvalidCell(doc, item, x, y, cellWidth, cellHeight) {
+  const pad = 6;
+  const innerWidth = cellWidth - pad * 2;
+  doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(8)
+    .text('INVALID UPC', x + pad, y + 6, { width: innerWidth });
+  doc.font('Helvetica-Bold').fontSize(8)
+    .text(item.rawUpc || item.upc || '—', x + pad, y + 18, { width: innerWidth });
   if (item.reason) {
-    doc.font('Helvetica').fontSize(9).fillColor('#6b7280')
-      .text(item.reason, x, y + 34);
+    doc.font('Helvetica').fontSize(7)
+      .text(truncate(item.reason, 40), x + pad, y + 30, { width: innerWidth });
   }
-  doc.fillColor('#111827').font('Helvetica').fontSize(10)
-    .text(truncate(item.description, 80) || '—', x, y + 50, { width: contentWidth });
-  doc.font('Helvetica-Bold').fontSize(10)
-    .text(`Location: ${item.location || item.dbkey || '—'}`, x, y + 68);
+  doc.font('Helvetica').fontSize(7)
+    .text(truncate(item.description, 48) || '—', x + pad, y + 44, { width: innerWidth, height: 28 });
+  doc.font('Helvetica-Bold').fontSize(8)
+    .text(`Loc: ${truncate(item.location || item.dbkey || '—', 18)}`, x + pad, y + cellHeight - 16, {
+      width: innerWidth,
+    });
+  drawCellBorder(doc, x, y, cellWidth, cellHeight);
 }
 
-function drawValidRow(doc, item, y, contentWidth) {
-  const x = PAGE_MARGIN;
-  let cursorY = y;
+function drawValidCell(doc, item, x, y, cellWidth, cellHeight) {
+  const pad = 6;
+  const innerWidth = cellWidth - pad * 2;
+  let cursorY = y + 4;
 
   if (item.primary?.buffer) {
-    doc.image(item.primary.buffer, x, cursorY, {
-      fit: [BARCODE_WIDTH, BARCODE_HEIGHT],
+    doc.image(item.primary.buffer, x + pad, cursorY, {
+      fit: [innerWidth, BARCODE_HEIGHT],
       align: 'left',
     });
-    cursorY += BARCODE_HEIGHT + 4;
+    cursorY += BARCODE_HEIGHT + 3;
   }
 
-  doc.fillColor('#111827').font('Helvetica-Bold').fontSize(12)
-    .text(item.displayDigits || item.upc, x, cursorY);
-  cursorY += 16;
+  doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(9)
+    .text(item.displayDigits || item.upc, x + pad, cursorY, { width: innerWidth });
+  cursorY += 12;
 
-  doc.font('Helvetica').fontSize(10)
-    .text(truncate(item.description, 90) || '—', x, cursorY, { width: contentWidth });
-  cursorY += 28;
-
-  doc.font('Helvetica-Bold').fontSize(10)
-    .text(`Location: ${item.location || item.dbkey || '—'}`, x, cursorY);
-  cursorY += 14;
-
-  if (item.fallback?.buffer) {
-    doc.font('Helvetica').fontSize(8).fillColor('#6b7280')
-      .text('EAN-13 fallback (leading 0):', x, cursorY);
-    cursorY += 10;
-    doc.image(item.fallback.buffer, x, cursorY, {
-      fit: [BARCODE_WIDTH, BARCODE_HEIGHT - 8],
-      align: 'left',
+  doc.font('Helvetica').fontSize(7.5)
+    .text(truncate(item.description, 52) || '—', x + pad, cursorY, {
+      width: innerWidth,
+      height: 26,
+      ellipsis: true,
     });
-  }
+  cursorY += 24;
+
+  doc.font('Helvetica-Bold').fontSize(8)
+    .text(`Loc: ${truncate(item.location || item.dbkey || '—', 18)}`, x + pad, cursorY, {
+      width: innerWidth,
+    });
+
+  drawCellBorder(doc, x, y, cellWidth, cellHeight);
+}
+
+function slotPosition(slotOnPage, contentTop, cellWidth, cellHeight) {
+  const col = slotOnPage < ROWS ? 0 : 1;
+  const row = slotOnPage < ROWS ? slotOnPage : slotOnPage - ROWS;
+  const x = PAGE_MARGIN + col * (cellWidth + COLUMN_GUTTER);
+  const y = contentTop + row * cellHeight;
+  return { x, y };
 }
 
 /**
  * @param {{ store?: string|null, visitId: number, dateLabel: string, items: Array<object> }} params
  * @returns {Promise<Buffer>}
  */
-function drawAisleHeader(doc, aisleLabel, y) {
-  const x = PAGE_MARGIN;
-  doc.fillColor('#374151').font('Helvetica-Bold').fontSize(11)
-    .text(aisleLabel, x, y);
-  return y + 18;
-}
-
 function buildTagBatchPdf({ store, visitId, dateLabel, items }) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'LETTER', margin: PAGE_MARGIN, autoFirstPage: false });
+    const doc = new PDFDocument({ size: 'LETTER', margin: 0, autoFirstPage: false });
     const chunks = [];
 
     doc.on('data', (chunk) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    const contentTop = PAGE_MARGIN + 90;
-    const contentBottom = LETTER_HEIGHT - PAGE_MARGIN;
     const contentWidth = LETTER_WIDTH - PAGE_MARGIN * 2;
-    const rowsPerPage = Math.max(1, Math.floor((contentBottom - contentTop) / ROW_HEIGHT));
+    const cellWidth = (contentWidth - COLUMN_GUTTER) / COLS;
+    const meta = { store, visitId, dateLabel, count: items.length };
 
-    doc.addPage();
-    drawHeader(doc, { store, visitId, dateLabel, count: items.length });
+    if (!items.length) {
+      doc.addPage();
+      drawHeader(doc, meta);
+      doc.end();
+      return;
+    }
 
-    let rowIndex = 0;
-    let y = contentTop;
-    const aisleGroups = groupTagsByAisle(items);
+    let pageContentTop = 0;
+    let pageCellHeight = 0;
 
-    for (const group of aisleGroups) {
-      if (rowIndex > 0 && y + 30 > contentBottom) {
+    for (let i = 0; i < items.length; i += 1) {
+      const slotOnPage = i % ITEMS_PER_PAGE;
+
+      if (slotOnPage === 0) {
         doc.addPage();
-        drawHeader(doc, { store, visitId, dateLabel, count: items.length });
-        y = contentTop;
+        pageContentTop = drawHeader(doc, meta);
+        pageCellHeight = (LETTER_HEIGHT - PAGE_MARGIN - pageContentTop) / ROWS;
       }
-      y = drawAisleHeader(doc, group.aisleLabel, y);
 
-      for (const item of group.tags) {
-        if (rowIndex > 0 && rowIndex % rowsPerPage === 0) {
-          doc.addPage();
-          drawHeader(doc, { store, visitId, dateLabel, count: items.length });
-          y = contentTop;
-          y = drawAisleHeader(doc, group.aisleLabel, y);
-        }
+      const { x, y } = slotPosition(slotOnPage, pageContentTop, cellWidth, pageCellHeight);
+      const item = items[i];
 
-        if (rowIndex > 0 && rowIndex % rowsPerPage !== 0) {
-          doc.strokeColor('#e5e7eb')
-            .moveTo(PAGE_MARGIN, y - 8)
-            .lineTo(LETTER_WIDTH - PAGE_MARGIN, y - 8)
-            .stroke();
-        }
-
-        if (item.valid && item.primary) {
-          drawValidRow(doc, item, y, contentWidth);
-        } else {
-          drawInvalidRow(doc, item, y, contentWidth);
-        }
-
-        y += ROW_HEIGHT;
-        rowIndex += 1;
+      if (item.valid && item.primary) {
+        drawValidCell(doc, item, x, y, cellWidth, pageCellHeight);
+      } else {
+        drawInvalidCell(doc, item, x, y, cellWidth, pageCellHeight);
       }
     }
 
@@ -153,4 +159,5 @@ function buildTagBatchPdf({ store, visitId, dateLabel, items }) {
 
 module.exports = {
   buildTagBatchPdf,
+  ITEMS_PER_PAGE,
 };

@@ -36,12 +36,12 @@ async function renderSymbology(bcid, text) {
   const buffer = await bwipjs.toBuffer({
     bcid,
     text,
-    scale: 4,
-    height: 14,
+    scale: 3,
+    height: 20,
     includetext: false,
     backgroundcolor: 'FFFFFF',
-    paddingwidth: 10,
-    paddingheight: 8,
+    paddingwidth: 12,
+    paddingheight: 6,
   });
   return {
     symbology: bcid === 'upca' ? 'UPC-A' : 'EAN-13',
@@ -135,7 +135,7 @@ function validateUpc(rawUpc) {
 
 /**
  * Render barcode PNG(s) for a UPC string.
- * @returns {Promise<{ valid: boolean, reason?: string, raw?: string, displayDigits?: string, primary?: object, fallback?: object }>}
+ * @returns {Promise<{ valid: boolean, reason?: string, raw?: string, displayDigits?: string, primary?: object }>}
  */
 async function generateBarcode(rawUpc) {
   const validation = validateUpc(rawUpc);
@@ -150,15 +150,10 @@ async function generateBarcode(rawUpc) {
   try {
     if (validation.symbology === 'UPC-A') {
       const primary = await renderSymbology('upca', validation.normalized);
-      let fallback;
-      if (validation.ean13Fallback) {
-        fallback = await renderSymbology('ean13', validation.ean13Fallback);
-      }
       return {
         valid: true,
         displayDigits: validation.displayDigits,
         primary,
-        fallback,
       };
     }
 
