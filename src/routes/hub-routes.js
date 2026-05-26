@@ -11,7 +11,7 @@ const {
   parseVisitId,
 } = require('../hub-auth');
 const { addSubscriber, broadcastVisit, sendSnapshotToClient } = require('../hub-broadcast');
-const { sendBackup } = require('../hub-backup');
+const { sendBackup, markVisitDirtyAndBackupNow } = require('../hub-backup');
 const { getTagBatchPreview, sendTagBatch } = require('../hub-tag-batch');
 const { query } = require('../lib/db');
 
@@ -298,6 +298,80 @@ async function readSectionState(visitIdNum, dbkey) {
   return rows.length ? rows[0].state : 'not_started';
 }
 
+async function loadSectionRow(visitIdNum, dbkey) {
+  const { rows } = await query(
+    `SELECT state, assignee_id FROM section_state WHERE visit_id = $1 AND dbkey = $2`,
+    [visitIdNum, dbkey],
+  );
+  if (!rows.length) {
+    return { state: 'not_started', assignee_id: null };
+  }
+  return rows[0];
+}
+
+async function loadHubUserById(userId) {
+  const { rows } = await query(
+    `SELECT id, name, email, is_active FROM hub_users WHERE id = $1`,
+    [userId],
+  );
+  return rows[0] || null;
+}
+
+/** Demo roster until SAS employee pull backs GET /roster (response shape stays stable). */
+const HUB_ROSTER_SEED = [
+  { email: 'hub.rep.a@test.local', name: 'Rep Alex', standing_rank: 1 },
+  { email: 'hub.rep.b@test.local', name: 'Rep Bailey', standing_rank: 1 },
+  { email: 'hub.lead@test.local', name: 'Lead Casey', standing_rank: 2 },
+];
+
+async function ensureHubRosterSeeded() {
+  for (const user of HUB_ROSTER_SEED) {
+    await query(
+      `INSERT INTO hub_users (email, name, standing_rank)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (email) DO NOTHING`,
+      [user.email, user.name, user.standing_rank],
+    );
+  }
+}
+
+function handleTransitionError(err, res, label) {
+  if (err.status === 403) return res.status(403).json({ error: err.message });
+  if (err.status === 404) return res.status(404).json({ error: err.message });
+  if (err.status === 409) return res.status(409).json({ error: err.message });
+  if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+  console.error(`[hub] ${label} failed:`, err.message);
+  return res.status(500).json({ error: label });
+}
+
+router.get('/:visitId/roster', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const visitIdNum = parseVisitId(req.params.visitId);
+    await ensureHubRosterSeeded();
+    const { rows } = await query(
+      `SELECT id, name, standing_rank
+       FROM hub_users
+       WHERE is_active = true
+       ORDER BY name`,
+    );
+    return res.json({
+      visitId: visitIdNum,
+      roster: rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        rank: Number(row.standing_rank) || 1,
+      })),
+      source: 'hub_users',
+    });
+  } catch (err) {
+    if (err.message === 'Invalid visitId') {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('[hub] roster failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load roster' });
+  }
+});
+
 async function setNeedsAttention(visitIdNum, dbkey) {
   const priorState = await readSectionState(visitIdNum, dbkey);
   await query(
@@ -428,6 +502,176 @@ router.post('/:visitId/sections/:dbkey/flag/nis', requireAuth, attachHubContext,
     if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
     console.error('[hub] flag/nis failed:', err.message);
     return res.status(500).json({ error: 'Failed to raise not-in-store flag' });
+  }
+});
+
+router.post('/:visitId/sections/:dbkey/assign', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const { visitId, dbkey } = req.params;
+    const rank = req.hubRank ?? 1;
+    if (rank < 2) {
+      return res.status(403).json({ error: 'Lead or supervisor required' });
+    }
+
+    const assigneeId = Number(req.body?.assigneeId);
+    if (!Number.isFinite(assigneeId)) {
+      return res.status(400).json({ error: 'assigneeId is required' });
+    }
+
+    const actor = req.hubUser;
+    const assignee = await loadHubUserById(assigneeId);
+    if (!assignee || !assignee.is_active) {
+      return res.status(400).json({ error: 'Unknown or inactive hub user' });
+    }
+
+    await applyTransition(visitId, async (visitIdNum) => {
+      const section = await loadSectionRow(visitIdNum, dbkey);
+      if (!['not_started', 'assigned'].includes(section.state)) {
+        throw Object.assign(
+          new Error(`Cannot assign a section in state ${section.state}`),
+          { status: 409 },
+        );
+      }
+
+      await query(
+        `INSERT INTO section_state (visit_id, dbkey, state, assignee_id, assigned_by, updated_at)
+         VALUES ($1, $2, 'assigned', $3, $4, now())
+         ON CONFLICT (visit_id, dbkey) DO UPDATE
+           SET state = 'assigned',
+               assignee_id = EXCLUDED.assignee_id,
+               assigned_by = EXCLUDED.assigned_by,
+               updated_at = now()`,
+        [visitIdNum, dbkey, assigneeId, actor.id],
+      );
+
+      await writeAuditLog(visitIdNum, actor.id, 'assigned', dbkey, {
+        assignee: assigneeId,
+        assignee_name: assignee.name,
+        by: actor.id,
+        by_name: actor.name,
+      });
+    });
+
+    await broadcastVisit(visitId);
+    return res.json({ ok: true });
+  } catch (err) {
+    return handleTransitionError(err, res, 'Failed to assign section');
+  }
+});
+
+router.post('/:visitId/sections/:dbkey/start', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const { visitId, dbkey } = req.params;
+    const actor = req.hubUser;
+    const rank = req.hubRank ?? 1;
+
+    await applyTransition(visitId, async (visitIdNum) => {
+      const section = await loadSectionRow(visitIdNum, dbkey);
+      if (section.state !== 'assigned') {
+        throw Object.assign(
+          new Error('Cannot start a section that is not assigned'),
+          { status: 409 },
+        );
+      }
+      if (rank < 2 && section.assignee_id !== actor.id) {
+        throw Object.assign(new Error('Not your assignment'), { status: 403 });
+      }
+
+      await query(
+        `UPDATE section_state
+         SET state = 'in_progress', started_at = now(), updated_at = now()
+         WHERE visit_id = $1 AND dbkey = $2`,
+        [visitIdNum, dbkey],
+      );
+
+      await writeAuditLog(visitIdNum, actor.id, 'started', dbkey, {
+        assignee_id: section.assignee_id,
+      });
+    });
+
+    await broadcastVisit(visitId);
+    return res.json({ ok: true });
+  } catch (err) {
+    return handleTransitionError(err, res, 'Failed to start section');
+  }
+});
+
+router.post('/:visitId/sections/:dbkey/mark-done', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const { visitId, dbkey } = req.params;
+    const actor = req.hubUser;
+    const rank = req.hubRank ?? 1;
+
+    await applyTransition(visitId, async (visitIdNum) => {
+      const section = await loadSectionRow(visitIdNum, dbkey);
+      if (section.state !== 'in_progress') {
+        throw Object.assign(
+          new Error('Cannot mark done a section that is not in progress'),
+          { status: 409 },
+        );
+      }
+      if (rank < 2 && section.assignee_id !== actor.id) {
+        throw Object.assign(new Error('Not your assignment'), { status: 403 });
+      }
+
+      await query(
+        `UPDATE section_state
+         SET state = 'done_pending_signoff', completed_at = now(), updated_at = now()
+         WHERE visit_id = $1 AND dbkey = $2`,
+        [visitIdNum, dbkey],
+      );
+
+      await writeAuditLog(visitIdNum, actor.id, 'marked_done', dbkey, {
+        prior_state: section.state,
+        assignee_id: section.assignee_id,
+      });
+    });
+
+    await broadcastVisit(visitId);
+    return res.json({ ok: true });
+  } catch (err) {
+    return handleTransitionError(err, res, 'Failed to mark section done');
+  }
+});
+
+router.post('/:visitId/sections/:dbkey/signoff', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const { visitId, dbkey } = req.params;
+    const rank = req.hubRank ?? 1;
+    if (rank < 2) {
+      return res.status(403).json({ error: 'Lead or supervisor required' });
+    }
+
+    const actor = req.hubUser;
+
+    await applyTransition(visitId, async (visitIdNum) => {
+      const section = await loadSectionRow(visitIdNum, dbkey);
+      if (section.state !== 'done_pending_signoff') {
+        throw Object.assign(
+          new Error('Cannot sign off a section that is not done pending sign-off'),
+          { status: 409 },
+        );
+      }
+
+      await query(
+        `UPDATE section_state
+         SET state = 'signed_off', signed_off_by = $3, signed_off_at = now(), updated_at = now()
+         WHERE visit_id = $1 AND dbkey = $2`,
+        [visitIdNum, dbkey, actor.id],
+      );
+
+      await writeAuditLog(visitIdNum, actor.id, 'signed_off', dbkey, {
+        prior_state: section.state,
+      });
+    });
+
+    await broadcastVisit(visitId);
+    markVisitDirtyAndBackupNow(visitId).catch((err) => {
+      console.error('[hub] signoff backup failed:', err.message);
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    return handleTransitionError(err, res, 'Failed to sign off section');
   }
 });
 

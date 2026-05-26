@@ -1,7 +1,7 @@
 // Checklane Hub state — snapshot reads, dirty tracking, and write transitions.
 
 const { query } = require('./lib/db');
-const { resolveRank } = require('./hub-auth');
+const { resolveRank, resolveHubUser } = require('./hub-auth');
 
 const STATE_KEYS = [
   'not_started',
@@ -118,10 +118,12 @@ async function getSnapshot(visitId, options = {}) {
 
   const [sectionResult, tagCountResult, verifiedTagResult, pendingResult] = await Promise.all([
     query(
-      `SELECT dbkey, state, assignee_id, reset_id, updated_at
-       FROM section_state
-       WHERE visit_id = $1
-       ORDER BY dbkey`,
+      `SELECT ss.dbkey, ss.state, ss.assignee_id, ss.reset_id, ss.updated_at,
+              hu.name AS assignee_name
+       FROM section_state ss
+       LEFT JOIN hub_users hu ON hu.id = ss.assignee_id
+       WHERE ss.visit_id = $1
+       ORDER BY ss.dbkey`,
       [visitIdNum],
     ),
     query(
@@ -151,6 +153,7 @@ async function getSnapshot(visitId, options = {}) {
     dbkey: row.dbkey,
     state: STATE_KEYS.includes(row.state) ? row.state : 'not_started',
     assignee_id: row.assignee_id,
+    assignee_name: row.assignee_name || null,
     reset_id: row.reset_id != null ? Number(row.reset_id) : null,
     updated_at: row.updated_at ? row.updated_at.toISOString() : null,
   }));
@@ -171,8 +174,11 @@ async function getSnapshot(visitId, options = {}) {
   }));
 
   let myRank = 1;
+  let myUserId = null;
   if (user) {
     myRank = await resolveRank(user, visitIdNum);
+    const hubUser = await resolveHubUser(user);
+    myUserId = hubUser.id;
   }
 
   return {
@@ -181,6 +187,7 @@ async function getSnapshot(visitId, options = {}) {
     sections,
     stats,
     myRank,
+    myUserId,
     pendingActions,
   };
 }
