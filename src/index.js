@@ -41,6 +41,7 @@ const weeksRouter = require('./routes/weeks');
 const createDecideRouter = require('./routes/decide');
 const createDumpBinRouter = require('./routes/dump-bin');
 const hubRoutes = require('./routes/hub-routes');
+const { initHubBackup, startBackupIntervalJob } = require('./hub-backup');
 
 const logger = {
   info: (...a) => console.log('[INFO]', ...a),
@@ -233,6 +234,9 @@ async function start() {
     throw err;
   }
   logger.info(`Auth mode: ${AUTH_MODE}`);
+
+  initHubBackup({ resend });
+  startBackupIntervalJob();
 
   const app = express();
 

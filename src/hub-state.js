@@ -1,4 +1,4 @@
-// Read-only Checklane Hub snapshot assembler (section_state only for now).
+// Checklane Hub state — snapshot reads, dirty tracking, and write transitions.
 
 const { query } = require('./lib/db');
 
@@ -10,6 +10,45 @@ const STATE_KEYS = [
   'done_pending_signoff',
   'signed_off',
 ];
+
+/** @type {Set<number>} visit_ids with unsent hub changes */
+const dirtyVisits = new Set();
+
+function parseVisitId(visitId) {
+  const visitIdNum = Number(visitId);
+  if (!Number.isFinite(visitIdNum)) {
+    throw new Error('Invalid visitId');
+  }
+  return visitIdNum;
+}
+
+function markVisitDirty(visitId) {
+  dirtyVisits.add(parseVisitId(visitId));
+}
+
+function clearVisitDirty(visitId) {
+  dirtyVisits.delete(parseVisitId(visitId));
+}
+
+function isVisitDirty(visitId) {
+  return dirtyVisits.has(parseVisitId(visitId));
+}
+
+function getDirtyVisitIds() {
+  return [...dirtyVisits];
+}
+
+/**
+ * Central write path for hub mutations. Runs writeFn against Postgres; on
+ * success marks the visit dirty so the 15-minute backup job will email a snapshot.
+ * All assign/start/mark-done/sign-off writes should go through here.
+ */
+async function applyTransition(visitId, writeFn) {
+  const visitIdNum = parseVisitId(visitId);
+  const result = await writeFn(visitIdNum);
+  markVisitDirty(visitIdNum);
+  return result;
+}
 
 function emptyStats() {
   return {
@@ -56,10 +95,7 @@ function buildStats(sections) {
 }
 
 async function getSnapshot(visitId) {
-  const visitIdNum = Number(visitId);
-  if (!Number.isFinite(visitIdNum)) {
-    throw new Error('Invalid visitId');
-  }
+  const visitIdNum = parseVisitId(visitId);
 
   const { rows } = await query(
     `SELECT dbkey, state, assignee_id, reset_id, updated_at
@@ -85,4 +121,12 @@ async function getSnapshot(visitId) {
   };
 }
 
-module.exports = { getSnapshot, STATE_KEYS };
+module.exports = {
+  getSnapshot,
+  applyTransition,
+  markVisitDirty,
+  clearVisitDirty,
+  isVisitDirty,
+  getDirtyVisitIds,
+  STATE_KEYS,
+};
