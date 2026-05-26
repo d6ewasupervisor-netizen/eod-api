@@ -444,6 +444,7 @@ const HUB_ROSTER_SEED = [
   { email: 'hub.rep.a@test.local', name: 'Rep Alex', standing_rank: 1 },
   { email: 'hub.rep.b@test.local', name: 'Rep Bailey', standing_rank: 1 },
   { email: 'hub.lead@test.local', name: 'Lead Casey', standing_rank: 2 },
+  { email: 'retail.odyssey.supervisor@gmail.com', name: 'Retail Odyssey Supervisor', standing_rank: 1 },
 ];
 
 async function ensureHubRosterSeeded() {
