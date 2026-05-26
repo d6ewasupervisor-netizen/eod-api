@@ -119,12 +119,12 @@ async function getSnapshot(visitId, options = {}) {
 
   const [sectionResult, tagCountResult, draftTagResult, verifiedTagResult, pendingResult] = await Promise.all([
     query(
-      `SELECT ss.dbkey, ss.state, ss.assignee_id, ss.reset_id, ss.updated_at,
+      `SELECT ss.lane, ss.dbkey, ss.state, ss.assignee_id, ss.reset_id, ss.updated_at,
               hu.name AS assignee_name
        FROM section_state ss
        LEFT JOIN hub_users hu ON hu.id = ss.assignee_id
        WHERE ss.visit_id = $1
-       ORDER BY ss.dbkey`,
+       ORDER BY ss.lane, ss.dbkey`,
       [visitIdNum],
     ),
     query(
@@ -157,6 +157,7 @@ async function getSnapshot(visitId, options = {}) {
   ]);
 
   const sections = sectionResult.rows.map((row) => ({
+    lane: row.lane || '',
     dbkey: row.dbkey,
     state: STATE_KEYS.includes(row.state) ? row.state : 'not_started',
     assignee_id: row.assignee_id,

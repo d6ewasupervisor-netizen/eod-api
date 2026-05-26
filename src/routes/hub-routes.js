@@ -23,6 +23,14 @@ const {
   verifyMissingTagsBulk,
 } = require('../hub-missing-tags');
 const { query } = require('../lib/db');
+const {
+  loadSectionRow,
+  upsertSectionState,
+  updateSectionState,
+  setNeedsAttention,
+  restoreSectionState,
+  laneFromRequest,
+} = require('../hub-section');
 
 const router = express.Router();
 
@@ -271,17 +279,6 @@ async function loadPendingAction(visitIdNum, pendingId) {
   return rows[0] || null;
 }
 
-async function restoreSectionState(visitIdNum, dbkey, priorState) {
-  const state = priorState || 'not_started';
-  await query(
-    `INSERT INTO section_state (visit_id, dbkey, state, updated_at)
-     VALUES ($1, $2, $3, now())
-     ON CONFLICT (visit_id, dbkey) DO UPDATE
-       SET state = EXCLUDED.state, updated_at = now()`,
-    [visitIdNum, dbkey, state],
-  );
-}
-
 router.post('/:visitId/pending/:id/verify', requireAuth, requireHubRank(2), async (req, res) => {
   try {
     const visitIdNum = parseVisitId(req.params.visitId);
@@ -311,7 +308,12 @@ router.post('/:visitId/pending/:id/verify', requireAuth, requireHubRank(2), asyn
       const payload = pending.payload || {};
 
       if (pending.action_type === 'help_request' || pending.action_type === 'nis') {
-        await restoreSectionState(visitIdNum, pending.dbkey, payload.prior_state);
+        await restoreSectionState(
+          visitIdNum,
+          pending.dbkey,
+          pending.lane || payload.lane || '',
+          payload.prior_state,
+        );
       } else if (pending.action_type === 'missing_tag') {
         const tagFlagId = payload.tag_flag_id;
         if (tagFlagId) {
@@ -377,7 +379,12 @@ router.post('/:visitId/pending/:id/reject', requireAuth, requireHubRank(2), asyn
       );
 
       if (pending.action_type === 'help_request' || pending.action_type === 'nis') {
-        await restoreSectionState(visitIdNum, pending.dbkey, payload.prior_state);
+        await restoreSectionState(
+          visitIdNum,
+          pending.dbkey,
+          pending.lane || payload.lane || '',
+          payload.prior_state,
+        );
       } else if (pending.action_type === 'missing_tag') {
         const tagFlagId = payload.tag_flag_id;
         if (tagFlagId) {
@@ -411,25 +418,6 @@ router.post('/:visitId/pending/:id/reject', requireAuth, requireHubRank(2), asyn
     return res.status(500).json({ error: 'Failed to reject pending action' });
   }
 });
-
-async function readSectionState(visitIdNum, dbkey) {
-  const { rows } = await query(
-    `SELECT state FROM section_state WHERE visit_id = $1 AND dbkey = $2`,
-    [visitIdNum, dbkey],
-  );
-  return rows.length ? rows[0].state : 'not_started';
-}
-
-async function loadSectionRow(visitIdNum, dbkey) {
-  const { rows } = await query(
-    `SELECT state, assignee_id FROM section_state WHERE visit_id = $1 AND dbkey = $2`,
-    [visitIdNum, dbkey],
-  );
-  if (!rows.length) {
-    return { state: 'not_started', assignee_id: null };
-  }
-  return rows[0];
-}
 
 async function loadHubUserById(userId) {
   const { rows } = await query(
@@ -495,33 +483,22 @@ router.get('/:visitId/roster', requireAuth, attachHubContext, async (req, res) =
   }
 });
 
-async function setNeedsAttention(visitIdNum, dbkey) {
-  const priorState = await readSectionState(visitIdNum, dbkey);
-  await query(
-    `INSERT INTO section_state (visit_id, dbkey, state, updated_at)
-     VALUES ($1, $2, 'needs_attention', now())
-     ON CONFLICT (visit_id, dbkey) DO UPDATE
-       SET state = 'needs_attention', updated_at = now()`,
-    [visitIdNum, dbkey],
-  );
-  return priorState;
-}
-
 router.post('/:visitId/sections/:dbkey/flag/help', requireAuth, attachHubContext, async (req, res) => {
   try {
     const { visitId, dbkey } = req.params;
+    const lane = laneFromRequest(req);
     const note = req.body?.note ?? null;
     const raiser = req.hubUser;
 
     const pendingId = await applyTransition(visitId, async (visitIdNum) => {
-      const priorState = await setNeedsAttention(visitIdNum, dbkey);
-      const payload = { note, prior_state: priorState, summary: 'Needs assistance' };
+      const priorState = await setNeedsAttention(visitIdNum, dbkey, lane);
+      const payload = { note, prior_state: priorState, lane, summary: 'Needs assistance' };
 
       const inserted = await query(
-        `INSERT INTO pending_actions (visit_id, dbkey, action_type, payload, raised_by)
-         VALUES ($1, $2, 'help_request', $3, $4)
+        `INSERT INTO pending_actions (visit_id, lane, dbkey, action_type, payload, raised_by)
+         VALUES ($1, $2, $3, 'help_request', $4, $5)
          RETURNING id`,
-        [visitIdNum, dbkey, JSON.stringify(payload), raiser.id],
+        [visitIdNum, lane, dbkey, JSON.stringify(payload), raiser.id],
       );
 
       const id = inserted.rows[0].id;
@@ -578,18 +555,19 @@ router.post('/:visitId/sections/:dbkey/flag/missing-tag', requireAuth, attachHub
 router.post('/:visitId/sections/:dbkey/flag/nis', requireAuth, attachHubContext, async (req, res) => {
   try {
     const { visitId, dbkey } = req.params;
+    const lane = laneFromRequest(req);
     const note = req.body?.note ?? null;
     const raiser = req.hubUser;
 
     const pendingId = await applyTransition(visitId, async (visitIdNum) => {
-      const priorState = await setNeedsAttention(visitIdNum, dbkey);
-      const payload = { note, prior_state: priorState, summary: 'Not in store' };
+      const priorState = await setNeedsAttention(visitIdNum, dbkey, lane);
+      const payload = { note, prior_state: priorState, lane, summary: 'Not in store' };
 
       const inserted = await query(
-        `INSERT INTO pending_actions (visit_id, dbkey, action_type, payload, raised_by)
-         VALUES ($1, $2, 'nis', $3, $4)
+        `INSERT INTO pending_actions (visit_id, lane, dbkey, action_type, payload, raised_by)
+         VALUES ($1, $2, $3, 'nis', $4, $5)
          RETURNING id`,
-        [visitIdNum, dbkey, JSON.stringify(payload), raiser.id],
+        [visitIdNum, lane, dbkey, JSON.stringify(payload), raiser.id],
       );
 
       const id = inserted.rows[0].id;
@@ -613,6 +591,7 @@ router.post('/:visitId/sections/:dbkey/flag/nis', requireAuth, attachHubContext,
 router.post('/:visitId/sections/:dbkey/assign', requireAuth, attachHubContext, async (req, res) => {
   try {
     const { visitId, dbkey } = req.params;
+    const lane = laneFromRequest(req);
     const rank = req.hubRank ?? 1;
     if (rank < 2) {
       return res.status(403).json({ error: 'Lead or supervisor required' });
@@ -630,7 +609,7 @@ router.post('/:visitId/sections/:dbkey/assign', requireAuth, attachHubContext, a
     }
 
     await applyTransition(visitId, async (visitIdNum) => {
-      const section = await loadSectionRow(visitIdNum, dbkey);
+      const section = await loadSectionRow(visitIdNum, dbkey, lane);
       if (!['not_started', 'assigned'].includes(section.state)) {
         throw Object.assign(
           new Error(`Cannot assign a section in state ${section.state}`),
@@ -638,18 +617,14 @@ router.post('/:visitId/sections/:dbkey/assign', requireAuth, attachHubContext, a
         );
       }
 
-      await query(
-        `INSERT INTO section_state (visit_id, dbkey, state, assignee_id, assigned_by, updated_at)
-         VALUES ($1, $2, 'assigned', $3, $4, now())
-         ON CONFLICT (visit_id, dbkey) DO UPDATE
-           SET state = 'assigned',
-               assignee_id = EXCLUDED.assignee_id,
-               assigned_by = EXCLUDED.assigned_by,
-               updated_at = now()`,
-        [visitIdNum, dbkey, assigneeId, actor.id],
-      );
+      await upsertSectionState(visitIdNum, dbkey, lane, {
+        state: 'assigned',
+        assignee_id: assigneeId,
+        assigned_by: actor.id,
+      });
 
       await writeAuditLog(visitIdNum, actor.id, 'assigned', dbkey, {
+        lane,
         assignee: assigneeId,
         assignee_name: assignee.name,
         by: actor.id,
@@ -667,11 +642,12 @@ router.post('/:visitId/sections/:dbkey/assign', requireAuth, attachHubContext, a
 router.post('/:visitId/sections/:dbkey/start', requireAuth, attachHubContext, async (req, res) => {
   try {
     const { visitId, dbkey } = req.params;
+    const lane = laneFromRequest(req);
     const actor = req.hubUser;
     const rank = req.hubRank ?? 1;
 
     await applyTransition(visitId, async (visitIdNum) => {
-      const section = await loadSectionRow(visitIdNum, dbkey);
+      const section = await loadSectionRow(visitIdNum, dbkey, lane);
       if (section.state !== 'assigned') {
         throw Object.assign(
           new Error('Cannot start a section that is not assigned'),
@@ -682,14 +658,13 @@ router.post('/:visitId/sections/:dbkey/start', requireAuth, attachHubContext, as
         throw Object.assign(new Error('Not your assignment'), { status: 403 });
       }
 
-      await query(
-        `UPDATE section_state
-         SET state = 'in_progress', started_at = now(), updated_at = now()
-         WHERE visit_id = $1 AND dbkey = $2`,
-        [visitIdNum, dbkey],
-      );
+      await updateSectionState(visitIdNum, dbkey, lane, {
+        state: 'in_progress',
+        started_at: new Date(),
+      });
 
       await writeAuditLog(visitIdNum, actor.id, 'started', dbkey, {
+        lane,
         assignee_id: section.assignee_id,
       });
     });
@@ -704,11 +679,12 @@ router.post('/:visitId/sections/:dbkey/start', requireAuth, attachHubContext, as
 router.post('/:visitId/sections/:dbkey/mark-done', requireAuth, attachHubContext, async (req, res) => {
   try {
     const { visitId, dbkey } = req.params;
+    const lane = laneFromRequest(req);
     const actor = req.hubUser;
     const rank = req.hubRank ?? 1;
 
     await applyTransition(visitId, async (visitIdNum) => {
-      const section = await loadSectionRow(visitIdNum, dbkey);
+      const section = await loadSectionRow(visitIdNum, dbkey, lane);
       if (section.state !== 'in_progress') {
         throw Object.assign(
           new Error('Cannot mark done a section that is not in progress'),
@@ -719,14 +695,13 @@ router.post('/:visitId/sections/:dbkey/mark-done', requireAuth, attachHubContext
         throw Object.assign(new Error('Not your assignment'), { status: 403 });
       }
 
-      await query(
-        `UPDATE section_state
-         SET state = 'done_pending_signoff', completed_at = now(), updated_at = now()
-         WHERE visit_id = $1 AND dbkey = $2`,
-        [visitIdNum, dbkey],
-      );
+      await updateSectionState(visitIdNum, dbkey, lane, {
+        state: 'done_pending_signoff',
+        completed_at: new Date(),
+      });
 
       await writeAuditLog(visitIdNum, actor.id, 'marked_done', dbkey, {
+        lane,
         prior_state: section.state,
         assignee_id: section.assignee_id,
       });
@@ -742,6 +717,7 @@ router.post('/:visitId/sections/:dbkey/mark-done', requireAuth, attachHubContext
 router.post('/:visitId/sections/:dbkey/signoff', requireAuth, attachHubContext, async (req, res) => {
   try {
     const { visitId, dbkey } = req.params;
+    const lane = laneFromRequest(req);
     const rank = req.hubRank ?? 1;
     if (rank < 2) {
       return res.status(403).json({ error: 'Lead or supervisor required' });
@@ -750,7 +726,7 @@ router.post('/:visitId/sections/:dbkey/signoff', requireAuth, attachHubContext, 
     const actor = req.hubUser;
 
     await applyTransition(visitId, async (visitIdNum) => {
-      const section = await loadSectionRow(visitIdNum, dbkey);
+      const section = await loadSectionRow(visitIdNum, dbkey, lane);
       if (section.state !== 'done_pending_signoff') {
         throw Object.assign(
           new Error('Cannot sign off a section that is not done pending sign-off'),
@@ -758,14 +734,14 @@ router.post('/:visitId/sections/:dbkey/signoff', requireAuth, attachHubContext, 
         );
       }
 
-      await query(
-        `UPDATE section_state
-         SET state = 'signed_off', signed_off_by = $3, signed_off_at = now(), updated_at = now()
-         WHERE visit_id = $1 AND dbkey = $2`,
-        [visitIdNum, dbkey, actor.id],
-      );
+      await updateSectionState(visitIdNum, dbkey, lane, {
+        state: 'signed_off',
+        signed_off_by: actor.id,
+        signed_off_at: new Date(),
+      });
 
       await writeAuditLog(visitIdNum, actor.id, 'signed_off', dbkey, {
+        lane,
         prior_state: section.state,
       });
     });
