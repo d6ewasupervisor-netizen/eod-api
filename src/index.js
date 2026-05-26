@@ -40,6 +40,7 @@ const whoamiRouter = require('./routes/whoami');
 const weeksRouter = require('./routes/weeks');
 const createDecideRouter = require('./routes/decide');
 const createDumpBinRouter = require('./routes/dump-bin');
+const hubRoutes = require('./routes/hub-routes');
 
 const logger = {
   info: (...a) => console.log('[INFO]', ...a),
@@ -326,6 +327,7 @@ async function start() {
   app.use('/api/access-request', accessRequestRouter);
   app.use('/api/whoami', whoamiRouter);
   app.use('/api/weeks', weeksRouter);
+  app.use('/api/hub', hubRoutes);
   app.use('/api/decide', createDecideRouter({ resend }));
   const dumpBinRouter = createDumpBinRouter({ resend, logger });
   app.use('/api', dumpBinRouter);
