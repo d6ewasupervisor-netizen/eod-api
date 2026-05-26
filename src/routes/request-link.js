@@ -23,6 +23,28 @@ const limiter = rateLimit({
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const ALLOWED_RETURN_HOSTS = new Set([
+  'checklanes.the-dump-bin.com',
+]);
+
+function buildMagicLink(token, returnTo) {
+  if (returnTo) {
+    try {
+      const url = new URL(returnTo);
+      if (url.protocol !== 'https:' || !ALLOWED_RETURN_HOSTS.has(url.host)) {
+        return null;
+      }
+      url.searchParams.set('token', token);
+      return url.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  const base = (process.env.FRONTEND_BASE_URL || 'https://the-dump-bin.com').replace(/\/+$/, '');
+  return `${base}/index.html?token=${encodeURIComponent(token)}`;
+}
+
 router.post('/', limiter, async (req, res) => {
   try {
     const rawEmail = (req.body && req.body.email) ? String(req.body.email) : '';
@@ -48,12 +70,11 @@ router.post('/', limiter, async (req, res) => {
       [email, jti, ip, ua],
     );
 
-    // FRONTEND_BASE_URL is the hub origin (no trailing /EOD now that the
-    // sign-in flow covers every app under the-dump-bin.com). The magic link
-    // lands the user on the hub home; from there they pick whichever tool
-    // they want.
-    const base = (process.env.FRONTEND_BASE_URL || 'https://the-dump-bin.com').replace(/\/+$/, '');
-    const link = `${base}/index.html?token=${encodeURIComponent(token)}`;
+    const rawReturnTo = (req.body && req.body.returnTo) ? String(req.body.returnTo).trim() : '';
+    const link = buildMagicLink(token, rawReturnTo || null);
+    if (!link) {
+      return res.status(400).json({ ok: false, error: 'Invalid return URL.' });
+    }
 
     await sendLinkEmail({ to: email, link });
 

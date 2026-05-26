@@ -250,7 +250,7 @@ async function start() {
   // Cloudflare Access fronts both the-dump-bin.com (frontend) and
   // eod-api.the-dump-bin.com (this API). Cookies are scoped to the parent
   // zone, so we just need to echo the origin and allow credentials.
-  const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://the-dump-bin.com')
+  const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://the-dump-bin.com,https://checklanes.the-dump-bin.com')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
