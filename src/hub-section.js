@@ -121,8 +121,19 @@ async function updateSectionState(visitIdNum, dbkey, lane, fields) {
   }
 }
 
+async function assertSectionAllowsRepFlags(visitIdNum, dbkey, lane) {
+  const state = await readSectionState(visitIdNum, dbkey, lane);
+  if (state === 'signed_off') {
+    throw Object.assign(
+      new Error('Cannot raise flags on a signed-off set — reopen it first'),
+      { status: 409 },
+    );
+  }
+  return state;
+}
+
 async function setNeedsAttention(visitIdNum, dbkey, lane) {
-  const priorState = await readSectionState(visitIdNum, dbkey, lane);
+  const priorState = await assertSectionAllowsRepFlags(visitIdNum, dbkey, lane);
   await upsertSectionState(visitIdNum, dbkey, lane, { state: 'needs_attention' });
   return priorState;
 }
@@ -178,6 +189,7 @@ module.exports = {
   loadSectionRow,
   upsertSectionState,
   updateSectionState,
+  assertSectionAllowsRepFlags,
   setNeedsAttention,
   restoreSectionState,
   clearSectionAssignment,

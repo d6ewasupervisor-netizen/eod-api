@@ -14,6 +14,7 @@ const { addSubscriber, broadcastVisit, sendSnapshotToClient } = require('../hub-
 const { sendBackup, markVisitDirtyAndBackupNow } = require('../hub-backup');
 const { getTagBatchPreview, sendTagBatch } = require('../hub-tag-batch');
 const { sendSectionReopenEmail, sendNisVerifiedEmail } = require('../hub-notify');
+const { parsePogMeta } = require('../lib/pog-meta');
 const {
   getSectionTagDrafts,
   addSectionTagDraft,
@@ -38,6 +39,17 @@ const ASSIGNABLE_STATES = ['not_started', 'assigned', 'in_progress', 'needs_atte
 const UNASSIGNABLE_STATES = ['assigned', 'in_progress', 'needs_attention'];
 const REOPENABLE_STATES = ['signed_off'];
 const MIN_REOPEN_REASON_LENGTH = 10;
+
+function buildNisFlagSummary({ setName, manifestPogId, action, dbkey, lane }) {
+  const meta = parsePogMeta({ manifestPogId, action, dbkey });
+  const parts = ['Not in store'];
+  if (setName) parts.push(setName);
+  if (lane) parts.push('lane ' + lane);
+  if (meta.category) parts.push('C' + meta.category);
+  if (meta.version) parts.push('V' + meta.version);
+  if (dbkey) parts.push('DBKey ' + dbkey);
+  return parts.join(' · ');
+}
 
 const router = express.Router();
 
@@ -175,11 +187,12 @@ router.post('/:visitId/sections/:dbkey/tag-drafts', requireAuth, attachHubContex
       req.params.visitId,
       req.params.dbkey,
       req.hubUser,
-      req.body || {},
+      { ...(req.body || {}), lane: laneFromRequest(req) },
     );
     if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
     return res.json(result);
   } catch (err) {
+    if (err.status === 409) return res.status(409).json({ error: err.message });
     if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
     console.error('[hub] tag-draft add failed:', err.message);
     return res.status(500).json({ error: 'Failed to add tag draft' });
@@ -551,6 +564,7 @@ router.post('/:visitId/sections/:dbkey/flag/help', requireAuth, attachHubContext
     await broadcastVisit(visitId);
     return res.json({ ok: true, pendingId });
   } catch (err) {
+    if (err.status === 409) return res.status(409).json({ error: err.message });
     if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
     console.error('[hub] flag/help failed:', err.message);
     return res.status(500).json({ error: 'Failed to raise help flag' });
@@ -568,10 +582,12 @@ router.post('/:visitId/sections/:dbkey/flag/missing-tag', requireAuth, attachHub
       return res.status(400).json({ error: 'UPC is required for missing-tag flags' });
     }
 
+    const lane = laneFromRequest(req);
     const result = await addSectionTagDraft(visitId, dbkey, req.hubUser, {
       upc,
       description,
       location,
+      lane,
     });
     if (!result.ok) {
       return res.status(result.status || 400).json({ error: result.error });
@@ -584,6 +600,7 @@ router.post('/:visitId/sections/:dbkey/flag/missing-tag', requireAuth, attachHub
 
     return res.json({ ok: true, tagId: result.id, draft: true });
   } catch (err) {
+    if (err.status === 409) return res.status(409).json({ error: err.message });
     if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
     console.error('[hub] flag/missing-tag failed:', err.message);
     return res.status(500).json({ error: 'Failed to raise missing-tag flag' });
@@ -606,7 +623,13 @@ router.post('/:visitId/sections/:dbkey/flag/nis', requireAuth, attachHubContext,
         note,
         prior_state: priorState,
         lane,
-        summary: 'Not in store',
+        summary: buildNisFlagSummary({
+          setName,
+          manifestPogId,
+          action,
+          dbkey,
+          lane,
+        }),
         set_name: setName,
         manifest_pog_id: manifestPogId,
         action,
@@ -631,6 +654,7 @@ router.post('/:visitId/sections/:dbkey/flag/nis', requireAuth, attachHubContext,
     await broadcastVisit(visitId);
     return res.json({ ok: true, pendingId });
   } catch (err) {
+    if (err.status === 409) return res.status(409).json({ error: err.message });
     if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
     console.error('[hub] flag/nis failed:', err.message);
     return res.status(500).json({ error: 'Failed to raise not-in-store flag' });

@@ -106,6 +106,10 @@ function buildStats(sections) {
 
 function summaryForPending(row) {
   const payload = row.payload || {};
+  if (row.action_type === 'nis') {
+    if (payload.summary && payload.summary !== 'Not in store') return payload.summary;
+    if (payload.set_name) return 'Not in store · ' + payload.set_name;
+  }
   if (payload.summary) return payload.summary;
   if (row.action_type === 'missing_tag' && payload.upc) {
     return `Missing tag: ${payload.upc}`;

@@ -13,6 +13,7 @@ const { validateUpc } = require('./lib/barcode');
 const { sortTagsByAisle, groupTagsByAisle } = require('./lib/tag-location');
 const { writeAuditLog, parseVisitId } = require('./hub-auth');
 const { applyTransition } = require('./hub-state');
+const { assertSectionAllowsRepFlags } = require('./hub-section');
 const { broadcastVisit } = require('./hub-broadcast');
 
 function rowToTag(row) {
@@ -53,7 +54,7 @@ async function getSectionTagDrafts(visitId, dbkey) {
   return { visitId: visitIdNum, dbkey, count: tags.length, tags };
 }
 
-async function addSectionTagDraft(visitId, dbkey, actor, { upc, description, location }) {
+async function addSectionTagDraft(visitId, dbkey, actor, { upc, description, location, lane }) {
   const visitIdNum = parseVisitId(visitId);
   const upcTrim = String(upc || '').trim();
   if (!upcTrim) {
@@ -61,6 +62,8 @@ async function addSectionTagDraft(visitId, dbkey, actor, { upc, description, loc
   }
 
   const id = await applyTransition(visitId, async () => {
+    await assertSectionAllowsRepFlags(visitIdNum, dbkey, lane || '');
+
     const dup = await query(
       `SELECT id FROM tag_flags
        WHERE visit_id = $1 AND dbkey = $2 AND status = 'draft'
