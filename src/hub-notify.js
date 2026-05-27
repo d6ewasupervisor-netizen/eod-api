@@ -11,6 +11,7 @@ const {
   buildSetRelatedEmailPayload,
 } = require('./lib/checklanes-email');
 const { parsePogMeta, buildNisHelpdeskSubject } = require('./lib/pog-meta');
+const { resolveNisSetMetadata } = require('./lib/hub-fixture-catalog');
 
 let _resend = null;
 
@@ -127,17 +128,25 @@ async function sendNisVerifiedEmail({
   }
 
   const visitIdNum = parseVisitId(visitId);
-  const storeLabel = store || (await resolveStore(visitIdNum)) || 'unknown';
+  const { storeNumber, payload: enrichedPayload } = await resolveNisSetMetadata({
+    visitIdNum,
+    lane,
+    dbkey,
+    payload,
+  });
+  const storeLabel =
+    store || storeNumber || (await resolveStore(visitIdNum)) || 'unknown';
   const meta = parsePogMeta({
-    manifestPogId: payload?.manifest_pog_id,
-    action: payload?.action,
+    manifestPogId: enrichedPayload?.manifest_pog_id,
+    action: enrichedPayload?.action,
     dbkey,
   });
-  const setName = payload?.set_name || payload?.summary || 'Not in store';
-  const note = payload?.note;
+  const setName = enrichedPayload?.set_name || enrichedPayload?.summary || 'Not in store';
+  const note = enrichedPayload?.note;
 
+  const subjectStore = storeNumber || storeLabel;
   const subject = buildNisHelpdeskSubject({
-    storeNumber: storeLabel,
+    storeNumber: subjectStore,
     category: meta.category,
     version: meta.version,
     dbkey: meta.dbkey || dbkey,
