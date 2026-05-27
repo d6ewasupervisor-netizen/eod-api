@@ -489,9 +489,10 @@ async function loadHubUserById(userId) {
 
 /** Demo roster until SAS employee pull backs GET /roster (response shape stays stable). */
 const HUB_ROSTER_SEED = [
+  { email: 'd6ewa.supervisor@gmail.com', name: 'Supervisor Lead', standing_rank: 2 },
   { email: 'hub.rep.a@test.local', name: 'Rep Alex', standing_rank: 1 },
   { email: 'hub.rep.b@test.local', name: 'Rep Bailey', standing_rank: 1 },
-  { email: 'hub.lead@test.local', name: 'Lead Casey', standing_rank: 2 },
+  { email: 'hub.lead@test.local', name: 'Lead Casey', standing_rank: 1 },
   { email: 'retail.odyssey.supervisor@gmail.com', name: 'Retail Odyssey Supervisor', standing_rank: 1 },
 ];
 
