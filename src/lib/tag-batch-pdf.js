@@ -46,6 +46,23 @@ function drawCellBorder(doc, x, y, cellWidth, cellHeight) {
     .stroke();
 }
 
+function drawPlanogramAndLocation(doc, item, x, pad, innerWidth, startY) {
+  let cursorY = startY;
+  const planogram = truncate(item.planogramName, 44);
+  const location = truncate(item.locationLabel || item.location || item.dbkey || '—', 56);
+
+  if (planogram) {
+    doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(7)
+      .text(`POG: ${planogram}`, x + pad, cursorY, { width: innerWidth, lineBreak: false });
+    cursorY += 10;
+  }
+
+  doc.font('Helvetica').fontSize(7)
+    .text(`Loc: ${location}`, x + pad, cursorY, { width: innerWidth, lineBreak: false });
+
+  return cursorY + 10;
+}
+
 function drawInvalidCell(doc, item, x, y, cellWidth, cellHeight) {
   const pad = 6;
   const innerWidth = cellWidth - pad * 2;
@@ -58,11 +75,8 @@ function drawInvalidCell(doc, item, x, y, cellWidth, cellHeight) {
       .text(truncate(item.reason, 40), x + pad, y + 30, { width: innerWidth });
   }
   doc.font('Helvetica').fontSize(7)
-    .text(truncate(item.description, 48) || '—', x + pad, y + 44, { width: innerWidth, height: 28 });
-  doc.font('Helvetica-Bold').fontSize(8)
-    .text(`Loc: ${truncate(item.location || item.dbkey || '—', 18)}`, x + pad, y + cellHeight - 16, {
-      width: innerWidth,
-    });
+    .text(truncate(item.description, 48) || '—', x + pad, y + 44, { width: innerWidth, height: 22 });
+  drawPlanogramAndLocation(doc, item, x, pad, innerWidth, y + cellHeight - 28);
   drawCellBorder(doc, x, y, cellWidth, cellHeight);
 }
 
@@ -86,15 +100,12 @@ function drawValidCell(doc, item, x, y, cellWidth, cellHeight) {
   doc.font('Helvetica').fontSize(7.5)
     .text(truncate(item.description, 52) || '—', x + pad, cursorY, {
       width: innerWidth,
-      height: 26,
+      height: 20,
       ellipsis: true,
     });
-  cursorY += 24;
+  cursorY += 18;
 
-  doc.font('Helvetica-Bold').fontSize(8)
-    .text(`Loc: ${truncate(item.location || item.dbkey || '—', 18)}`, x + pad, cursorY, {
-      width: innerWidth,
-    });
+  drawPlanogramAndLocation(doc, item, x, pad, innerWidth, cursorY);
 
   drawCellBorder(doc, x, y, cellWidth, cellHeight);
 }

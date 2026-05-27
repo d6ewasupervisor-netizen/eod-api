@@ -16,7 +16,8 @@ const { writeAuditLog, parseVisitId } = require('./hub-auth');
 const { applyTransition } = require('./hub-state');
 const { broadcastVisit } = require('./hub-broadcast');
 const { buildSetRelatedEmailPayload, CHECKLANES_OPS_EMAIL } = require('./lib/checklanes-email');
-const { sortTagsByAisle, groupTagsByAisle } = require('./lib/tag-location');
+const { sortTagsByAisle, groupTagsByAisle, formatTagLocationLabel } = require('./lib/tag-location');
+const { lookupFixture, resolveStoreForVisit } = require('./lib/hub-fixture-catalog');
 
 const TZ = 'America/Los_Angeles';
 
@@ -55,18 +56,20 @@ function formatStoreNumber(storeNumber) {
 }
 
 async function resolveStore(visitIdNum) {
-  const { rows } = await query(
-    `SELECT store_number
-     FROM schedules
-     WHERE visit_id = $1
-     ORDER BY scheduled_date DESC
-     LIMIT 1`,
-    [visitIdNum],
-  );
-  if (rows.length && rows[0].store_number != null) {
-    return formatStoreNumber(rows[0].store_number);
-  }
-  return null;
+  const storeNumber = await resolveStoreForVisit(visitIdNum);
+  return storeNumber ? formatStoreNumber(storeNumber) : null;
+}
+
+function resolvePlanogramName(storeNumber, dbkey) {
+  const fixture = storeNumber ? lookupFixture({ storeNumber, dbkey }) : null;
+  return fixture?.name || null;
+}
+
+function enrichTagLocationFields(row, storeNumber) {
+  return {
+    locationLabel: formatTagLocationLabel(row.location) || row.location || null,
+    planogramName: resolvePlanogramName(storeNumber, row.dbkey),
+  };
 }
 
 function formatLocalDate(date = new Date()) {
@@ -101,14 +104,17 @@ async function loadVerifiedUnsentTags(visitIdNum) {
   return rows;
 }
 
-async function enrichTagForPreview(row) {
+async function enrichTagForPreview(row, storeNumber) {
   const validation = validateUpc(row.upc);
+  const { locationLabel, planogramName } = enrichTagLocationFields(row, storeNumber);
   return {
     id: row.id,
     dbkey: row.dbkey,
     upc: row.upc,
     description: row.description,
     location: row.location,
+    locationLabel,
+    planogramName,
     valid: validation.valid,
     reason: validation.reason || null,
     displayDigits: validation.displayDigits || null,
@@ -121,7 +127,8 @@ async function getTagBatchPreview(visitId) {
   const visitIdNum = parseVisitId(visitId);
   const rows = await loadVerifiedUnsentTags(visitIdNum);
   const store = await resolveStore(visitIdNum);
-  const tags = await Promise.all(rows.map(enrichTagForPreview));
+  const storeNumber = store ? String(Number(store)) : null;
+  const tags = await Promise.all(rows.map((row) => enrichTagForPreview(row, storeNumber)));
   const sorted = sortTagsByAisle(tags);
 
   return {
@@ -133,8 +140,9 @@ async function getTagBatchPreview(visitId) {
   };
 }
 
-async function enrichTagForPdf(row) {
+async function enrichTagForPdf(row, storeNumber) {
   const barcode = await generateBarcode(row.upc);
+  const { locationLabel, planogramName } = enrichTagLocationFields(row, storeNumber);
   return {
     id: row.id,
     dbkey: row.dbkey,
@@ -142,6 +150,8 @@ async function enrichTagForPdf(row) {
     rawUpc: row.upc,
     description: row.description,
     location: row.location,
+    locationLabel,
+    planogramName,
     valid: barcode.valid,
     reason: barcode.reason,
     displayDigits: barcode.displayDigits,
@@ -176,10 +186,9 @@ async function sendTagBatch(visitId, actor) {
     return { ok: false, status: 400, error: 'no verified tags to send' };
   }
 
-  const [store, pdfItems] = await Promise.all([
-    resolveStore(visitIdNum),
-    Promise.all(rows.map(enrichTagForPdf)),
-  ]);
+  const store = await resolveStore(visitIdNum);
+  const storeNumber = store ? String(Number(store)) : null;
+  const pdfItems = await Promise.all(rows.map((row) => enrichTagForPdf(row, storeNumber)));
 
   const sortedPdfItems = sortTagsByAisle(pdfItems);
 

@@ -27,6 +27,40 @@ function parseAisleFromLocation(location) {
 }
 
 /**
+ * Expand compact tag locations (601B01F02P03, 607R02C03) for fax / print labels.
+ * Passes through human-readable labels unchanged.
+ * @returns {string|null}
+ */
+function formatTagLocationLabel(location) {
+  const s = String(location || '').trim();
+  if (!s) return null;
+
+  if (/bay\s+\d+/i.test(s) || s.includes('·')) {
+    return s;
+  }
+
+  if (s.includes('\n')) {
+    return s
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  const peg = s.match(/^(\d+)R(\d+)C(\d+)$/i);
+  if (peg) {
+    return `Aisle ${Number(peg[1])}, Row ${Number(peg[2])}, Column ${Number(peg[3])}`;
+  }
+
+  const shelf = s.match(/^(\d+)B(\d+)F(\d+)P(\d+)$/i);
+  if (shelf) {
+    return `Aisle ${Number(shelf[1])}, Bay ${Number(shelf[2])}, Shelf ${Number(shelf[3])}, Position ${Number(shelf[4])}`;
+  }
+
+  return s;
+}
+
+/**
  * @param {{ location?: string|null, dbkey?: string|null, lane?: string|number|null }} tag
  * @returns {number}
  */
@@ -88,6 +122,7 @@ function groupTagsByAisle(tags) {
 
 module.exports = {
   parseAisleFromLocation,
+  formatTagLocationLabel,
   aisleSortKey,
   sortTagsByAisle,
   groupTagsByAisle,
