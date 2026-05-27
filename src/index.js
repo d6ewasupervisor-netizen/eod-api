@@ -42,6 +42,7 @@ const weeksRouter = require('./routes/weeks');
 const createDecideRouter = require('./routes/decide');
 const createDumpBinRouter = require('./routes/dump-bin');
 const hubRoutes = require('./routes/hub-routes');
+const hubStoreRoutes = require('./routes/hub-store-routes');
 const { initHubBackup, startBackupIntervalJob } = require('./hub-backup');
 const { initHubTagBatch } = require('./hub-tag-batch');
 const { initHubNotify } = require('./hub-notify');
@@ -336,6 +337,7 @@ async function start() {
   app.use('/api/access-request', accessRequestRouter);
   app.use('/api/whoami', whoamiRouter);
   app.use('/api/weeks', weeksRouter);
+  app.use('/api/hub', hubStoreRoutes);
   app.use('/api/hub', hubRoutes);
   app.use('/api/decide', createDecideRouter({ resend }));
   const dumpBinRouter = createDumpBinRouter({ resend, logger });

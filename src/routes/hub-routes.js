@@ -25,6 +25,8 @@ const {
   verifyMissingTagsBulk,
 } = require('../hub-missing-tags');
 const { query } = require('../lib/db');
+const { resolveStoreForVisit } = require('../lib/hub-fixture-catalog');
+const { requireVisitAccess } = require('../hub-store-access');
 const {
   loadSectionRow,
   upsertSectionState,
@@ -52,6 +54,8 @@ function buildNisFlagSummary({ setName, manifestPogId, action, dbkey, lane }) {
 }
 
 const router = express.Router();
+
+router.use('/:visitId', requireAuth, requireVisitAccess());
 
 async function attachHubContext(req, res, next) {
   try {
@@ -520,20 +524,45 @@ router.get('/:visitId/roster', requireAuth, attachHubContext, async (req, res) =
   try {
     const visitIdNum = parseVisitId(req.params.visitId);
     await ensureHubRosterSeeded();
-    const { rows } = await query(
-      `SELECT id, name, standing_rank
-       FROM hub_users
-       WHERE is_active = true
-       ORDER BY name`,
-    );
+    const storeNumber = await resolveStoreForVisit(visitIdNum);
+
+    let rows;
+    if (storeNumber) {
+      const storeRoster = await query(
+        `SELECT u.id, u.name, a.store_role
+         FROM hub_store_assignments a
+         JOIN hub_users u ON u.id = a.user_id
+         WHERE a.store_number = $1 AND u.is_active = true
+         ORDER BY
+           CASE a.store_role WHEN 'lead' THEN 0 ELSE 1 END,
+           u.name`,
+        [storeNumber],
+      );
+      rows = storeRoster.rows;
+    }
+
+    if (!rows?.length) {
+      const fallback = await query(
+        `SELECT id, name, standing_rank AS store_role
+         FROM hub_users
+         WHERE is_active = true
+         ORDER BY name`,
+      );
+      rows = fallback.rows;
+    }
+
     return res.json({
       visitId: visitIdNum,
+      storeNumber: storeNumber || null,
       roster: rows.map((row) => ({
         id: row.id,
         name: row.name,
-        rank: Number(row.standing_rank) || 1,
+        rank: row.store_role === 'lead' ? 2
+          : row.store_role === 'rep' ? 1
+          : (Number(row.standing_rank) || 1),
+        storeRole: row.store_role || null,
       })),
-      source: 'hub_users',
+      source: storeNumber ? 'store_assignments' : 'hub_users',
     });
   } catch (err) {
     if (err.message === 'Invalid visitId') {

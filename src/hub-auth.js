@@ -1,6 +1,8 @@
 // Checklane Hub — rank resolution (env-first, DB raises, never lowers).
 
 const { query } = require('./lib/db');
+const { resolveStoreForVisit } = require('./lib/hub-fixture-catalog');
+const { storeRankForUser, isHubAdmin } = require('./hub-store-access');
 
 function parseEmailList(envVal) {
   return (envVal || '')
@@ -37,7 +39,7 @@ async function resolveHubUser(user) {
   const fallbackName = email.split('@')[0] || 'User';
 
   const existing = await query(
-    `SELECT id, email, name, standing_rank, is_active
+    `SELECT id, email, name, standing_rank, is_active, is_hub_admin
      FROM hub_users
      WHERE email = $1`,
     [email],
@@ -54,7 +56,7 @@ async function resolveHubUser(user) {
   const inserted = await query(
     `INSERT INTO hub_users (email, name)
      VALUES ($1, $2)
-     RETURNING id, email, name, standing_rank, is_active`,
+     RETURNING id, email, name, standing_rank, is_active, is_hub_admin`,
     [email, fallbackName],
   );
   return inserted.rows[0];
@@ -69,6 +71,10 @@ async function resolveRank(user, visitId) {
   const envRank = envRankFromEmail(user.email);
 
   const hubUser = await resolveHubUser(user);
+  if (await isHubAdmin(user, hubUser)) {
+    return Math.max(envRank, 3);
+  }
+
   const standingRank = hubUser.is_active ? Number(hubUser.standing_rank) || 1 : 1;
 
   const { rows: grants } = await query(
@@ -86,7 +92,17 @@ async function resolveRank(user, visitId) {
     grantRank = Math.max(grantRank, Number(row.granted_rank) || 0);
   }
 
-  return Math.max(envRank, standingRank, grantRank);
+  let storeRank = 1;
+  try {
+    const storeNumber = await resolveStoreForVisit(visitIdNum);
+    if (storeNumber) {
+      storeRank = await storeRankForUser(user, storeNumber);
+    }
+  } catch (err) {
+    console.warn('[hub-auth] store rank lookup failed:', err.message);
+  }
+
+  return Math.max(envRank, standingRank, grantRank, storeRank);
 }
 
 function requireHubRank(minRank) {
