@@ -1,8 +1,16 @@
 // Checklane Hub — store-scoped access, assignments, and supervisor purview.
 
 const { query } = require('./lib/db');
-const { resolveHubUser, parseVisitId } = require('./hub-auth');
+const { resolveHubUser } = require('./hub-auth');
 const { resolveStoreForVisit } = require('./lib/hub-fixture-catalog');
+
+function parseVisitId(visitId) {
+  const visitIdNum = Number(visitId);
+  if (!Number.isFinite(visitIdNum)) {
+    throw new Error('Invalid visitId');
+  }
+  return visitIdNum;
+}
 
 function parseEmailList(envVal) {
   return (envVal || '')

@@ -2,7 +2,6 @@
 
 const { query } = require('./lib/db');
 const { resolveStoreForVisit } = require('./lib/hub-fixture-catalog');
-const { storeRankForUser, isHubAdmin } = require('./hub-store-access');
 
 function parseEmailList(envVal) {
   return (envVal || '')
@@ -67,6 +66,7 @@ async function resolveHubUser(user) {
  * DB can only raise rank, never lower env baseline.
  */
 async function resolveRank(user, visitId) {
+  const { storeRankForUser, isHubAdmin } = require('./hub-store-access');
   const visitIdNum = parseVisitId(visitId);
   const envRank = envRankFromEmail(user.email);
 
