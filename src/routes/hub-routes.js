@@ -13,7 +13,7 @@ const {
 const { addSubscriber, broadcastVisit, sendSnapshotToClient } = require('../hub-broadcast');
 const { sendBackup, markVisitDirtyAndBackupNow } = require('../hub-backup');
 const { getTagBatchPreview, sendTagBatch } = require('../hub-tag-batch');
-const { sendSectionReopenEmail, sendNisVerifiedEmail } = require('../hub-notify');
+const { sendSectionReopenEmail, sendNisVerifiedEmail, sendHelpVerifiedEmail } = require('../hub-notify');
 const { parsePogMeta } = require('../lib/pog-meta');
 const {
   getSectionTagDrafts,
@@ -25,7 +25,7 @@ const {
   verifyMissingTagsBulk,
 } = require('../hub-missing-tags');
 const { query } = require('../lib/db');
-const { resolveStoreForVisit } = require('../lib/hub-fixture-catalog');
+const { resolveStoreForVisit, lookupFixture, enrichNisPayload } = require('../lib/hub-fixture-catalog');
 const { requireVisitAccess } = require('../hub-store-access');
 const {
   loadSectionRow,
@@ -50,6 +50,21 @@ function buildNisFlagSummary({ setName, manifestPogId, action, dbkey, lane }) {
   if (meta.category) parts.push('C' + meta.category);
   if (meta.version) parts.push('V' + meta.version);
   if (dbkey) parts.push('DBKey ' + dbkey);
+  return parts.join(' · ');
+}
+
+function buildHelpFlagSummary({
+  issueTypeId,
+  issueTypeLabel,
+  customLabel,
+  setName,
+  lane,
+}) {
+  const label = issueTypeId === 'custom' && customLabel ? customLabel : issueTypeLabel;
+  const parts = ['Needs help'];
+  if (label) parts.push(label);
+  if (setName) parts.push(setName);
+  if (lane) parts.push('lane ' + lane);
   return parts.join(' · ');
 }
 
@@ -389,10 +404,29 @@ router.post('/:visitId/pending/:id/verify', requireAuth, requireHubRank(2), asyn
           status: 'verified',
         });
       }
+    } else if (verifiedPending?.action_type === 'help_request') {
+      const payload = verifiedPending.payload || {};
+      emailResult = await sendHelpVerifiedEmail({
+        visitId: req.params.visitId,
+        dbkey: verifiedPending.dbkey,
+        lane: verifiedPending.lane || payload.lane || '',
+        payload,
+        raiserName: verifiedPending.raised_by_name,
+        raiserEmail: verifiedPending.raised_by_email,
+        verifier,
+      });
+      if (!emailResult.sent) {
+        return res.status(502).json({
+          error: emailResult.error || 'Help desk notification email failed',
+          emailSent: false,
+          id: pendingId,
+          status: 'verified',
+        });
+      }
     }
 
     await broadcastVisit(req.params.visitId);
-    if (verifiedPending?.action_type === 'nis') {
+    if (verifiedPending?.action_type === 'nis' || verifiedPending?.action_type === 'help_request') {
       markVisitDirtyAndBackupNow(req.params.visitId).catch((err) => {
         console.error('[hub] nis verify backup failed:', err.message);
       });
@@ -578,23 +612,63 @@ router.post('/:visitId/sections/:dbkey/flag/help', requireAuth, attachHubContext
     const { visitId, dbkey } = req.params;
     const lane = laneFromRequest(req);
     const note = req.body?.note ?? null;
+    const issueTypeId = req.body?.issue_type_id ?? req.body?.issueTypeId ?? null;
+    const issueTypeLabel = req.body?.issue_type_label ?? req.body?.issueTypeLabel ?? null;
+    const issueDetails = req.body?.issue_details ?? req.body?.issueDetails ?? null;
+    const customLabel = req.body?.custom_label ?? req.body?.customLabel ?? null;
     const raiser = req.hubUser;
 
-    const pendingId = await applyTransition(visitId, async (visitIdNum) => {
-      const priorState = await setNeedsAttention(visitIdNum, dbkey, lane);
-      const payload = { note, prior_state: priorState, lane, summary: 'Needs assistance' };
+    if (!issueTypeId || !issueTypeLabel) {
+      return res.status(400).json({ error: 'Issue type is required' });
+    }
+    if (issueTypeId === 'custom' && !customLabel && !issueDetails) {
+      return res.status(400).json({ error: 'Custom issue requires a summary and description' });
+    }
+    if (issueTypeId !== 'custom' && !issueDetails) {
+      return res.status(400).json({ error: 'Issue details are required' });
+    }
+
+    const visitIdNum = parseVisitId(visitId);
+    const storeNumber = await resolveStoreForVisit(visitIdNum);
+    const fixture = storeNumber ? lookupFixture({ storeNumber, lane, dbkey }) : null;
+    const setName = req.body?.set_name ?? req.body?.setName ?? fixture?.name ?? null;
+    const manifestPogId = req.body?.manifest_pog_id ?? req.body?.manifestPogId ?? fixture?.manifest_pog_id ?? null;
+    const action = req.body?.action ?? fixture?.action ?? null;
+
+    const pendingId = await applyTransition(visitId, async (visitIdNumInner) => {
+      const priorState = await setNeedsAttention(visitIdNumInner, dbkey, lane);
+      const payload = enrichNisPayload({
+        note,
+        prior_state: priorState,
+        lane,
+        summary: buildHelpFlagSummary({
+          issueTypeId,
+          issueTypeLabel,
+          customLabel,
+          setName,
+          lane,
+        }),
+        issue_type_id: issueTypeId,
+        issue_type_label: issueTypeLabel,
+        issue_details: issueDetails,
+        custom_label: customLabel,
+        set_name: setName,
+        manifest_pog_id: manifestPogId,
+        action,
+      }, fixture);
 
       const inserted = await query(
         `INSERT INTO pending_actions (visit_id, lane, dbkey, action_type, payload, raised_by)
          VALUES ($1, $2, $3, 'help_request', $4, $5)
          RETURNING id`,
-        [visitIdNum, lane, dbkey, JSON.stringify(payload), raiser.id],
+        [visitIdNumInner, lane, dbkey, JSON.stringify(payload), raiser.id],
       );
 
       const id = inserted.rows[0].id;
-      await writeAuditLog(visitIdNum, raiser.id, 'flag_raised', dbkey, {
+      await writeAuditLog(visitIdNumInner, raiser.id, 'flag_raised', dbkey, {
         type: 'help_request',
         pending_id: id,
+        issue_type_id: issueTypeId,
         note,
       });
       return id;

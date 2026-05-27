@@ -12,6 +12,13 @@ const {
 } = require('./lib/checklanes-email');
 const { parsePogMeta, buildNisHelpdeskSubject } = require('./lib/pog-meta');
 const { resolveNisSetMetadata } = require('./lib/hub-fixture-catalog');
+const {
+  HELPDESK_TO,
+  buildHelpdeskFromAddress,
+  buildHelpdeskSubject,
+  buildHelpdeskCc,
+  resolveHelpdeskReplyTo,
+} = require('./lib/helpdesk-email');
 
 let _resend = null;
 
@@ -224,8 +231,128 @@ async function sendNisVerifiedEmail({
   return { sent: true, resendId: data?.id, subject };
 }
 
+async function sendHelpVerifiedEmail({
+  visitId,
+  store,
+  dbkey,
+  lane,
+  payload,
+  raiserName,
+  raiserEmail,
+  verifier,
+}) {
+  if (!_resend) {
+    return { sent: false, error: 'Hub notify not initialized' };
+  }
+
+  const visitIdNum = parseVisitId(visitId);
+  const { storeNumber, payload: enrichedPayload } = await resolveNisSetMetadata({
+    visitIdNum,
+    lane,
+    dbkey,
+    payload,
+  });
+  const storeLabel =
+    store || storeNumber || (await resolveStore(visitIdNum)) || 'unknown';
+  const meta = parsePogMeta({
+    manifestPogId: enrichedPayload?.manifest_pog_id,
+    action: enrichedPayload?.action,
+    dbkey,
+  });
+  const issueLabel =
+    enrichedPayload?.custom_label ||
+    enrichedPayload?.issue_type_label ||
+    'Needs assistance';
+  const issueDetails = enrichedPayload?.issue_details;
+  const note = enrichedPayload?.note;
+  const setName = enrichedPayload?.set_name;
+
+  const subjectStore = storeNumber || storeLabel;
+  const categoryNumber = meta.category || '0000';
+  const subject = buildHelpdeskSubject({
+    storeNumber: subjectStore,
+    categoryNumber,
+    dbkey: meta.dbkey || dbkey,
+    version: meta.version,
+    issueLabel,
+  });
+
+  const detailRows = [
+    ['Store', storeLabel],
+    setName ? ['Set', setName] : null,
+    ['Lane', lane || '—'],
+    meta.category ? ['Category', `C${meta.category}`] : null,
+    meta.version ? ['Version', `V${meta.version}`] : null,
+    ['DBKey', meta.dbkey || dbkey || '—'],
+    ['Visit', String(visitIdNum)],
+    ['Issue type', issueLabel],
+    ['Raised by', formatPerson(raiserName, raiserEmail)],
+    ['Verified by', formatPerson(verifier.name, verifier.email)],
+  ].filter(Boolean);
+
+  const detailsHtml = detailRows
+    .map(
+      ([label, value]) =>
+        `<p style="margin:0 0 8px;"><strong>${escHtml(label)}:</strong> ${escHtml(value)}</p>`,
+    )
+    .join('');
+
+  const issueHtml = issueDetails
+    ? `<p style="margin:16px 0 6px;font-weight:700;">Issue details</p>
+       <p style="margin:0;padding:12px;background:#f3f4f6;border-radius:6px;white-space:pre-wrap;">${escHtml(issueDetails)}</p>`
+    : '';
+
+  const noteHtml = note
+    ? `<p style="margin:16px 0 6px;font-weight:700;">Additional notes</p>
+       <p style="margin:0;padding:12px;background:#f3f4f6;border-radius:6px;white-space:pre-wrap;">${escHtml(note)}</p>`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:system-ui,sans-serif;color:#111827;max-width:560px;line-height:1.5;">
+  <h2 style="margin:0 0 12px;font-size:18px;">KOMPASS Help Desk — verified by lead</h2>
+  <p style="margin:0 0 12px;color:#374151;">A supervisor or lead confirmed this help request and forwarded it to the help desk.</p>
+  ${detailsHtml}
+  ${issueHtml}
+  ${noteHtml}
+</body></html>`;
+
+  const from = buildHelpdeskFromAddress(subjectStore, categoryNumber);
+  const replyTo = resolveHelpdeskReplyTo({ userName: raiserName, userEmail: raiserEmail });
+  const cc = buildHelpdeskCc(raiserEmail);
+
+  const emailPayload = {
+    from,
+    to: HELPDESK_TO,
+    cc,
+    reply_to: replyTo,
+    subject,
+    html,
+  };
+
+  const { data, error } = await _resend.emails.send(emailPayload);
+  if (error) {
+    console.error('[hub-notify] help verify email failed:', error.message || String(error));
+    return { sent: false, error: error.message || String(error), subject };
+  }
+
+  const recipients = [HELPDESK_TO, ...cc];
+
+  await logHubEmail({
+    visitIdNum,
+    emailType: 'help_verified',
+    recipients,
+    subject,
+    bodySummary: issueLabel,
+    resendId: data?.id,
+    sentBy: verifier.id,
+  });
+
+  return { sent: true, resendId: data?.id, subject };
+}
+
 module.exports = {
   initHubNotify,
   sendSectionReopenEmail,
   sendNisVerifiedEmail,
+  sendHelpVerifiedEmail,
 };
