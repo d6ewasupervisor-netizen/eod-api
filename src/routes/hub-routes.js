@@ -700,6 +700,84 @@ router.post('/:visitId/sections/:dbkey/flag/nis', requireAuth, attachHubContext,
   }
 });
 
+router.post('/:visitId/sections/bulk-assign', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const { visitId } = req.params;
+    const rank = req.hubRank ?? 1;
+    if (rank < 2) {
+      return res.status(403).json({ error: 'Lead or supervisor required' });
+    }
+
+    const assigneeId = Number(req.body?.assigneeId);
+    if (!Number.isFinite(assigneeId)) {
+      return res.status(400).json({ error: 'assigneeId is required' });
+    }
+
+    const sections = Array.isArray(req.body?.sections) ? req.body.sections : [];
+    if (!sections.length) {
+      return res.status(400).json({ error: 'sections array is required' });
+    }
+
+    const actor = req.hubUser;
+    const assignee = await loadHubUserById(assigneeId);
+    if (!assignee || !assignee.is_active) {
+      return res.status(400).json({ error: 'Unknown or inactive hub user' });
+    }
+
+    const results = { assigned: 0, skipped: 0, errors: [] };
+
+    await applyTransition(visitId, async (visitIdNum) => {
+      for (const item of sections) {
+        const dbkey = String(item?.dbkey || '').trim();
+        const lane = laneFromRequest({ body: { lane: item?.lane } });
+        if (!dbkey) {
+          results.skipped += 1;
+          continue;
+        }
+
+        try {
+          const section = await loadSectionRow(visitIdNum, dbkey, lane);
+          if (!ASSIGNABLE_STATES.includes(section.state)) {
+            results.skipped += 1;
+            results.errors.push({ dbkey, lane, error: `State ${section.state}` });
+            continue;
+          }
+
+          const fields = {
+            state: 'assigned',
+            assignee_id: assigneeId,
+            assigned_by: actor.id,
+          };
+          if (section.state === 'in_progress') {
+            fields.started_at = null;
+          }
+
+          await updateSectionState(visitIdNum, dbkey, lane, fields);
+
+          const action = section.assignee_id != null ? 'reassigned' : 'assigned';
+          await writeAuditLog(visitIdNum, actor.id, action, dbkey, {
+            lane,
+            assignee: assigneeId,
+            assignee_name: assignee.name,
+            prior_assignee_id: section.assignee_id,
+            prior_state: section.state,
+            bulk: true,
+          });
+          results.assigned += 1;
+        } catch (err) {
+          results.skipped += 1;
+          results.errors.push({ dbkey, lane, error: err.message });
+        }
+      }
+    });
+
+    await broadcastVisit(visitId);
+    return res.json({ ok: true, ...results });
+  } catch (err) {
+    return handleTransitionError(err, res, 'Failed to bulk assign sections');
+  }
+});
+
 router.post('/:visitId/sections/:dbkey/assign', requireAuth, attachHubContext, async (req, res) => {
   try {
     const { visitId, dbkey } = req.params;
