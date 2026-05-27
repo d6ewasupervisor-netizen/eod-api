@@ -14,6 +14,7 @@ const { createInstaworkRouter } = require('./instawork-router');
 const { createAiRouter } = require('./ai-router');
 const { runFullSync } = require('./sas-sync');
 const { addReplyTo } = require('./lib/resend-reply-to');
+const { CHECKLANES_FROM } = require('./lib/checklanes-email');
 const {
   HELPDESK_TO,
   buildHelpdeskFromAddress,
@@ -43,6 +44,7 @@ const createDumpBinRouter = require('./routes/dump-bin');
 const hubRoutes = require('./routes/hub-routes');
 const { initHubBackup, startBackupIntervalJob } = require('./hub-backup');
 const { initHubTagBatch } = require('./hub-tag-batch');
+const { initHubNotify } = require('./hub-notify');
 
 const logger = {
   info: (...a) => console.log('[INFO]', ...a),
@@ -238,6 +240,7 @@ async function start() {
 
   initHubBackup({ resend });
   initHubTagBatch({ resend });
+  initHubNotify({ resend });
   startBackupIntervalJob();
 
   const app = express();
@@ -691,7 +694,9 @@ async function start() {
       });
     }
 
-    const from = buildHelpdeskFromAddress(storeNumber, categoryNumber);
+    const from = dbkey
+      ? CHECKLANES_FROM
+      : buildHelpdeskFromAddress(storeNumber, categoryNumber);
     const replyTo = resolveHelpdeskReplyTo({ userName, userEmail });
     const cc = buildHelpdeskCc(userEmail);
     const subject = buildHelpdeskSubject({

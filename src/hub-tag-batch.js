@@ -15,8 +15,8 @@ const { buildTagBatchPdf } = require('./lib/tag-batch-pdf');
 const { writeAuditLog, parseVisitId } = require('./hub-auth');
 const { applyTransition } = require('./hub-state');
 const { broadcastVisit } = require('./hub-broadcast');
+const { buildSetRelatedEmailPayload, CHECKLANES_OPS_EMAIL } = require('./lib/checklanes-email');
 const { sortTagsByAisle, groupTagsByAisle } = require('./lib/tag-location');
-const { resolveBackupRecipient } = require('./hub-backup');
 
 const TZ = 'America/Los_Angeles';
 
@@ -26,20 +26,25 @@ function initHubTagBatch({ resend }) {
   _resend = resend;
 }
 
-function resolveTagBatchRecipient(fallbackEmail) {
+function resolveTagBatchRecipient() {
   if (process.env.HUB_TAG_BATCH_EMAIL) {
     return process.env.HUB_TAG_BATCH_EMAIL.trim();
   }
-  if (process.env.OVERRIDE_APPROVER_EMAIL) {
-    return process.env.OVERRIDE_APPROVER_EMAIL.trim();
-  }
-  const supervisors = (process.env.KOMPASS_SUPERVISOR_EMAILS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (supervisors.length) return supervisors[0];
-  if (fallbackEmail) return fallbackEmail.trim();
-  return resolveBackupRecipient();
+  return CHECKLANES_OPS_EMAIL;
+}
+
+/**
+ * Barcode print batch subject — store token only, e.g. #31 or #163.
+ * Hardcoded #999 during hub testing; flip to tagBatchEmailSubjectLive when live.
+ */
+function tagBatchEmailSubject(_storeNumber) {
+  return '#999';
+}
+
+function tagBatchEmailSubjectLive(storeNumber) {
+  const n = Number(storeNumber);
+  if (!Number.isFinite(n)) return '#999';
+  return `#${n}`;
 }
 
 function formatStoreNumber(storeNumber) {
@@ -188,10 +193,12 @@ async function sendTagBatch(visitId, actor) {
 
   const storeLabel = store || 'unknown';
   const count = rows.length;
-  const subject = `[Tag Batch] Store ${storeLabel} · ${count} tags · ${dateLabel}`;
-  const to = resolveTagBatchRecipient(actor.email);
-  const cc = actor.email;
-  const recipients = cc && cc.toLowerCase() !== to.toLowerCase() ? [to, cc] : [to];
+  const subject = tagBatchEmailSubject(store);
+  const to = resolveTagBatchRecipient();
+  const recipients = [to];
+  if (actor.email && actor.email.toLowerCase() !== to.toLowerCase()) {
+    recipients.push(actor.email);
+  }
 
   const html = `<!DOCTYPE html>
 <html><body style="font-family:system-ui,sans-serif;color:#111827;max-width:420px;">
@@ -205,14 +212,15 @@ async function sendTagBatch(visitId, actor) {
   const stamp = formatFilenameDate();
   const filename = `tag-batch_${storeLabel}_${visitIdNum}_${stamp}.pdf`;
 
-  const { data, error } = await _resend.emails.send({
-    from: 'Checklane Hub <noreply@retail-odyssey.com>',
-    to: [to],
-    cc: cc ? [cc] : undefined,
-    subject,
-    html,
-    attachments: [{ filename, content: pdfBuffer.toString('base64') }],
-  });
+  const { data, error } = await _resend.emails.send(
+    buildSetRelatedEmailPayload({
+      to,
+      subject,
+      html,
+      actorEmail: actor.email,
+      attachments: [{ filename, content: pdfBuffer.toString('base64') }],
+    }),
+  );
 
   if (error) {
     console.error('[hub-tag-batch] Resend error:', error.message || String(error));
@@ -269,4 +277,6 @@ module.exports = {
   getTagBatchPreview,
   sendTagBatch,
   resolveTagBatchRecipient,
+  tagBatchEmailSubject,
+  tagBatchEmailSubjectLive,
 };

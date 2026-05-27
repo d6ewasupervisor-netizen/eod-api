@@ -14,7 +14,8 @@ const crypto = require('crypto');
 const axios = require('axios');
 const { getHeaders, sasGet, sasPatch, isSessionAlive } = require('./sas-bridge');
 const { requireRole } = require('./auth-middleware');
-const { resolveResendReplyTo, looksLikeEmail } = require('./lib/resend-reply-to');
+const { looksLikeEmail } = require('./lib/resend-reply-to');
+const { buildSetRelatedEmailPayload } = require('./lib/checklanes-email');
 const { extractPlanogramMeta } = require('./lib/helpdesk-email');
 const { issueReviewToken } = require('./lib/decision-review-jwt');
 
@@ -95,15 +96,18 @@ async function getDirectReports() {
 
 // ─── EMAIL ──────────────────────────────────────────────────────────────────
 
-async function sendEmail(resend, { to, subject, html, replyToOpts }) {
-  const payload = {
-    from: 'shifts@retail-odyssey.com',
-    to: Array.isArray(to) ? to : [to],
+async function sendEmail(resend, { to, subject, html, replyToOpts, actorEmail }) {
+  const actor =
+    actorEmail ||
+    replyToOpts?.explicit ||
+    replyToOpts?.userEmail;
+  const payload = buildSetRelatedEmailPayload({
+    to,
     subject,
     html,
-  };
-  const rt = resolveResendReplyTo(replyToOpts || {});
-  if (rt) payload.reply_to = rt;
+    actorEmail: actor,
+    replyToExplicit: actor,
+  });
   const { data, error } = await resend.emails.send(payload);
   if (error) {
     logger.error('Email send failed:', error);
@@ -236,9 +240,7 @@ async function applyShiftDecision(pool, resend, requestId, decision) {
           date: request.date,
           requestedBy: request.requested_by,
         }, results),
-        replyToOpts: {
-          explicit: looksLikeEmail(request.requested_by) ? request.requested_by : undefined,
-        },
+        actorEmail: looksLikeEmail(request.requested_by) ? request.requested_by : undefined,
       });
     } catch (err) {
       logger.error(`Failed to send confirmation email: ${err.message}`);
@@ -572,10 +574,9 @@ function registerRoutes(app, resend, pool) {
         to: SUPERVISOR_EMAIL,
         subject: `Shift Removal Request — Store #${storeNumber} ${date}`,
         html: buildApprovalEmail({ ...request, reviewUrl }),
-        replyToOpts: {
-          userEmail: req.user?.email,
-          explicit: looksLikeEmail(requestedBy) ? requestedBy : undefined,
-        },
+        actorEmail:
+          (looksLikeEmail(requestedBy) ? requestedBy : undefined) ||
+          req.user?.email,
       });
     } catch (err) {
       logger.error(`Failed to send approval email: ${err.message}`);

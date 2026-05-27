@@ -132,6 +132,41 @@ async function restoreSectionState(visitIdNum, dbkey, lane, priorState) {
   await upsertSectionState(visitIdNum, dbkey, lane, { state });
 }
 
+async function clearSectionAssignment(visitIdNum, dbkey, lane) {
+  const laneNorm = normalizeLane(lane);
+  const result = await query(
+    `UPDATE section_state SET
+       state = 'not_started',
+       assignee_id = NULL,
+       assigned_by = NULL,
+       started_at = NULL,
+       updated_at = now()
+     WHERE visit_id = $1 AND lane = $2 AND dbkey = $3`,
+    [visitIdNum, laneNorm, dbkey],
+  );
+
+  if (result.rowCount === 0 && laneNorm) {
+    const legacy = await query(
+      `UPDATE section_state SET
+         state = 'not_started',
+         assignee_id = NULL,
+         assigned_by = NULL,
+         started_at = NULL,
+         updated_at = now()
+       WHERE visit_id = $1 AND lane = '' AND dbkey = $2`,
+      [visitIdNum, dbkey],
+    );
+    if (legacy.rowCount === 0) {
+      await upsertSectionState(visitIdNum, dbkey, laneNorm, {
+        state: 'not_started',
+        assignee_id: null,
+        assigned_by: null,
+        started_at: null,
+      });
+    }
+  }
+}
+
 function laneFromRequest(req) {
   const lane = req.body?.lane ?? req.query?.lane ?? '';
   return normalizeLane(lane);
@@ -145,5 +180,6 @@ module.exports = {
   updateSectionState,
   setNeedsAttention,
   restoreSectionState,
+  clearSectionAssignment,
   laneFromRequest,
 };

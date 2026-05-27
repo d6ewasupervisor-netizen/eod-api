@@ -11,6 +11,7 @@
  */
 
 const { query } = require('./lib/db');
+const { buildSetRelatedEmailPayload } = require('./lib/checklanes-email');
 const {
   markVisitDirty,
   clearVisitDirty,
@@ -289,13 +290,14 @@ async function sendBackup(visitId, reason, { sentBy = 0 } = {}) {
   const jsonContent = Buffer.from(JSON.stringify(backup, null, 2)).toString('base64');
 
   try {
-    const { data, error } = await _resend.emails.send({
-      from: 'Hub Backup <noreply@retail-odyssey.com>',
-      to: [to],
-      subject,
-      html,
-      attachments: [{ filename, content: jsonContent }],
-    });
+    const { data, error } = await _resend.emails.send(
+      buildSetRelatedEmailPayload({
+        to,
+        subject,
+        html,
+        attachments: [{ filename, content: jsonContent }],
+      }),
+    );
 
     if (error) {
       logger.error(`Resend error for visit ${visitIdNum}:`, error.message || String(error));

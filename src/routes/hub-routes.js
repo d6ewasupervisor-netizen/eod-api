@@ -13,6 +13,7 @@ const {
 const { addSubscriber, broadcastVisit, sendSnapshotToClient } = require('../hub-broadcast');
 const { sendBackup, markVisitDirtyAndBackupNow } = require('../hub-backup');
 const { getTagBatchPreview, sendTagBatch } = require('../hub-tag-batch');
+const { sendSectionReopenEmail } = require('../hub-notify');
 const {
   getSectionTagDrafts,
   addSectionTagDraft,
@@ -29,8 +30,14 @@ const {
   updateSectionState,
   setNeedsAttention,
   restoreSectionState,
+  clearSectionAssignment,
   laneFromRequest,
 } = require('../hub-section');
+
+const ASSIGNABLE_STATES = ['not_started', 'assigned', 'in_progress', 'needs_attention'];
+const UNASSIGNABLE_STATES = ['assigned', 'in_progress', 'needs_attention'];
+const REOPENABLE_STATES = ['done_pending_signoff', 'signed_off'];
+const MIN_REOPEN_REASON_LENGTH = 10;
 
 const router = express.Router();
 
@@ -610,23 +617,31 @@ router.post('/:visitId/sections/:dbkey/assign', requireAuth, attachHubContext, a
 
     await applyTransition(visitId, async (visitIdNum) => {
       const section = await loadSectionRow(visitIdNum, dbkey, lane);
-      if (!['not_started', 'assigned'].includes(section.state)) {
+      if (!ASSIGNABLE_STATES.includes(section.state)) {
         throw Object.assign(
           new Error(`Cannot assign a section in state ${section.state}`),
           { status: 409 },
         );
       }
 
-      await upsertSectionState(visitIdNum, dbkey, lane, {
+      const fields = {
         state: 'assigned',
         assignee_id: assigneeId,
         assigned_by: actor.id,
-      });
+      };
+      if (section.state === 'in_progress') {
+        fields.started_at = null;
+      }
 
-      await writeAuditLog(visitIdNum, actor.id, 'assigned', dbkey, {
+      await updateSectionState(visitIdNum, dbkey, lane, fields);
+
+      const action = section.assignee_id != null ? 'reassigned' : 'assigned';
+      await writeAuditLog(visitIdNum, actor.id, action, dbkey, {
         lane,
         assignee: assigneeId,
         assignee_name: assignee.name,
+        prior_assignee_id: section.assignee_id,
+        prior_state: section.state,
         by: actor.id,
         by_name: actor.name,
       });
@@ -636,6 +651,47 @@ router.post('/:visitId/sections/:dbkey/assign', requireAuth, attachHubContext, a
     return res.json({ ok: true });
   } catch (err) {
     return handleTransitionError(err, res, 'Failed to assign section');
+  }
+});
+
+router.post('/:visitId/sections/:dbkey/unassign', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const { visitId, dbkey } = req.params;
+    const lane = laneFromRequest(req);
+    const rank = req.hubRank ?? 1;
+    if (rank < 2) {
+      return res.status(403).json({ error: 'Lead or supervisor required' });
+    }
+
+    const actor = req.hubUser;
+
+    await applyTransition(visitId, async (visitIdNum) => {
+      const section = await loadSectionRow(visitIdNum, dbkey, lane);
+      if (!UNASSIGNABLE_STATES.includes(section.state)) {
+        throw Object.assign(
+          new Error(`Cannot unassign a section in state ${section.state}`),
+          { status: 409 },
+        );
+      }
+      if (section.assignee_id == null) {
+        throw Object.assign(new Error('Section is not assigned'), { status: 409 });
+      }
+
+      await clearSectionAssignment(visitIdNum, dbkey, lane);
+
+      await writeAuditLog(visitIdNum, actor.id, 'unassigned', dbkey, {
+        lane,
+        prior_assignee_id: section.assignee_id,
+        prior_state: section.state,
+        by: actor.id,
+        by_name: actor.name,
+      });
+    });
+
+    await broadcastVisit(visitId);
+    return res.json({ ok: true });
+  } catch (err) {
+    return handleTransitionError(err, res, 'Failed to unassign section');
   }
 });
 
@@ -753,6 +809,79 @@ router.post('/:visitId/sections/:dbkey/signoff', requireAuth, attachHubContext, 
     return res.json({ ok: true });
   } catch (err) {
     return handleTransitionError(err, res, 'Failed to sign off section');
+  }
+});
+
+router.post('/:visitId/sections/:dbkey/reopen', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const { visitId, dbkey } = req.params;
+    const lane = laneFromRequest(req);
+    const rank = req.hubRank ?? 1;
+    if (rank < 2) {
+      return res.status(403).json({ error: 'Lead or supervisor required' });
+    }
+
+    const reason = String(req.body?.reason || '').trim();
+    if (reason.length < MIN_REOPEN_REASON_LENGTH) {
+      return res.status(400).json({
+        error: `An explanation of at least ${MIN_REOPEN_REASON_LENGTH} characters is required to reopen a completed set`,
+      });
+    }
+
+    const actor = req.hubUser;
+
+    const sectionPreview = await loadSectionRow(parseVisitId(visitId), dbkey, lane);
+    if (!REOPENABLE_STATES.includes(sectionPreview.state)) {
+      return res.status(409).json({
+        error: `Cannot reopen a section in state ${sectionPreview.state}`,
+      });
+    }
+
+    const emailResult = await sendSectionReopenEmail({
+      visitId,
+      lane,
+      dbkey,
+      priorState: sectionPreview.state,
+      reason,
+      actor,
+    });
+
+    if (!emailResult.sent) {
+      return res.status(502).json({
+        error: emailResult.error || 'Notification email failed — set was not reopened',
+        emailSent: false,
+      });
+    }
+
+    await applyTransition(visitId, async (visitIdNum) => {
+      const section = await loadSectionRow(visitIdNum, dbkey, lane);
+      if (!REOPENABLE_STATES.includes(section.state)) {
+        throw Object.assign(
+          new Error(`Cannot reopen a section in state ${section.state}`),
+          { status: 409 },
+        );
+      }
+
+      await updateSectionState(visitIdNum, dbkey, lane, {
+        state: 'in_progress',
+        completed_at: null,
+        signed_off_by: null,
+        signed_off_at: null,
+      });
+
+      await writeAuditLog(visitIdNum, actor.id, 'reopened', dbkey, {
+        lane,
+        prior_state: section.state,
+        reason,
+        assignee_id: section.assignee_id,
+        resend_id: emailResult.resendId,
+      });
+    });
+
+    await broadcastVisit(visitId);
+    return res.json({ ok: true, emailSent: true, resendId: emailResult.resendId });
+  } catch (err) {
+    return handleTransitionError(err, res, 'Failed to reopen section');
   }
 });
 
