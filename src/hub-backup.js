@@ -115,6 +115,7 @@ function buildSummary(sectionState, tagFlags, pendingActions) {
     needs_attention: 0,
     done_pending_signoff: 0,
     signed_off: 0,
+    not_in_store: 0,
   };
 
   let lastSignoffAt = null;

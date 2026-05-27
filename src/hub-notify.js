@@ -61,14 +61,23 @@ async function sendSectionReopenEmail({
   const subject =
     `[Checklanes reopen] Store ${storeLabel} · Lane ${lane || '—'} · DBKey ${dbkey}`;
 
+  const priorLabel = priorState === 'not_in_store'
+    ? 'Not in store'
+    : priorState === 'signed_off'
+      ? 'Signed off'
+      : priorState;
+  const reopenHeadline = priorState === 'not_in_store'
+    ? 'Set reopened — was confirmed not in store'
+    : 'Set reopened — was marked complete';
+
   const html = `<!DOCTYPE html>
 <html><body style="font-family:system-ui,sans-serif;color:#111827;max-width:560px;line-height:1.5;">
-  <h2 style="margin:0 0 12px;font-size:18px;">Set reopened — was marked complete</h2>
+  <h2 style="margin:0 0 12px;font-size:18px;">${escHtml(reopenHeadline)}</h2>
   <p style="margin:0 0 8px;"><strong>Store:</strong> ${escHtml(storeLabel)}</p>
   <p style="margin:0 0 8px;"><strong>Visit:</strong> ${escHtml(String(visitIdNum))}</p>
   <p style="margin:0 0 8px;"><strong>Lane:</strong> ${escHtml(lane || '—')}</p>
   <p style="margin:0 0 8px;"><strong>DBKey:</strong> ${escHtml(dbkey)}</p>
-  <p style="margin:0 0 8px;"><strong>Prior state:</strong> ${escHtml(priorState)}</p>
+  <p style="margin:0 0 8px;"><strong>Prior state:</strong> ${escHtml(priorLabel)}</p>
   <p style="margin:0 0 8px;"><strong>Reopened by:</strong> ${escHtml(actorLabel)} (${escHtml(actor.email || '')})</p>
   <p style="margin:16px 0 6px;font-weight:700;">Explanation</p>
   <p style="margin:0;padding:12px;background:#f3f4f6;border-radius:6px;white-space:pre-wrap;">${escHtml(reason)}</p>

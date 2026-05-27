@@ -37,7 +37,7 @@ const {
 
 const ASSIGNABLE_STATES = ['not_started', 'assigned', 'in_progress', 'needs_attention'];
 const UNASSIGNABLE_STATES = ['assigned', 'in_progress', 'needs_attention'];
-const REOPENABLE_STATES = ['signed_off'];
+const REOPENABLE_STATES = ['signed_off', 'not_in_store'];
 const MIN_REOPEN_REASON_LENGTH = 10;
 
 function buildNisFlagSummary({ setName, manifestPogId, action, dbkey, lane }) {
@@ -328,13 +328,17 @@ router.post('/:visitId/pending/:id/verify', requireAuth, requireHubRank(2), asyn
 
       const payload = pending.payload || {};
 
-      if (pending.action_type === 'help_request' || pending.action_type === 'nis') {
+      if (pending.action_type === 'help_request') {
         await restoreSectionState(
           visitIdNum,
           pending.dbkey,
           pending.lane || payload.lane || '',
           payload.prior_state,
         );
+      } else if (pending.action_type === 'nis') {
+        await upsertSectionState(visitIdNum, pending.dbkey, pending.lane || payload.lane || '', {
+          state: 'not_in_store',
+        });
       } else if (pending.action_type === 'missing_tag') {
         const tagFlagId = payload.tag_flag_id;
         if (tagFlagId) {
@@ -384,6 +388,11 @@ router.post('/:visitId/pending/:id/verify', requireAuth, requireHubRank(2), asyn
     }
 
     await broadcastVisit(req.params.visitId);
+    if (verifiedPending?.action_type === 'nis') {
+      markVisitDirtyAndBackupNow(req.params.visitId).catch((err) => {
+        console.error('[hub] nis verify backup failed:', err.message);
+      });
+    }
     return res.json({
       ok: true,
       id: pendingId,

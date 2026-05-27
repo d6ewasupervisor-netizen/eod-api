@@ -123,9 +123,13 @@ async function updateSectionState(visitIdNum, dbkey, lane, fields) {
 
 async function assertSectionAllowsRepFlags(visitIdNum, dbkey, lane) {
   const state = await readSectionState(visitIdNum, dbkey, lane);
-  if (state === 'signed_off') {
+  if (state === 'signed_off' || state === 'not_in_store') {
     throw Object.assign(
-      new Error('Cannot raise flags on a signed-off set — reopen it first'),
+      new Error(
+        state === 'not_in_store'
+          ? 'Cannot raise flags on a not-in-store set — reopen it first'
+          : 'Cannot raise flags on a signed-off set — reopen it first',
+      ),
       { status: 409 },
     );
   }

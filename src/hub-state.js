@@ -10,6 +10,7 @@ const STATE_KEYS = [
   'needs_attention',
   'done_pending_signoff',
   'signed_off',
+  'not_in_store',
 ];
 
 const ACTION_SUMMARIES = {
@@ -66,6 +67,7 @@ function emptyStats() {
     needsAttention: 0,
     donePendingSignoff: 0,
     signedOff: 0,
+    notInStore: 0,
     openTagFlags: 0,
     draftTags: 0,
     verifiedUnsentTags: 0,
@@ -95,6 +97,9 @@ function buildStats(sections) {
         break;
       case 'signed_off':
         stats.signedOff += 1;
+        break;
+      case 'not_in_store':
+        stats.notInStore += 1;
         break;
       default:
         break;
