@@ -13,7 +13,7 @@ const {
 const { addSubscriber, broadcastVisit, sendSnapshotToClient } = require('../hub-broadcast');
 const { sendBackup, markVisitDirtyAndBackupNow } = require('../hub-backup');
 const { getTagBatchPreview, sendTagBatch } = require('../hub-tag-batch');
-const { sendSectionReopenEmail } = require('../hub-notify');
+const { sendSectionReopenEmail, sendNisVerifiedEmail } = require('../hub-notify');
 const {
   getSectionTagDrafts,
   addSectionTagDraft,
@@ -295,6 +295,7 @@ router.post('/:visitId/pending/:id/verify', requireAuth, requireHubRank(2), asyn
     }
 
     const verifier = req.hubUser;
+    let verifiedPending = null;
 
     await applyTransition(req.params.visitId, async () => {
       const pending = await loadPendingAction(visitIdNum, pendingId);
@@ -343,10 +344,40 @@ router.post('/:visitId/pending/:id/verify', requireAuth, requireHubRank(2), asyn
         verified_by_name: verifier.name,
         verified_by_email: verifier.email,
       });
+
+      verifiedPending = pending;
     });
 
+    let emailResult = null;
+    if (verifiedPending?.action_type === 'nis') {
+      const payload = verifiedPending.payload || {};
+      emailResult = await sendNisVerifiedEmail({
+        visitId: req.params.visitId,
+        dbkey: verifiedPending.dbkey,
+        lane: verifiedPending.lane || payload.lane || '',
+        payload,
+        raiserName: verifiedPending.raised_by_name,
+        raiserEmail: verifiedPending.raised_by_email,
+        verifier,
+      });
+      if (!emailResult.sent) {
+        return res.status(502).json({
+          error: emailResult.error || 'Help desk notification email failed',
+          emailSent: false,
+          id: pendingId,
+          status: 'verified',
+        });
+      }
+    }
+
     await broadcastVisit(req.params.visitId);
-    return res.json({ ok: true, id: pendingId, status: 'verified' });
+    return res.json({
+      ok: true,
+      id: pendingId,
+      status: 'verified',
+      emailSent: emailResult?.sent ?? false,
+      resendId: emailResult?.resendId,
+    });
   } catch (err) {
     if (err.status === 404) return res.status(404).json({ error: err.message });
     if (err.status === 409) return res.status(409).json({ error: err.message });
@@ -564,11 +595,22 @@ router.post('/:visitId/sections/:dbkey/flag/nis', requireAuth, attachHubContext,
     const { visitId, dbkey } = req.params;
     const lane = laneFromRequest(req);
     const note = req.body?.note ?? null;
+    const setName = req.body?.set_name ?? req.body?.setName ?? null;
+    const manifestPogId = req.body?.manifest_pog_id ?? req.body?.manifestPogId ?? null;
+    const action = req.body?.action ?? null;
     const raiser = req.hubUser;
 
     const pendingId = await applyTransition(visitId, async (visitIdNum) => {
       const priorState = await setNeedsAttention(visitIdNum, dbkey, lane);
-      const payload = { note, prior_state: priorState, lane, summary: 'Not in store' };
+      const payload = {
+        note,
+        prior_state: priorState,
+        lane,
+        summary: 'Not in store',
+        set_name: setName,
+        manifest_pog_id: manifestPogId,
+        action,
+      };
 
       const inserted = await query(
         `INSERT INTO pending_actions (visit_id, lane, dbkey, action_type, payload, raised_by)

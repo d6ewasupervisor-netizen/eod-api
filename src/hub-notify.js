@@ -10,6 +10,7 @@ const {
   CHECKLANES_OPS_EMAIL,
   buildSetRelatedEmailPayload,
 } = require('./lib/checklanes-email');
+const { parsePogMeta, buildNisHelpdeskSubject } = require('./lib/pog-meta');
 
 let _resend = null;
 
@@ -90,7 +91,123 @@ async function sendSectionReopenEmail({
   return { sent: true, resendId: data?.id };
 }
 
+async function logHubEmail({
+  visitIdNum,
+  emailType,
+  recipients,
+  subject,
+  bodySummary,
+  resendId,
+  sentBy,
+}) {
+  await query(
+    `INSERT INTO email_log (visit_id, email_type, recipients, subject, body_summary, sent_by, resend_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [visitIdNum, emailType, recipients, subject, bodySummary, sentBy, resendId || null],
+  );
+}
+
+function formatPerson(name, email) {
+  const label = name || email || 'Unknown';
+  return email && name ? `${name} (${email})` : label;
+}
+
+async function sendNisVerifiedEmail({
+  visitId,
+  store,
+  dbkey,
+  lane,
+  payload,
+  raiserName,
+  raiserEmail,
+  verifier,
+}) {
+  if (!_resend) {
+    return { sent: false, error: 'Hub notify not initialized' };
+  }
+
+  const visitIdNum = parseVisitId(visitId);
+  const storeLabel = store || (await resolveStore(visitIdNum)) || 'unknown';
+  const meta = parsePogMeta({
+    manifestPogId: payload?.manifest_pog_id,
+    action: payload?.action,
+    dbkey,
+  });
+  const setName = payload?.set_name || payload?.summary || 'Not in store';
+  const note = payload?.note;
+
+  const subject = buildNisHelpdeskSubject({
+    storeNumber: storeLabel,
+    category: meta.category,
+    version: meta.version,
+    dbkey: meta.dbkey || dbkey,
+  });
+
+  const detailRows = [
+    ['Store', storeLabel],
+    ['Set', setName],
+    ['Lane', lane || '—'],
+    meta.category ? ['Category', `C${meta.category}`] : null,
+    meta.version ? ['Version', `V${meta.version}`] : null,
+    ['DBKey', meta.dbkey || dbkey || '—'],
+    ['Visit', String(visitIdNum)],
+    ['Raised by', formatPerson(raiserName, raiserEmail)],
+    ['Verified by', formatPerson(verifier.name, verifier.email)],
+  ].filter(Boolean);
+
+  const detailsHtml = detailRows
+    .map(
+      ([label, value]) =>
+        `<p style="margin:0 0 8px;"><strong>${escHtml(label)}:</strong> ${escHtml(value)}</p>`,
+    )
+    .join('');
+
+  const noteHtml = note
+    ? `<p style="margin:16px 0 6px;font-weight:700;">Note from field</p>
+       <p style="margin:0;padding:12px;background:#f3f4f6;border-radius:6px;white-space:pre-wrap;">${escHtml(note)}</p>`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:system-ui,sans-serif;color:#111827;max-width:560px;line-height:1.5;">
+  <h2 style="margin:0 0 12px;font-size:18px;">Not in store — verified by lead</h2>
+  <p style="margin:0 0 12px;color:#374151;">A supervisor or lead confirmed this set is not present in the store.</p>
+  ${detailsHtml}
+  ${noteHtml}
+</body></html>`;
+
+  const to = CHECKLANES_OPS_EMAIL;
+  const emailPayload = buildSetRelatedEmailPayload({
+    to,
+    subject,
+    html,
+    actorEmail: verifier.email,
+    replyToExplicit: verifier.email,
+  });
+
+  const { data, error } = await _resend.emails.send(emailPayload);
+  if (error) {
+    console.error('[hub-notify] NIS verify email failed:', error.message || String(error));
+    return { sent: false, error: error.message || String(error), subject };
+  }
+
+  const recipients = [to];
+  if (emailPayload.cc) recipients.push(...emailPayload.cc);
+
+  await logHubEmail({
+    visitIdNum,
+    emailType: 'nis_verified',
+    recipients,
+    subject,
+    bodySummary: setName,
+    resendId: data?.id,
+    sentBy: verifier.id,
+  });
+
+  return { sent: true, resendId: data?.id, subject };
+}
+
 module.exports = {
   initHubNotify,
   sendSectionReopenEmail,
+  sendNisVerifiedEmail,
 };
