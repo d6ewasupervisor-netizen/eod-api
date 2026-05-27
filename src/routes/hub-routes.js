@@ -36,7 +36,7 @@ const {
 
 const ASSIGNABLE_STATES = ['not_started', 'assigned', 'in_progress', 'needs_attention'];
 const UNASSIGNABLE_STATES = ['assigned', 'in_progress', 'needs_attention'];
-const REOPENABLE_STATES = ['done_pending_signoff', 'signed_off'];
+const REOPENABLE_STATES = ['signed_off'];
 const MIN_REOPEN_REASON_LENGTH = 10;
 
 const router = express.Router();
