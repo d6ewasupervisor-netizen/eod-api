@@ -51,6 +51,67 @@ function canAccessThread(rank, userId, thread) {
   return thread.rep_id === userId;
 }
 
+async function listRecipients(visitId, userId, rank) {
+  const visitIdNum = parseVisitId(visitId);
+  const storeNumber = await resolveStoreForVisit(visitIdNum);
+  let rows = [];
+
+  if (storeNumber) {
+    const result = await query(
+      `SELECT u.id, u.name, a.store_role
+       FROM hub_store_assignments a
+       JOIN hub_users u ON u.id = a.user_id
+       WHERE a.store_number = $1 AND u.is_active = true
+       ORDER BY u.name`,
+      [storeNumber],
+    );
+    rows = result.rows;
+  }
+
+  if (!rows.length) {
+    const fallback = await query(
+      `SELECT id, name, standing_rank AS store_role
+       FROM hub_users
+       WHERE is_active = true
+       ORDER BY name`,
+    );
+    rows = fallback.rows;
+  }
+
+  const toRank = (row) => {
+    if (row.store_role === 'lead') return 2;
+    if (row.store_role === 'rep') return 1;
+    return Number(row.standing_rank) || 1;
+  };
+
+  const recipients = [];
+  for (const row of rows) {
+    const personRank = toRank(row);
+    if (Number(row.id) === Number(userId)) continue;
+
+    if (rank >= 2) {
+      if (personRank < 2) {
+        recipients.push({
+          id: row.id,
+          name: row.name,
+          role: 'rep',
+          roleLabel: 'Rep',
+        });
+      }
+    } else if (personRank >= 2) {
+      recipients.push({
+        id: row.id,
+        name: row.name,
+        role: personRank >= 3 ? 'supervisor' : 'lead',
+        roleLabel: personRank >= 3 ? 'Supervisor' : 'Lead',
+      });
+    }
+  }
+
+  recipients.sort((a, b) => a.name.localeCompare(b.name));
+  return { recipients };
+}
+
 async function listThreads(visitId, userId, rank) {
   const visitIdNum = parseVisitId(visitId);
 
@@ -172,10 +233,12 @@ async function getThreadMessages(visitId, threadId, userId, rank, options = {}) 
 
   const limit = Math.min(Number(options.limit) || DEFAULT_MESSAGE_LIMIT, 200);
   const { rows } = await query(
-    `SELECT m.id, m.body, m.dbkey, m.message_type, m.sender_id, m.created_at,
-            hu.name AS sender_name
+    `SELECT m.id, m.body, m.dbkey, m.message_type, m.sender_id, m.recipient_id, m.created_at,
+            hu.name AS sender_name,
+            ru.name AS recipient_name
      FROM hub_messages m
      JOIN hub_users hu ON hu.id = m.sender_id
+     LEFT JOIN hub_users ru ON ru.id = m.recipient_id
      WHERE m.thread_id = $1
      ORDER BY m.id DESC
      LIMIT $2`,
@@ -189,6 +252,8 @@ async function getThreadMessages(visitId, threadId, userId, rank, options = {}) 
     messageType: row.message_type,
     senderId: row.sender_id,
     senderName: row.sender_name,
+    recipientId: row.recipient_id,
+    recipientName: row.recipient_name || null,
     createdAt: row.created_at.toISOString(),
   }));
 
@@ -202,10 +267,22 @@ async function getThreadMessages(visitId, threadId, userId, rank, options = {}) 
   };
 }
 
-async function sendMessage(visitId, { senderId, rank, body, threadId, repId, dbkey, messageType }) {
+async function sendMessage(visitId, {
+  senderId, rank, body, threadId, repId, recipientId, dbkey, messageType,
+}) {
   const visitIdNum = parseVisitId(visitId);
   const text = trimBody(body);
   const type = messageType === 'request_next_set' ? 'request_next_set' : 'chat';
+  const recipientNum = recipientId != null ? Number(recipientId) : null;
+  if (!Number.isFinite(recipientNum) || recipientNum < 1) {
+    throw new Error('Recipient required');
+  }
+
+  const { recipients } = await listRecipients(visitId, senderId, rank);
+  const allowed = recipients.some((r) => Number(r.id) === recipientNum);
+  if (!allowed) {
+    throw new Error('Invalid recipient');
+  }
 
   let thread;
   if (threadId) {
@@ -213,8 +290,8 @@ async function sendMessage(visitId, { senderId, rank, body, threadId, repId, dbk
     if (!canAccessThread(rank, senderId, thread)) {
       throw new Error('Thread not found');
     }
-  } else if (rank >= 2 && repId) {
-    thread = await ensureThread(visitIdNum, repId);
+  } else if (rank >= 2) {
+    thread = await ensureThread(visitIdNum, recipientNum);
     thread = await loadThreadForVisit(thread.id, visitIdNum);
   } else if (rank < 2) {
     thread = await ensureThread(visitIdNum, senderId);
@@ -223,11 +300,19 @@ async function sendMessage(visitId, { senderId, rank, body, threadId, repId, dbk
     throw new Error('repId or threadId required');
   }
 
+  const { rows: recipientRows } = await query(
+    `SELECT id, name FROM hub_users WHERE id = $1 AND is_active = true`,
+    [recipientNum],
+  );
+  if (!recipientRows.length) {
+    throw new Error('Recipient not found');
+  }
+
   const { rows } = await query(
-    `INSERT INTO hub_messages (thread_id, sender_id, body, dbkey, message_type)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, thread_id, sender_id, body, dbkey, message_type, created_at`,
-    [thread.id, senderId, text, dbkey || null, type],
+    `INSERT INTO hub_messages (thread_id, sender_id, recipient_id, body, dbkey, message_type)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, thread_id, sender_id, recipient_id, body, dbkey, message_type, created_at`,
+    [thread.id, senderId, recipientNum, text, dbkey || null, type],
   );
   const msg = rows[0];
 
@@ -245,6 +330,8 @@ async function sendMessage(visitId, { senderId, rank, body, threadId, repId, dbk
       messageType: msg.message_type,
       senderId: msg.sender_id,
       senderName: senderRows[0]?.name || 'User',
+      recipientId: msg.recipient_id,
+      recipientName: recipientRows[0]?.name || null,
       createdAt: msg.created_at.toISOString(),
     },
     thread: {
@@ -295,6 +382,7 @@ async function getChatSummary(visitId, userId, rank) {
 
 module.exports = {
   listThreads,
+  listRecipients,
   getThreadMessages,
   sendMessage,
   markThreadRead,

@@ -50,6 +50,7 @@ const {
 } = require('../hub-bay-photos');
 const {
   listThreads,
+  listRecipients,
   getThreadMessages,
   sendMessage,
   markThreadRead,
@@ -140,6 +141,17 @@ router.get('/:visitId/snapshot', requireAuth, async (req, res) => {
   }
 });
 
+router.get('/:visitId/chat/recipients', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const result = await listRecipients(req.params.visitId, req.hubUser.id, req.hubRank);
+    return res.json(result);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] chat recipients failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load chat recipients' });
+  }
+});
+
 router.get('/:visitId/chat/threads', requireAuth, attachHubContext, async (req, res) => {
   try {
     const result = await listThreads(req.params.visitId, req.hubUser.id, req.hubRank);
@@ -179,6 +191,7 @@ router.post('/:visitId/chat/messages', requireAuth, attachHubContext, async (req
       body: req.body?.body,
       threadId: req.body?.threadId,
       repId: req.body?.repId,
+      recipientId: req.body?.recipientId,
       dbkey: req.body?.dbkey,
       messageType: req.body?.messageType,
     });
@@ -203,6 +216,12 @@ router.post('/:visitId/chat/messages', requireAuth, attachHubContext, async (req
       return res.status(400).json({ error: err.message });
     }
     if (err.message === 'repId or threadId required') {
+      return res.status(400).json({ error: err.message });
+    }
+    if (err.message === 'Recipient required' || err.message === 'Recipient not found') {
+      return res.status(400).json({ error: err.message });
+    }
+    if (err.message === 'Invalid recipient') {
       return res.status(400).json({ error: err.message });
     }
     console.error('[hub] chat send failed:', err.message);
