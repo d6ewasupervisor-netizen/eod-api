@@ -31,6 +31,14 @@ function writeSnapshotEvent(res, snapshot) {
   res.write(`event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`);
 }
 
+/**
+ * SSE comment line. Keeps idle connections alive through proxies/load balancers
+ * (e.g. Railway) that would otherwise drop a stream with no traffic.
+ */
+function writeHeartbeat(res) {
+  res.write(`: ping ${Date.now()}\n\n`);
+}
+
 function writeChatEvent(res, payload) {
   res.write(`event: chat\ndata: ${JSON.stringify(payload)}\n\n`);
 }
@@ -98,4 +106,5 @@ module.exports = {
   sendSnapshotToClient,
   writeSnapshotEvent,
   writeChatEvent,
+  writeHeartbeat,
 };

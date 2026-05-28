@@ -10,7 +10,11 @@ const {
   writeAuditLog,
   parseVisitId,
 } = require('../hub-auth');
-const { addSubscriber, broadcastVisit, broadcastChat, sendSnapshotToClient } = require('../hub-broadcast');
+const {
+  addSubscriber, broadcastVisit, broadcastChat, sendSnapshotToClient, writeHeartbeat,
+} = require('../hub-broadcast');
+
+const STREAM_HEARTBEAT_MS = 25000;
 const { sendBackup, markVisitDirtyAndBackupNow } = require('../hub-backup');
 const { getTagBatchPreview, sendTagBatch } = require('../hub-tag-batch');
 const { sendSectionReopenEmail, sendNisVerifiedEmail, sendHelpVerifiedEmail } = require('../hub-notify');
@@ -117,10 +121,25 @@ router.get('/:visitId/stream', requireAuth, async (req, res) => {
 
   addSubscriber(req.params.visitId, res, req.user);
 
+  const heartbeat = setInterval(() => {
+    if (res.writableEnded || res.destroyed) {
+      clearInterval(heartbeat);
+      return;
+    }
+    try {
+      writeHeartbeat(res);
+    } catch (err) {
+      clearInterval(heartbeat);
+    }
+  }, STREAM_HEARTBEAT_MS);
+  res.on('close', () => clearInterval(heartbeat));
+  res.on('finish', () => clearInterval(heartbeat));
+
   try {
     await sendSnapshotToClient(res, req.user, req.params.visitId);
   } catch (err) {
     console.error('[hub] stream initial snapshot failed:', err.message);
+    clearInterval(heartbeat);
     res.end();
   }
 });
