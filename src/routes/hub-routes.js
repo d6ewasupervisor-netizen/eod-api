@@ -10,7 +10,7 @@ const {
   writeAuditLog,
   parseVisitId,
 } = require('../hub-auth');
-const { addSubscriber, broadcastVisit, sendSnapshotToClient } = require('../hub-broadcast');
+const { addSubscriber, broadcastVisit, broadcastChat, sendSnapshotToClient } = require('../hub-broadcast');
 const { sendBackup, markVisitDirtyAndBackupNow } = require('../hub-backup');
 const { getTagBatchPreview, sendTagBatch } = require('../hub-tag-batch');
 const { sendSectionReopenEmail, sendNisVerifiedEmail, sendHelpVerifiedEmail } = require('../hub-notify');
@@ -48,6 +48,12 @@ const {
   assertAllBayPhotosPresent,
   clearBayPhotos,
 } = require('../hub-bay-photos');
+const {
+  listThreads,
+  getThreadMessages,
+  sendMessage,
+  markThreadRead,
+} = require('../hub-messages');
 
 const ASSIGNABLE_STATES = ['not_started', 'assigned', 'in_progress', 'needs_attention'];
 const UNASSIGNABLE_STATES = ['assigned', 'in_progress', 'needs_attention'];
@@ -131,6 +137,111 @@ router.get('/:visitId/snapshot', requireAuth, async (req, res) => {
     }
     console.error('[hub] snapshot failed:', err.message);
     return res.status(500).json({ error: 'Failed to load hub snapshot' });
+  }
+});
+
+router.get('/:visitId/chat/threads', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const result = await listThreads(req.params.visitId, req.hubUser.id, req.hubRank);
+    return res.json(result);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] chat threads failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load chat threads' });
+  }
+});
+
+router.get('/:visitId/chat/threads/:threadId/messages', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const threadId = Number(req.params.threadId);
+    if (!Number.isFinite(threadId)) return res.status(400).json({ error: 'Invalid threadId' });
+    const result = await getThreadMessages(
+      req.params.visitId,
+      threadId,
+      req.hubUser.id,
+      req.hubRank,
+      { limit: req.query.limit },
+    );
+    return res.json(result);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    if (err.message === 'Thread not found') return res.status(404).json({ error: err.message });
+    console.error('[hub] chat messages failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load messages' });
+  }
+});
+
+router.post('/:visitId/chat/messages', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const result = await sendMessage(req.params.visitId, {
+      senderId: req.hubUser.id,
+      rank: req.hubRank,
+      body: req.body?.body,
+      threadId: req.body?.threadId,
+      repId: req.body?.repId,
+      dbkey: req.body?.dbkey,
+      messageType: req.body?.messageType,
+    });
+
+    await broadcastChat(req.params.visitId, async (user) => {
+      const rank = await resolveRank(user, req.params.visitId);
+      const hubUser = await resolveHubUser(user);
+      const threads = await listThreads(req.params.visitId, hubUser.id, rank);
+      return {
+        type: 'message',
+        threadId: result.thread.id,
+        message: result.message,
+        chatSummary: { unreadTotal: threads.unreadTotal, threadCount: threads.threads.length },
+      };
+    });
+
+    return res.json(result);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    if (err.message === 'Thread not found') return res.status(404).json({ error: err.message });
+    if (err.message === 'Message body required' || err.message.startsWith('Message too long')) {
+      return res.status(400).json({ error: err.message });
+    }
+    if (err.message === 'repId or threadId required') {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('[hub] chat send failed:', err.message);
+    return res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+router.post('/:visitId/chat/threads/:threadId/read', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const threadId = Number(req.params.threadId);
+    if (!Number.isFinite(threadId)) return res.status(400).json({ error: 'Invalid threadId' });
+    const result = await markThreadRead(
+      req.params.visitId,
+      threadId,
+      req.hubUser.id,
+      req.hubRank,
+      req.body?.lastMessageId,
+    );
+
+    await broadcastChat(req.params.visitId, async (user) => {
+      const rank = await resolveRank(user, req.params.visitId);
+      const hubUser = await resolveHubUser(user);
+      const threads = await listThreads(req.params.visitId, hubUser.id, rank);
+      return {
+        type: 'read',
+        threadId,
+        chatSummary: { unreadTotal: threads.unreadTotal, threadCount: threads.threads.length },
+      };
+    });
+
+    return res.json(result);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    if (err.message === 'Thread not found' || err.message === 'Message not found') {
+      return res.status(404).json({ error: err.message });
+    }
+    if (err.message === 'Invalid lastMessageId') return res.status(400).json({ error: err.message });
+    console.error('[hub] chat read failed:', err.message);
+    return res.status(500).json({ error: 'Failed to mark thread read' });
   }
 });
 

@@ -31,6 +31,37 @@ function writeSnapshotEvent(res, snapshot) {
   res.write(`event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`);
 }
 
+function writeChatEvent(res, payload) {
+  res.write(`event: chat\ndata: ${JSON.stringify(payload)}\n\n`);
+}
+
+async function broadcastChat(visitId, payloadBuilder) {
+  const key = String(parseVisitId(visitId));
+  const subs = subscribersByVisit.get(key);
+  if (!subs || !subs.size) return;
+
+  const dead = [];
+  for (const sub of subs) {
+    try {
+      if (sub.res.writableEnded || sub.res.destroyed) {
+        dead.push(sub);
+        continue;
+      }
+      const payload = typeof payloadBuilder === 'function'
+        ? await payloadBuilder(sub.user)
+        : payloadBuilder;
+      writeChatEvent(sub.res, payload);
+    } catch (err) {
+      console.error('[hub-broadcast] chat push failed:', err.message);
+      dead.push(sub);
+    }
+  }
+  for (const sub of dead) {
+    subs.delete(sub);
+  }
+  if (!subs.size) subscribersByVisit.delete(key);
+}
+
 async function sendSnapshotToClient(res, user, visitId) {
   const snapshot = await getSnapshot(visitId, { user });
   writeSnapshotEvent(res, snapshot);
@@ -63,6 +94,8 @@ async function broadcastVisit(visitId) {
 module.exports = {
   addSubscriber,
   broadcastVisit,
+  broadcastChat,
   sendSnapshotToClient,
   writeSnapshotEvent,
+  writeChatEvent,
 };

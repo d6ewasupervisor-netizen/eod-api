@@ -3,6 +3,7 @@
 const { query } = require('./lib/db');
 const { resolveRank, resolveHubUser } = require('./hub-auth');
 const { getLaneNamesMap } = require('./hub-lane-names');
+const { getChatSummary } = require('./hub-messages');
 
 const STATE_KEYS = [
   'not_started',
@@ -195,10 +196,12 @@ async function getSnapshot(visitId, options = {}) {
 
   let myRank = 1;
   let myUserId = null;
+  let chatSummary = { unreadTotal: 0, threadCount: 0 };
   if (user) {
     myRank = await resolveRank(user, visitIdNum);
     const hubUser = await resolveHubUser(user);
     myUserId = hubUser.id;
+    chatSummary = await getChatSummary(visitIdNum, myUserId, myRank);
   }
 
   return {
@@ -210,6 +213,7 @@ async function getSnapshot(visitId, options = {}) {
     myUserId,
     pendingActions,
     laneNames,
+    chatSummary,
   };
 }
 
