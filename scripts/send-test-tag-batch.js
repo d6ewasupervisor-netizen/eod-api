@@ -10,6 +10,11 @@
  * Defaults: visitId 99999163, leadEmail d6ewa.supervisor@gmail.com
  */
 
+// Prefer public proxy when running locally via `railway run` (internal hostname won't resolve).
+if (process.env.DATABASE_PUBLIC_URL) {
+  process.env.DATABASE_URL = process.env.DATABASE_PUBLIC_URL;
+}
+
 const fs = require('fs');
 const path = require('path');
 const { Resend } = require('resend');
