@@ -40,6 +40,14 @@ const {
   bulkSetLanePhysicalNames,
   setLanePhysicalName,
 } = require('../hub-lane-names');
+const {
+  parseBayNum,
+  listBayPhotos,
+  loadBayPhotoRow,
+  upsertBayPhoto,
+  assertAllBayPhotosPresent,
+  clearBayPhotos,
+} = require('../hub-bay-photos');
 
 const ASSIGNABLE_STATES = ['not_started', 'assigned', 'in_progress', 'needs_attention'];
 const UNASSIGNABLE_STATES = ['assigned', 'in_progress', 'needs_attention'];
@@ -1026,12 +1034,115 @@ router.post('/:visitId/sections/:dbkey/start', requireAuth, attachHubContext, as
   }
 });
 
+router.get('/:visitId/sections/:dbkey/bay-photos', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const visitIdNum = parseVisitId(req.params.visitId);
+    const { dbkey } = req.params;
+    const lane = laneFromRequest(req);
+    const photos = await listBayPhotos(visitIdNum, dbkey, lane);
+    return res.json({
+      visitId: visitIdNum,
+      dbkey,
+      lane: lane || '',
+      photos: photos.map((row) => ({
+        bay_num: row.bay_num,
+        updated_at: row.updated_at,
+        url: `/api/hub/${visitIdNum}/sections/${encodeURIComponent(dbkey)}/bay-photos/${row.bay_num}/image?lane=${encodeURIComponent(lane || '')}`,
+      })),
+    });
+  } catch (err) {
+    if (err.message === 'Invalid visitId') {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('[hub] bay-photos list failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load bay photos' });
+  }
+});
+
+router.get('/:visitId/sections/:dbkey/bay-photos/:bayNum/image', requireAuth, async (req, res) => {
+  try {
+    const visitIdNum = parseVisitId(req.params.visitId);
+    const { dbkey } = req.params;
+    const bayNum = parseBayNum(req.params.bayNum);
+    if (bayNum == null) {
+      return res.status(400).json({ error: 'Invalid bay number' });
+    }
+    const lane = laneFromRequest(req);
+    const row = await loadBayPhotoRow(visitIdNum, dbkey, lane, bayNum);
+    if (!row) {
+      return res.status(404).json({ error: 'Bay photo not found' });
+    }
+    const buf = Buffer.from(row.photo_base64, 'base64');
+    res.set('Content-Type', row.content_type || 'image/jpeg');
+    res.set('Cache-Control', 'private, max-age=300');
+    return res.send(buf);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('[hub] bay-photo image failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load bay photo' });
+  }
+});
+
+router.post('/:visitId/sections/:dbkey/bay-photos/:bayNum', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const { visitId, dbkey } = req.params;
+    const bayNum = parseBayNum(req.params.bayNum);
+    if (bayNum == null) {
+      return res.status(400).json({ error: 'Invalid bay number' });
+    }
+    const lane = laneFromRequest(req);
+    const actor = req.hubUser;
+    const rank = req.hubRank ?? 1;
+    const { dataUrl } = req.body || {};
+    if (!dataUrl) {
+      return res.status(400).json({ error: 'dataUrl is required' });
+    }
+
+    await applyTransition(visitId, async (visitIdNum) => {
+      const section = await loadSectionRow(visitIdNum, dbkey, lane);
+      if (section.state !== 'in_progress') {
+        throw Object.assign(
+          new Error('Bay photos can only be uploaded while the set is in progress'),
+          { status: 409 },
+        );
+      }
+      if (rank < 2 && section.assignee_id !== actor.id) {
+        throw Object.assign(new Error('Not your assignment'), { status: 403 });
+      }
+      await upsertBayPhoto(visitIdNum, dbkey, lane, bayNum, dataUrl, actor.id);
+      await writeAuditLog(visitIdNum, actor.id, 'bay_photo_uploaded', dbkey, {
+        lane,
+        bay_num: bayNum,
+      });
+    });
+
+    await broadcastVisit(visitId);
+    const visitIdNum = parseVisitId(visitId);
+    return res.json({
+      ok: true,
+      bay_num: bayNum,
+      url: `/api/hub/${visitIdNum}/sections/${encodeURIComponent(dbkey)}/bay-photos/${bayNum}/image?lane=${encodeURIComponent(lane || '')}`,
+    });
+  } catch (err) {
+    if (err.status === 400 || err.status === 403 || err.status === 409 || err.status === 413) {
+      return res.status(err.status).json({ error: err.message, missingBays: err.missingBays });
+    }
+    console.error('[hub] bay-photo upload failed:', err.message);
+    return res.status(500).json({ error: 'Failed to save bay photo' });
+  }
+});
+
 router.post('/:visitId/sections/:dbkey/mark-done', requireAuth, attachHubContext, async (req, res) => {
   try {
     const { visitId, dbkey } = req.params;
     const lane = laneFromRequest(req);
     const actor = req.hubUser;
     const rank = req.hubRank ?? 1;
+    const bayNums = Array.isArray(req.body?.bayNums)
+      ? req.body.bayNums.map(Number).filter((n) => Number.isInteger(n) && n > 0)
+      : [];
 
     await applyTransition(visitId, async (visitIdNum) => {
       const section = await loadSectionRow(visitIdNum, dbkey, lane);
@@ -1045,6 +1156,8 @@ router.post('/:visitId/sections/:dbkey/mark-done', requireAuth, attachHubContext
         throw Object.assign(new Error('Not your assignment'), { status: 403 });
       }
 
+      await assertAllBayPhotosPresent(visitIdNum, dbkey, lane, bayNums);
+
       await updateSectionState(visitIdNum, dbkey, lane, {
         state: 'done_pending_signoff',
         completed_at: new Date(),
@@ -1054,6 +1167,7 @@ router.post('/:visitId/sections/:dbkey/mark-done', requireAuth, attachHubContext
         lane,
         prior_state: section.state,
         assignee_id: section.assignee_id,
+        bay_count: bayNums.length,
       });
     });
 
@@ -1162,6 +1276,8 @@ router.post('/:visitId/sections/:dbkey/reopen', requireAuth, attachHubContext, a
         signed_off_by: null,
         signed_off_at: null,
       });
+
+      await clearBayPhotos(visitIdNum, dbkey, lane);
 
       await writeAuditLog(visitIdNum, actor.id, 'reopened', dbkey, {
         lane,
