@@ -1,6 +1,6 @@
 /**
  * Fax-oriented PDF sheet for verified Checklane missing-tag batches.
- * Layout: 2 columns × 6 rows (12 UPCs per page) for email-to-fax delivery.
+ * Layout: 2 columns × 4 rows (8 UPCs per page) for email-to-fax delivery.
  */
 
 const PDFDocument = require('pdfkit');
@@ -8,9 +8,9 @@ const PDFDocument = require('pdfkit');
 const PAGE_MARGIN = 36;
 const COLUMN_GUTTER = 14;
 const COLS = 2;
-const ROWS = 6;
+const ROWS = 4;
 const ITEMS_PER_PAGE = COLS * ROWS;
-const BARCODE_HEIGHT = 38;
+const BARCODE_HEIGHT = 58;
 const LETTER_WIDTH = 612;
 const LETTER_HEIGHT = 792;
 const BLACK = '#000000';
@@ -93,17 +93,17 @@ function drawValidCell(doc, item, x, y, cellWidth, cellHeight) {
     cursorY += BARCODE_HEIGHT + 3;
   }
 
-  doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(9)
+  doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(10)
     .text(item.displayDigits || item.upc, x + pad, cursorY, { width: innerWidth });
-  cursorY += 12;
+  cursorY += 13;
 
-  doc.font('Helvetica').fontSize(7.5)
+  doc.font('Helvetica').fontSize(8)
     .text(truncate(item.description, 52) || '—', x + pad, cursorY, {
       width: innerWidth,
-      height: 20,
+      height: 22,
       ellipsis: true,
     });
-  cursorY += 18;
+  cursorY += 20;
 
   drawPlanogramAndLocation(doc, item, x, pad, innerWidth, cursorY);
 
