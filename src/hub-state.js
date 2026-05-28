@@ -2,6 +2,7 @@
 
 const { query } = require('./lib/db');
 const { resolveRank, resolveHubUser } = require('./hub-auth');
+const { getLaneNamesMap } = require('./hub-lane-names');
 
 const STATE_KEYS = [
   'not_started',
@@ -126,7 +127,7 @@ async function getSnapshot(visitId, options = {}) {
   const visitIdNum = parseVisitId(visitId);
   const { user } = options;
 
-  const [sectionResult, tagCountResult, draftTagResult, verifiedTagResult, pendingResult] = await Promise.all([
+  const [sectionResult, tagCountResult, draftTagResult, verifiedTagResult, pendingResult, laneNames] = await Promise.all([
     query(
       `SELECT ss.lane, ss.dbkey, ss.state, ss.assignee_id, ss.reset_id, ss.updated_at,
               hu.name AS assignee_name
@@ -163,6 +164,7 @@ async function getSnapshot(visitId, options = {}) {
        ORDER BY pa.raised_at ASC`,
       [visitIdNum],
     ),
+    getLaneNamesMap(visitIdNum),
   ]);
 
   const sections = sectionResult.rows.map((row) => ({
@@ -207,6 +209,7 @@ async function getSnapshot(visitId, options = {}) {
     myRank,
     myUserId,
     pendingActions,
+    laneNames,
   };
 }
 

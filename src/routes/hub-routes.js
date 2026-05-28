@@ -36,6 +36,10 @@ const {
   clearSectionAssignment,
   laneFromRequest,
 } = require('../hub-section');
+const {
+  bulkSetLanePhysicalNames,
+  setLanePhysicalName,
+} = require('../hub-lane-names');
 
 const ASSIGNABLE_STATES = ['not_started', 'assigned', 'in_progress', 'needs_attention'];
 const UNASSIGNABLE_STATES = ['assigned', 'in_progress', 'needs_attention'];
@@ -132,6 +136,39 @@ router.get('/:visitId/tag-batch/preview', requireAuth, requireHubRank(2), async 
     }
     console.error('[hub] tag-batch preview failed:', err.message);
     return res.status(500).json({ error: 'Failed to load tag batch preview' });
+  }
+});
+
+router.post('/:visitId/lane-names', requireAuth, requireHubRank(2), async (req, res) => {
+  try {
+    const result = await bulkSetLanePhysicalNames(req.params.visitId, req.body?.names, req.hubUser);
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ error: result.error || 'Failed to save lane names' });
+    }
+    return res.json(result);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] lane-names bulk failed:', err.message);
+    return res.status(500).json({ error: 'Failed to save lane names' });
+  }
+});
+
+router.post('/:visitId/lane-names/:lane', requireAuth, requireHubRank(2), async (req, res) => {
+  try {
+    const result = await setLanePhysicalName(
+      req.params.visitId,
+      req.params.lane,
+      req.body?.physicalName,
+      req.hubUser,
+    );
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ error: result.error || 'Failed to save lane name' });
+    }
+    return res.json(result);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] lane-name set failed:', err.message);
+    return res.status(500).json({ error: 'Failed to save lane name' });
   }
 });
 

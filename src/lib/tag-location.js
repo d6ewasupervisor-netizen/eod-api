@@ -66,6 +66,63 @@ function formatTagLocationLabel(location) {
 }
 
 /**
+ * Human label for a register lane with optional physical store name.
+ * @returns {string}
+ */
+function laneDisplayLabel(lane, physicalName) {
+  const laneStr = String(lane ?? '').trim();
+  const name = String(physicalName ?? '').trim();
+  if (!laneStr) return name;
+  if (!name) return laneStr;
+  return `${laneStr} · ${name}`;
+}
+
+/**
+ * Section header for grouped tags / assignments.
+ * @param {number|null} aisle
+ * @param {Record<string, string>|null|undefined} laneNamesMap
+ * @returns {string}
+ */
+function aisleGroupLabel(aisle, laneNamesMap) {
+  if (aisle == null || aisle >= 99999) return 'Unknown aisle';
+  const key = String(aisle);
+  const physicalName = laneNamesMap?.[key];
+  if (physicalName) return laneDisplayLabel(aisle, physicalName);
+  return `Aisle ${aisle}`;
+}
+
+/**
+ * Add physical lane name to a tag location string for print / field display.
+ * Original register numbers stay in compact codes; human labels gain the store name.
+ * @returns {string|null}
+ */
+function enrichLocationWithPhysicalName(location, lane, physicalName) {
+  const name = String(physicalName ?? '').trim();
+  if (!name) return formatTagLocationLabel(location) || location || null;
+
+  const raw = String(location ?? '').trim();
+  const formatted = formatTagLocationLabel(location) || raw;
+  if (!formatted) return name;
+
+  const laneStr = lane != null && lane !== '' ? String(lane).trim() : '';
+  if (laneStr && formatted.includes(`Aisle ${laneStr}`)) {
+    return formatted.replace(`Aisle ${laneStr}`, name);
+  }
+  if (/^Lane\s+\d+/i.test(formatted)) {
+    return formatted.replace(/^Lane\s+\d+/i, name);
+  }
+  if (raw && /^\d+[BRFP]/i.test(raw)) {
+    const expanded = formatTagLocationLabel(raw);
+    if (expanded && laneStr && expanded.includes(`Aisle ${laneStr}`)) {
+      return expanded.replace(`Aisle ${laneStr}`, name);
+    }
+    return `${name} · ${formatted}`;
+  }
+  if (formatted.includes(name)) return formatted;
+  return `${name} · ${formatted}`;
+}
+
+/**
  * @param {{ location?: string|null, dbkey?: string|null, lane?: string|number|null }} tag
  * @returns {number}
  */
@@ -107,14 +164,14 @@ function sortTagsByAisle(tags) {
  * @param {Array<object>} tags
  * @returns {Array<{ aisle: number|null, aisleLabel: string, tags: Array<object> }>}
  */
-function groupTagsByAisle(tags) {
+function groupTagsByAisle(tags, laneNamesMap) {
   const sorted = sortTagsByAisle(tags);
   const groups = [];
   let current = null;
 
   for (const tag of sorted) {
     const aisle = aisleSortKey(tag);
-    const aisleLabel = aisle >= 99999 ? 'Unknown aisle' : `Aisle ${aisle}`;
+    const aisleLabel = aisleGroupLabel(aisle >= 99999 ? null : aisle, laneNamesMap);
     if (!current || current.aisle !== aisle) {
       current = { aisle: aisle >= 99999 ? null : aisle, aisleLabel, tags: [] };
       groups.push(current);
@@ -128,6 +185,9 @@ function groupTagsByAisle(tags) {
 module.exports = {
   parseAisleFromLocation,
   formatTagLocationLabel,
+  laneDisplayLabel,
+  aisleGroupLabel,
+  enrichLocationWithPhysicalName,
   aisleSortKey,
   sortTagsByAisle,
   groupTagsByAisle,

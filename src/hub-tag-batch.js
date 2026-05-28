@@ -16,8 +16,9 @@ const { writeAuditLog, parseVisitId } = require('./hub-auth');
 const { applyTransition } = require('./hub-state');
 const { broadcastVisit } = require('./hub-broadcast');
 const { buildSetRelatedEmailPayload, CHECKLANES_OPS_EMAIL } = require('./lib/checklanes-email');
-const { sortTagsByAisle, groupTagsByAisle, formatTagLocationLabel } = require('./lib/tag-location');
+const { sortTagsByAisle, groupTagsByAisle, formatTagLocationLabel, parseAisleFromLocation, enrichLocationWithPhysicalName } = require('./lib/tag-location');
 const { lookupFixture, resolveStoreForVisit } = require('./lib/hub-fixture-catalog');
+const { getLaneNamesMap } = require('./hub-lane-names');
 
 const TZ = 'America/Los_Angeles';
 
@@ -65,9 +66,18 @@ function resolvePlanogramName(storeNumber, dbkey) {
   return fixture?.name || null;
 }
 
-function enrichTagLocationFields(row, storeNumber) {
+function enrichTagLocationFields(row, storeNumber, laneNamesMap) {
+  const laneNum = parseAisleFromLocation(row.location);
+  const laneKey = laneNum != null ? String(laneNum) : null;
+  const physicalName = laneKey ? laneNamesMap?.[laneKey] : null;
+  const locationLabel = enrichLocationWithPhysicalName(row.location, laneNum, physicalName)
+    || formatTagLocationLabel(row.location)
+    || row.location
+    || null;
   return {
-    locationLabel: formatTagLocationLabel(row.location) || row.location || null,
+    locationLabel,
+    physicalLaneName: physicalName || null,
+    lane: laneKey,
     planogramName: resolvePlanogramName(storeNumber, row.dbkey),
   };
 }
@@ -104,9 +114,9 @@ async function loadVerifiedUnsentTags(visitIdNum) {
   return rows;
 }
 
-async function enrichTagForPreview(row, storeNumber) {
+async function enrichTagForPreview(row, storeNumber, laneNamesMap) {
   const validation = validateUpc(row.upc);
-  const { locationLabel, planogramName } = enrichTagLocationFields(row, storeNumber);
+  const { locationLabel, planogramName, physicalLaneName, lane } = enrichTagLocationFields(row, storeNumber, laneNamesMap);
   return {
     id: row.id,
     dbkey: row.dbkey,
@@ -114,6 +124,8 @@ async function enrichTagForPreview(row, storeNumber) {
     description: row.description,
     location: row.location,
     locationLabel,
+    physicalLaneName,
+    lane,
     planogramName,
     valid: validation.valid,
     reason: validation.reason || null,
@@ -125,10 +137,13 @@ async function enrichTagForPreview(row, storeNumber) {
 
 async function getTagBatchPreview(visitId) {
   const visitIdNum = parseVisitId(visitId);
-  const rows = await loadVerifiedUnsentTags(visitIdNum);
+  const [rows, laneNamesMap] = await Promise.all([
+    loadVerifiedUnsentTags(visitIdNum),
+    getLaneNamesMap(visitIdNum),
+  ]);
   const store = await resolveStore(visitIdNum);
   const storeNumber = store ? String(Number(store)) : null;
-  const tags = await Promise.all(rows.map((row) => enrichTagForPreview(row, storeNumber)));
+  const tags = await Promise.all(rows.map((row) => enrichTagForPreview(row, storeNumber, laneNamesMap)));
   const sorted = sortTagsByAisle(tags);
 
   return {
@@ -136,13 +151,14 @@ async function getTagBatchPreview(visitId) {
     store,
     count: sorted.length,
     tags: sorted,
-    byAisle: groupTagsByAisle(sorted),
+    byAisle: groupTagsByAisle(sorted, laneNamesMap),
+    laneNames: laneNamesMap,
   };
 }
 
-async function enrichTagForPdf(row, storeNumber) {
+async function enrichTagForPdf(row, storeNumber, laneNamesMap) {
   const barcode = await generateBarcode(row.upc);
-  const { locationLabel, planogramName } = enrichTagLocationFields(row, storeNumber);
+  const { locationLabel, planogramName, physicalLaneName, lane } = enrichTagLocationFields(row, storeNumber, laneNamesMap);
   return {
     id: row.id,
     dbkey: row.dbkey,
@@ -151,6 +167,8 @@ async function enrichTagForPdf(row, storeNumber) {
     description: row.description,
     location: row.location,
     locationLabel,
+    physicalLaneName,
+    lane,
     planogramName,
     valid: barcode.valid,
     reason: barcode.reason,
@@ -180,7 +198,10 @@ async function sendTagBatch(visitId, actor) {
   }
 
   const visitIdNum = parseVisitId(visitId);
-  const rows = await loadVerifiedUnsentTags(visitIdNum);
+  const [rows, laneNamesMap] = await Promise.all([
+    loadVerifiedUnsentTags(visitIdNum),
+    getLaneNamesMap(visitIdNum),
+  ]);
 
   if (!rows.length) {
     return { ok: false, status: 400, error: 'no verified tags to send' };
@@ -188,7 +209,7 @@ async function sendTagBatch(visitId, actor) {
 
   const store = await resolveStore(visitIdNum);
   const storeNumber = store ? String(Number(store)) : null;
-  const pdfItems = await Promise.all(rows.map((row) => enrichTagForPdf(row, storeNumber)));
+  const pdfItems = await Promise.all(rows.map((row) => enrichTagForPdf(row, storeNumber, laneNamesMap)));
 
   const sortedPdfItems = sortTagsByAisle(pdfItems);
 
