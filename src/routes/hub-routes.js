@@ -36,10 +36,7 @@ const {
   clearSectionAssignment,
   laneFromRequest,
 } = require('../hub-section');
-const {
-  bulkSetLanePhysicalNames,
-  setLanePhysicalName,
-} = require('../hub-lane-names');
+const { setSectionAisleDesignation } = require('../hub-aisle-designation');
 const {
   parseBayNum,
   listBayPhotos,
@@ -277,36 +274,26 @@ router.get('/:visitId/tag-batch/preview', requireAuth, requireHubRank(2), async 
   }
 });
 
-router.post('/:visitId/lane-names', requireAuth, requireHubRank(2), async (req, res) => {
+router.post('/:visitId/sections/:dbkey/aisle-designation', requireAuth, requireHubRank(2), async (req, res) => {
   try {
-    const result = await bulkSetLanePhysicalNames(req.params.visitId, req.body?.names, req.hubUser);
-    if (!result.ok) {
-      return res.status(result.status || 400).json({ error: result.error || 'Failed to save lane names' });
-    }
-    return res.json(result);
-  } catch (err) {
-    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
-    console.error('[hub] lane-names bulk failed:', err.message);
-    return res.status(500).json({ error: 'Failed to save lane names' });
-  }
-});
-
-router.post('/:visitId/lane-names/:lane', requireAuth, requireHubRank(2), async (req, res) => {
-  try {
-    const result = await setLanePhysicalName(
+    const result = await setSectionAisleDesignation(
       req.params.visitId,
-      req.params.lane,
-      req.body?.physicalName,
+      req.params.dbkey,
+      laneFromRequest(req),
+      {
+        preset: req.body?.preset,
+        custom: req.body?.custom,
+      },
       req.hubUser,
     );
     if (!result.ok) {
-      return res.status(result.status || 400).json({ error: result.error || 'Failed to save lane name' });
+      return res.status(result.status || 400).json({ error: result.error || 'Failed to save aisle designation' });
     }
     return res.json(result);
   } catch (err) {
     if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
-    console.error('[hub] lane-name set failed:', err.message);
-    return res.status(500).json({ error: 'Failed to save lane name' });
+    console.error('[hub] aisle-designation failed:', err.message);
+    return res.status(500).json({ error: 'Failed to save aisle designation' });
   }
 });
 

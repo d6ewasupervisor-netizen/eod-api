@@ -2,7 +2,8 @@
 
 const { query } = require('./lib/db');
 const { resolveRank, resolveHubUser } = require('./hub-auth');
-const { getLaneNamesMap } = require('./hub-lane-names');
+const { resolveAisleLabel } = require('./hub-aisle-designation');
+const { PRESET_CATALOG } = require('./lib/aisle-designations');
 const { getChatSummary } = require('./hub-messages');
 
 const STATE_KEYS = [
@@ -128,9 +129,10 @@ async function getSnapshot(visitId, options = {}) {
   const visitIdNum = parseVisitId(visitId);
   const { user } = options;
 
-  const [sectionResult, tagCountResult, draftTagResult, verifiedTagResult, pendingResult, laneNames] = await Promise.all([
+  const [sectionResult, tagCountResult, draftTagResult, verifiedTagResult, pendingResult] = await Promise.all([
     query(
       `SELECT ss.lane, ss.dbkey, ss.state, ss.assignee_id, ss.reset_id, ss.updated_at,
+              ss.aisle_preset, ss.aisle_custom,
               hu.name AS assignee_name
        FROM section_state ss
        LEFT JOIN hub_users hu ON hu.id = ss.assignee_id
@@ -165,7 +167,6 @@ async function getSnapshot(visitId, options = {}) {
        ORDER BY pa.raised_at ASC`,
       [visitIdNum],
     ),
-    getLaneNamesMap(visitIdNum),
   ]);
 
   const sections = sectionResult.rows.map((row) => ({
@@ -176,6 +177,9 @@ async function getSnapshot(visitId, options = {}) {
     assignee_name: row.assignee_name || null,
     reset_id: row.reset_id != null ? Number(row.reset_id) : null,
     updated_at: row.updated_at ? row.updated_at.toISOString() : null,
+    aisle_preset: row.aisle_preset || null,
+    aisle_custom: row.aisle_custom || null,
+    aisle_label: resolveAisleLabel(row.aisle_preset, row.aisle_custom),
   }));
 
   const stats = buildStats(sections);
@@ -212,7 +216,7 @@ async function getSnapshot(visitId, options = {}) {
     myRank,
     myUserId,
     pendingActions,
-    laneNames,
+    aislePresets: PRESET_CATALOG,
     chatSummary,
   };
 }

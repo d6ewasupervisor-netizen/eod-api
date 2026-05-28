@@ -49,84 +49,40 @@ function formatTagLocationLabel(location) {
 
   const peg = s.match(/^(\d+)R(\d+)C(\d+)$/i);
   if (peg) {
-    return `Aisle ${Number(peg[1])}, Row ${Number(peg[2])}, Column ${Number(peg[3])}`;
+    return `Reg ${Number(peg[1])}, Row ${Number(peg[2])}, Column ${Number(peg[3])}`;
   }
 
   const shelf = s.match(/^(\d+)B(\d+)F(\d+)P(\d+)$/i);
   if (shelf) {
-    return `Aisle ${Number(shelf[1])}, Bay ${Number(shelf[2])}, Shelf ${Number(shelf[3])}, Position ${Number(shelf[4])}`;
+    return `Reg ${Number(shelf[1])}, Bay ${Number(shelf[2])}, Shelf ${Number(shelf[3])}, Position ${Number(shelf[4])}`;
   }
 
   const shelfRowCol = s.match(/^(\d+)B(\d+)F(\d+)R(\d+)C(\d+)$/i);
   if (shelfRowCol) {
-    return `Aisle ${Number(shelfRowCol[1])}, Bay ${Number(shelfRowCol[2])}, Shelf ${Number(shelfRowCol[3])}, Row ${Number(shelfRowCol[4])}, Column ${Number(shelfRowCol[5])}`;
+    return `Reg ${Number(shelfRowCol[1])}, Bay ${Number(shelfRowCol[2])}, Shelf ${Number(shelfRowCol[3])}, Row ${Number(shelfRowCol[4])}, Column ${Number(shelfRowCol[5])}`;
   }
 
   return s;
 }
 
 /**
- * Human label for a register lane with optional physical store name.
- * @returns {string}
- */
-function laneDisplayLabel(lane, physicalName) {
-  const laneStr = String(lane ?? '').trim();
-  const name = String(physicalName ?? '').trim();
-  if (!laneStr) return name;
-  if (!name) return laneStr;
-  return `${laneStr} · ${name}`;
-}
-
-/**
- * Section header for grouped tags / assignments.
- * @param {number|null} aisle
- * @param {Record<string, string>|null|undefined} laneNamesMap
- * @returns {string}
- */
-function aisleGroupLabel(aisle, laneNamesMap) {
-  if (aisle == null || aisle >= 99999) return 'Unknown aisle';
-  const key = String(aisle);
-  const physicalName = laneNamesMap?.[key];
-  if (physicalName) return laneDisplayLabel(aisle, physicalName);
-  return `Aisle ${aisle}`;
-}
-
-/**
- * Add physical lane name to a tag location string for print / field display.
- * Original register numbers stay in compact codes; human labels gain the store name.
+ * Prepend store aisle designation to a shelf location for print / field display.
  * @returns {string|null}
  */
-function enrichLocationWithPhysicalName(location, lane, physicalName) {
-  const name = String(physicalName ?? '').trim();
-  if (!name) return formatTagLocationLabel(location) || location || null;
-
-  const raw = String(location ?? '').trim();
-  const formatted = formatTagLocationLabel(location) || raw;
-  if (!formatted) return name;
-
-  const laneStr = lane != null && lane !== '' ? String(lane).trim() : '';
-  if (laneStr && formatted.includes(`Aisle ${laneStr}`)) {
-    return formatted.replace(`Aisle ${laneStr}`, name);
-  }
-  if (/^Lane\s+\d+/i.test(formatted)) {
-    return formatted.replace(/^Lane\s+\d+/i, name);
-  }
-  if (raw && /^\d+[BRFP]/i.test(raw)) {
-    const expanded = formatTagLocationLabel(raw);
-    if (expanded && laneStr && expanded.includes(`Aisle ${laneStr}`)) {
-      return expanded.replace(`Aisle ${laneStr}`, name);
-    }
-    return `${name} · ${formatted}`;
-  }
-  if (formatted.includes(name)) return formatted;
-  return `${name} · ${formatted}`;
+function enrichLocationWithStoreAisle(location, storeAisleLabel) {
+  const label = String(storeAisleLabel ?? '').trim();
+  const formatted = formatTagLocationLabel(location) || String(location || '').trim() || null;
+  if (!label) return formatted;
+  if (!formatted) return label;
+  if (formatted.includes(label)) return formatted;
+  return `${label} · ${formatted}`;
 }
 
 /**
- * @param {{ location?: string|null, dbkey?: string|null, lane?: string|number|null }} tag
+ * @param {{ location?: string|null, dbkey?: string|null, lane?: string|number|null, storeAisleLabel?: string|null }} tag
  * @returns {number}
  */
-function aisleSortKey(tag) {
+function registerSortKey(tag) {
   const fromLoc = parseAisleFromLocation(tag.location);
   if (fromLoc != null && Number.isFinite(fromLoc)) return fromLoc;
 
@@ -138,16 +94,27 @@ function aisleSortKey(tag) {
   return 99999;
 }
 
+function storeAisleSortKey(tag) {
+  const label = String(tag.storeAisleLabel || '').trim();
+  if (label) return label.toLowerCase();
+  const reg = registerSortKey(tag);
+  return reg >= 99999 ? 'zzz-unknown' : `reg-${String(reg).padStart(5, '0')}`;
+}
+
 /**
- * Sort tags for print: aisle ascending, then location, then description.
+ * Sort tags for print: store aisle label, then register, then location, then description.
  * @param {Array<object>} tags
  * @returns {Array<object>}
  */
 function sortTagsByAisle(tags) {
   return tags.slice().sort((a, b) => {
-    const aisleA = aisleSortKey(a);
-    const aisleB = aisleSortKey(b);
-    if (aisleA !== aisleB) return aisleA - aisleB;
+    const aisleA = storeAisleSortKey(a);
+    const aisleB = storeAisleSortKey(b);
+    if (aisleA !== aisleB) return aisleA.localeCompare(aisleB, undefined, { numeric: true });
+
+    const regA = registerSortKey(a);
+    const regB = registerSortKey(b);
+    if (regA !== regB) return regA - regB;
 
     const locA = String(a.location || a.dbkey || '');
     const locB = String(b.location || b.dbkey || '');
@@ -160,20 +127,23 @@ function sortTagsByAisle(tags) {
 }
 
 /**
- * Group sorted tags by aisle number for UI / PDF section headers.
+ * Group sorted tags by store aisle designation for UI / PDF section headers.
  * @param {Array<object>} tags
- * @returns {Array<{ aisle: number|null, aisleLabel: string, tags: Array<object> }>}
+ * @returns {Array<{ aisle: string|null, aisleLabel: string, tags: Array<object> }>}
  */
-function groupTagsByAisle(tags, laneNamesMap) {
+function groupTagsByAisle(tags) {
   const sorted = sortTagsByAisle(tags);
   const groups = [];
   let current = null;
 
   for (const tag of sorted) {
-    const aisle = aisleSortKey(tag);
-    const aisleLabel = aisleGroupLabel(aisle >= 99999 ? null : aisle, laneNamesMap);
-    if (!current || current.aisle !== aisle) {
-      current = { aisle: aisle >= 99999 ? null : aisle, aisleLabel, tags: [] };
+    const storeLabel = String(tag.storeAisleLabel || '').trim();
+    const reg = registerSortKey(tag);
+    const aisleLabel = storeLabel || (reg >= 99999 ? 'Unassigned store aisle' : `Register ${reg}`);
+    const aisleKey = storeLabel || (reg >= 99999 ? null : String(reg));
+
+    if (!current || current.aisle !== aisleKey) {
+      current = { aisle: aisleKey, aisleLabel, tags: [] };
       groups.push(current);
     }
     current.tags.push(tag);
@@ -185,10 +155,9 @@ function groupTagsByAisle(tags, laneNamesMap) {
 module.exports = {
   parseAisleFromLocation,
   formatTagLocationLabel,
-  laneDisplayLabel,
-  aisleGroupLabel,
-  enrichLocationWithPhysicalName,
-  aisleSortKey,
+  enrichLocationWithStoreAisle,
+  registerSortKey,
+  storeAisleSortKey,
   sortTagsByAisle,
   groupTagsByAisle,
 };
