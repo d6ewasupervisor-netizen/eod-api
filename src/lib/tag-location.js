@@ -126,27 +126,51 @@ function sortTagsByAisle(tags) {
   });
 }
 
+const UNASSIGNED_AISLE_KEY = '__unassigned__';
+
+/**
+ * Canonical, stable identifier for a tag's store aisle. Used to group, assign,
+ * and send batches per aisle so the UI and server agree on the same key.
+ * @param {object} tag
+ * @returns {string}
+ */
+function aisleKeyForTag(tag) {
+  // Sweep-added tags freeze the canonical aisle key chosen at scan time so they
+  // group with exactly the aisle the lead/assignee targeted.
+  const explicit = String(tag.aisleKeyExplicit || '').trim();
+  if (explicit) return explicit;
+  const storeLabel = String(tag.storeAisleLabel || '').trim();
+  if (storeLabel) return storeLabel;
+  const reg = registerSortKey(tag);
+  return reg >= 99999 ? UNASSIGNED_AISLE_KEY : `reg-${reg}`;
+}
+
 /**
  * Group sorted tags by store aisle designation for UI / PDF section headers.
  * @param {Array<object>} tags
- * @returns {Array<{ aisle: string|null, aisleLabel: string, tags: Array<object> }>}
+ * @returns {Array<{ aisle: string|null, aisleKey: string, aisleLabel: string, tags: Array<object> }>}
  */
 function groupTagsByAisle(tags) {
   const sorted = sortTagsByAisle(tags);
   const groups = [];
-  let current = null;
+  const byKey = new Map();
 
   for (const tag of sorted) {
     const storeLabel = String(tag.storeAisleLabel || '').trim();
     const reg = registerSortKey(tag);
     const aisleLabel = storeLabel || (reg >= 99999 ? 'Unassigned store aisle' : `Register ${reg}`);
-    const aisleKey = storeLabel || (reg >= 99999 ? null : String(reg));
+    const aisleKey = aisleKeyForTag(tag);
+    const legacyAisle = storeLabel || (reg >= 99999 ? null : String(reg));
 
-    if (!current || current.aisle !== aisleKey) {
-      current = { aisle: aisleKey, aisleLabel, tags: [] };
-      groups.push(current);
+    // Key-based (not adjacency-based) so frozen sweep tags always land in the
+    // exact aisle group they targeted, even if their sort order differs.
+    let group = byKey.get(aisleKey);
+    if (!group) {
+      group = { aisle: legacyAisle, aisleKey, aisleLabel, tags: [] };
+      byKey.set(aisleKey, group);
+      groups.push(group);
     }
-    current.tags.push(tag);
+    group.tags.push(tag);
   }
 
   return groups;
@@ -160,4 +184,6 @@ module.exports = {
   storeAisleSortKey,
   sortTagsByAisle,
   groupTagsByAisle,
+  aisleKeyForTag,
+  UNASSIGNED_AISLE_KEY,
 };

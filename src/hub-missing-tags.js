@@ -74,10 +74,10 @@ async function addSectionTagDraft(visitId, dbkey, actor, { upc, description, loc
     if (dup.rows.length) return dup.rows[0].id;
 
     const inserted = await query(
-      `INSERT INTO tag_flags (visit_id, dbkey, upc, description, location, flagged_by, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'draft')
+      `INSERT INTO tag_flags (visit_id, dbkey, lane, upc, description, location, flagged_by, status, source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', 'rep')
        RETURNING id`,
-      [visitIdNum, dbkey, upcTrim, description ?? null, location ?? null, actor.id],
+      [visitIdNum, dbkey, lane || '', upcTrim, description ?? null, location ?? null, actor.id],
     );
     const tagId = inserted.rows[0].id;
     await writeAuditLog(visitIdNum, actor.id, 'tag_draft_added', dbkey, {
@@ -168,6 +168,11 @@ async function bulkAddSectionTagDrafts(visitId, dbkey, actor, items) {
   return { ok: true, added, skipped };
 }
 
+/**
+ * Submit a section's draft tags. They move draft → flagged and become pending
+ * items in the aisle tag batch. The old per-tag pending_actions verify gate is
+ * gone — the lead/assignee aisle sweep is now the review step (see hub-tag-batch).
+ */
 async function submitSectionTagDrafts(visitId, dbkey, actor) {
   const visitIdNum = parseVisitId(visitId);
 
@@ -184,40 +189,18 @@ async function submitSectionTagDrafts(visitId, dbkey, actor) {
       throw Object.assign(new Error('No draft tags to submit'), { status: 400 });
     }
 
-    const pendingIds = [];
-
-    for (const draft of drafts) {
-      await query(
-        `UPDATE tag_flags SET status = 'flagged', flagged_at = now()
-         WHERE id = $1 AND visit_id = $2 AND status = 'draft'`,
-        [draft.id, visitIdNum],
-      );
-
-      const summary = `Missing tag: ${draft.upc}`;
-      const payload = {
-        upc: draft.upc,
-        description: draft.description,
-        location: draft.location,
-        tag_flag_id: draft.id,
-        summary,
-      };
-
-      const inserted = await query(
-        `INSERT INTO pending_actions (visit_id, dbkey, action_type, payload, raised_by)
-         VALUES ($1, $2, 'missing_tag', $3, $4)
-         RETURNING id`,
-        [visitIdNum, dbkey, JSON.stringify(payload), actor.id],
-      );
-      pendingIds.push(inserted.rows[0].id);
-    }
+    await query(
+      `UPDATE tag_flags SET status = 'flagged', flagged_at = now()
+       WHERE visit_id = $1 AND dbkey = $2 AND status = 'draft'`,
+      [visitIdNum, dbkey],
+    );
 
     await writeAuditLog(visitIdNum, actor.id, 'tag_drafts_submitted', dbkey, {
       count: drafts.length,
       tag_ids: drafts.map((d) => d.id),
-      pending_ids: pendingIds,
     });
 
-    return { count: drafts.length, pendingIds };
+    return { count: drafts.length };
   });
 
   await broadcastVisit(visitIdNum);

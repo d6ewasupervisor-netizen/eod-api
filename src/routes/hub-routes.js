@@ -14,9 +14,22 @@ const {
   addSubscriber, broadcastVisit, broadcastChat, sendSnapshotToClient, writeHeartbeat,
 } = require('../hub-broadcast');
 
-const STREAM_HEARTBEAT_MS = 25000;
+const STREAM_HEARTBEAT_MS = 15000;
+// ~2KB of comment padding. Forces buffering proxies (Cloudflare/nginx) to start
+// streaming the response immediately instead of holding the first flush.
+const STREAM_PREAMBLE = ':' + ' '.repeat(2048) + '\n\nretry: 3000\n\n';
 const { sendBackup, markVisitDirtyAndBackupNow } = require('../hub-backup');
-const { getTagBatchPreview, sendTagBatch } = require('../hub-tag-batch');
+const { getTagBatchPreview, sendTagBatch, sendTagBatchForAisle } = require('../hub-tag-batch');
+const {
+  getAisleAssignments,
+  userAssignedAisleKeys,
+  canAccessTagBatch,
+  canWorkAisle,
+  assignAisleSweep,
+  unassignAisleSweep,
+  addSweepTag,
+  removePendingTag,
+} = require('../hub-tag-sweep');
 const { sendSectionReopenEmail, sendNisVerifiedEmail, sendHelpVerifiedEmail } = require('../hub-notify');
 const { parsePogMeta } = require('../lib/pog-meta');
 const {
@@ -106,6 +119,28 @@ async function attachHubContext(req, res, next) {
   }
 }
 
+/**
+ * Tag batch access: leads/supervisors (rank>=2) always; a rep may enter the tag
+ * batch only if they've been assigned at least one aisle sweep. Sets req.hubUser,
+ * req.hubRank, and req.assignedAisleKeys for downstream aisle-scoped checks.
+ */
+async function requireTagBatchAccess(req, res, next) {
+  try {
+    req.hubUser = await resolveHubUser(req.user);
+    req.hubRank = await resolveRank(req.user, req.params.visitId);
+    req.assignedAisleKeys = await userAssignedAisleKeys(req.params.visitId, req.hubUser.id);
+    const allowed = await canAccessTagBatch(req.params.visitId, req.hubRank, req.hubUser.id);
+    if (!allowed) {
+      return res.status(403).json({ error: 'Lead, supervisor, or assigned rep required' });
+    }
+    next();
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] tag-batch access failed:', err.message);
+    return res.status(500).json({ error: 'Failed to resolve tag batch access' });
+  }
+}
+
 router.get('/:visitId/stream', requireAuth, async (req, res) => {
   try {
     parseVisitId(req.params.visitId);
@@ -118,6 +153,9 @@ router.get('/:visitId/stream', requireAuth, async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
   if (res.flushHeaders) res.flushHeaders();
+
+  // Padding + retry hint up front so proxies stream rather than buffer-and-close.
+  res.write(STREAM_PREAMBLE);
 
   addSubscriber(req.params.visitId, res, req.user);
 
@@ -280,16 +318,105 @@ router.post('/:visitId/chat/threads/:threadId/read', requireAuth, attachHubConte
   }
 });
 
-router.get('/:visitId/tag-batch/preview', requireAuth, requireHubRank(2), async (req, res) => {
+router.get('/:visitId/tag-batch/preview', requireAuth, requireTagBatchAccess, async (req, res) => {
   try {
-    const preview = await getTagBatchPreview(req.params.visitId);
-    return res.json(preview);
+    // Reps see only their assigned aisles; leads/supervisors see everything.
+    const restrictToAisleKeys = req.hubRank >= 2 ? null : req.assignedAisleKeys;
+    const preview = await getTagBatchPreview(req.params.visitId, { restrictToAisleKeys });
+    return res.json({
+      ...preview,
+      myRank: req.hubRank,
+      myAssignedAisleKeys: req.assignedAisleKeys,
+    });
   } catch (err) {
     if (err.message === 'Invalid visitId') {
       return res.status(400).json({ error: err.message });
     }
     console.error('[hub] tag-batch preview failed:', err.message);
     return res.status(500).json({ error: 'Failed to load tag batch preview' });
+  }
+});
+
+router.get('/:visitId/tag-batch/assignments', requireAuth, requireHubRank(2), async (req, res) => {
+  try {
+    const assignments = await getAisleAssignments(req.params.visitId);
+    return res.json({ visitId: parseVisitId(req.params.visitId), assignments });
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] tag-batch assignments failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load aisle assignments' });
+  }
+});
+
+router.post('/:visitId/tag-batch/assign', requireAuth, requireHubRank(2), async (req, res) => {
+  try {
+    const result = await assignAisleSweep(req.params.visitId, req.hubUser, {
+      aisleKey: req.body?.aisleKey,
+      aisleLabel: req.body?.aisleLabel,
+      assigneeId: req.body?.assigneeId,
+    });
+    if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+    return res.json(result);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] tag-batch assign failed:', err.message);
+    return res.status(500).json({ error: 'Failed to assign aisle sweep' });
+  }
+});
+
+router.post('/:visitId/tag-batch/unassign', requireAuth, requireHubRank(2), async (req, res) => {
+  try {
+    const result = await unassignAisleSweep(req.params.visitId, req.hubUser, {
+      aisleKey: req.body?.aisleKey,
+    });
+    if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+    return res.json(result);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] tag-batch unassign failed:', err.message);
+    return res.status(500).json({ error: 'Failed to unassign aisle sweep' });
+  }
+});
+
+router.post('/:visitId/tag-batch/sweep-tag', requireAuth, requireTagBatchAccess, async (req, res) => {
+  try {
+    const aisleKey = String(req.body?.aisleKey ?? '').trim();
+    const allowed = await canWorkAisle(req.params.visitId, req.hubRank, req.hubUser.id, aisleKey);
+    if (!allowed) {
+      return res.status(403).json({ error: 'That aisle is assigned to someone else' });
+    }
+    const result = await addSweepTag(req.params.visitId, req.hubUser, {
+      upc: req.body?.upc,
+      description: req.body?.description,
+      location: req.body?.location,
+      aisleKey: req.body?.aisleKey,
+      aisleLabel: req.body?.aisleLabel,
+      lane: req.body?.lane,
+      dbkey: req.body?.dbkey,
+    });
+    if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+    return res.json(result);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] tag-batch sweep-tag failed:', err.message);
+    return res.status(500).json({ error: 'Failed to add sweep tag' });
+  }
+});
+
+router.delete('/:visitId/tag-batch/tag/:tagId', requireAuth, requireTagBatchAccess, async (req, res) => {
+  try {
+    const result = await removePendingTag(
+      req.params.visitId,
+      req.hubRank,
+      req.hubUser.id,
+      req.params.tagId,
+    );
+    if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+    return res.json(result);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] tag-batch remove tag failed:', err.message);
+    return res.status(500).json({ error: 'Failed to remove pending tag' });
   }
 });
 
@@ -316,15 +443,30 @@ router.post('/:visitId/sections/:dbkey/aisle-designation', requireAuth, requireH
   }
 });
 
-router.post('/:visitId/send-tag-batch', requireAuth, requireHubRank(2), async (req, res) => {
+router.post('/:visitId/send-tag-batch', requireAuth, requireTagBatchAccess, async (req, res) => {
   try {
-    const result = await sendTagBatch(req.params.visitId, req.hubUser);
+    const aisleKey = String(req.body?.aisleKey ?? '').trim();
+    let result;
+    if (aisleKey) {
+      const allowed = await canWorkAisle(req.params.visitId, req.hubRank, req.hubUser.id, aisleKey);
+      if (!allowed) {
+        return res.status(403).json({ error: 'That aisle is assigned to someone else' });
+      }
+      result = await sendTagBatchForAisle(req.params.visitId, req.hubUser, aisleKey);
+    } else {
+      // Send-all is lead/supervisor only.
+      if (req.hubRank < 2) {
+        return res.status(400).json({ error: 'aisleKey is required' });
+      }
+      result = await sendTagBatch(req.params.visitId, req.hubUser);
+    }
     if (!result.ok) {
       return res.status(result.status || 500).json({ error: result.error || 'Tag batch send failed' });
     }
     return res.json({
       ok: true,
       count: result.count,
+      aisleLabel: result.aisleLabel,
       resendId: result.resendId,
       recipients: result.recipients,
     });
@@ -459,6 +601,7 @@ router.get('/:visitId/pending', requireAuth, requireHubRank(2), async (req, res)
        FROM pending_actions pa
        JOIN hub_users hu ON hu.id = pa.raised_by
        WHERE pa.visit_id = $1 AND pa.status = 'pending'
+         AND pa.action_type <> 'missing_tag'
        ORDER BY pa.raised_at ASC`,
       [visitIdNum],
     );

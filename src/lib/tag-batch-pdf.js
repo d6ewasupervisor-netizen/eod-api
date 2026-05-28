@@ -25,9 +25,10 @@ function drawHeader(doc, meta) {
   const y0 = PAGE_MARGIN;
   doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(13)
     .text('Checklane Tag Print Batch', PAGE_MARGIN, y0);
+  const aislePart = meta.aisleLabel ? `${meta.aisleLabel}  ·  ` : '';
   doc.font('Helvetica').fontSize(9)
     .text(
-      `Store: ${meta.store || 'unknown'}  ·  Visit: ${meta.visitId}  ·  ${meta.dateLabel}  ·  Items: ${meta.count}`,
+      `${aislePart}Store: ${meta.store || 'unknown'}  ·  Visit: ${meta.visitId}  ·  ${meta.dateLabel}  ·  Items: ${meta.count}`,
       PAGE_MARGIN,
       y0 + 16,
       { width: LETTER_WIDTH - PAGE_MARGIN * 2 },
@@ -122,7 +123,7 @@ function slotPosition(slotOnPage, contentTop, cellWidth, cellHeight) {
  * @param {{ store?: string|null, visitId: number, dateLabel: string, items: Array<object> }} params
  * @returns {Promise<Buffer>}
  */
-function buildTagBatchPdf({ store, visitId, dateLabel, items }) {
+function buildTagBatchPdf({ store, visitId, dateLabel, items, aisleLabel = null }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'LETTER', margin: 0, autoFirstPage: false });
     const chunks = [];
@@ -133,7 +134,7 @@ function buildTagBatchPdf({ store, visitId, dateLabel, items }) {
 
     const contentWidth = LETTER_WIDTH - PAGE_MARGIN * 2;
     const cellWidth = (contentWidth - COLUMN_GUTTER) / COLS;
-    const meta = { store, visitId, dateLabel, count: items.length };
+    const meta = { store, visitId, dateLabel, aisleLabel, count: items.length };
 
     if (!items.length) {
       doc.addPage();

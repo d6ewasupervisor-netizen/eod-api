@@ -164,6 +164,7 @@ async function getSnapshot(visitId, options = {}) {
        FROM pending_actions pa
        JOIN hub_users hu ON hu.id = pa.raised_by
        WHERE pa.visit_id = $1 AND pa.status = 'pending'
+         AND pa.action_type <> 'missing_tag'
        ORDER BY pa.raised_at ASC`,
       [visitIdNum],
     ),
@@ -185,7 +186,9 @@ async function getSnapshot(visitId, options = {}) {
   const stats = buildStats(sections);
   stats.openTagFlags = tagCountResult.rows[0]?.cnt ?? 0;
   stats.draftTags = draftTagResult.rows[0]?.cnt ?? 0;
-  stats.verifiedUnsentTags = verifiedTagResult.rows[0]?.cnt ?? 0;
+  // Pending in the aisle tag batch = flagged (rep/sweep) + any legacy verified rows.
+  stats.pendingTags = (tagCountResult.rows[0]?.cnt ?? 0) + (verifiedTagResult.rows[0]?.cnt ?? 0);
+  stats.verifiedUnsentTags = stats.pendingTags;
 
   const pendingActions = pendingResult.rows.map((row) => ({
     id: row.id,
@@ -201,11 +204,15 @@ async function getSnapshot(visitId, options = {}) {
   let myRank = 1;
   let myUserId = null;
   let chatSummary = { unreadTotal: 0, threadCount: 0 };
+  let myTagSweepAisleKeys = [];
   if (user) {
     myRank = await resolveRank(user, visitIdNum);
     const hubUser = await resolveHubUser(user);
     myUserId = hubUser.id;
     chatSummary = await getChatSummary(visitIdNum, myUserId, myRank);
+    // Lazy require avoids a hub-state <-> hub-tag-sweep require cycle.
+    const { userAssignedAisleKeys } = require('./hub-tag-sweep');
+    myTagSweepAisleKeys = await userAssignedAisleKeys(visitIdNum, myUserId);
   }
 
   return {
@@ -218,6 +225,7 @@ async function getSnapshot(visitId, options = {}) {
     pendingActions,
     aislePresets: PRESET_CATALOG,
     chatSummary,
+    myTagSweepAisleKeys,
   };
 }
 
