@@ -57,6 +57,11 @@ function formatTagLocationLabel(location) {
     return `Aisle ${Number(shelf[1])}, Bay ${Number(shelf[2])}, Shelf ${Number(shelf[3])}, Position ${Number(shelf[4])}`;
   }
 
+  const shelfRowCol = s.match(/^(\d+)B(\d+)F(\d+)R(\d+)C(\d+)$/i);
+  if (shelfRowCol) {
+    return `Aisle ${Number(shelfRowCol[1])}, Bay ${Number(shelfRowCol[2])}, Shelf ${Number(shelfRowCol[3])}, Row ${Number(shelfRowCol[4])}, Column ${Number(shelfRowCol[5])}`;
+  }
+
   return s;
 }
 
