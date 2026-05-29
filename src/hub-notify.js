@@ -129,6 +129,23 @@ function formatPerson(name, email) {
   return email && name ? `${name} (${email})` : label;
 }
 
+/** Map internal photo records to Resend attachment objects. */
+function toResendAttachments(attachments) {
+  if (!Array.isArray(attachments) || !attachments.length) return undefined;
+  return attachments
+    .filter((a) => a && a.content)
+    .map((a) => ({
+      filename: a.filename || 'photo.jpg',
+      content: a.content,
+      content_type: a.content_type || 'image/jpeg',
+    }));
+}
+
+function photosNoteHtml(count) {
+  if (!count) return '';
+  return `<p style="margin:16px 0 0;color:#374151;font-size:13px;">${count} field photo${count !== 1 ? 's' : ''} attached.</p>`;
+}
+
 async function sendNisVerifiedEmail({
   visitId,
   store,
@@ -138,6 +155,7 @@ async function sendNisVerifiedEmail({
   raiserName,
   raiserEmail,
   verifier,
+  attachments,
 }) {
   if (!_resend) {
     return { sent: false, error: 'Hub notify not initialized' };
@@ -192,12 +210,14 @@ async function sendNisVerifiedEmail({
        <p style="margin:0;padding:12px;background:#f3f4f6;border-radius:6px;white-space:pre-wrap;">${escHtml(note)}</p>`
     : '';
 
+  const resendAttachments = toResendAttachments(attachments);
   const html = `<!DOCTYPE html>
 <html><body style="font-family:system-ui,sans-serif;color:#111827;max-width:560px;line-height:1.5;">
   <h2 style="margin:0 0 12px;font-size:18px;">Not in store — verified by lead</h2>
   <p style="margin:0 0 12px;color:#374151;">A supervisor or lead confirmed this set is not present in the store.</p>
   ${detailsHtml}
   ${noteHtml}
+  ${photosNoteHtml(resendAttachments ? resendAttachments.length : 0)}
 </body></html>`;
 
   const to = CHECKLANES_OPS_EMAIL;
@@ -208,6 +228,7 @@ async function sendNisVerifiedEmail({
     actorEmail: verifier.email,
     replyToExplicit: verifier.email,
   });
+  if (resendAttachments) emailPayload.attachments = resendAttachments;
 
   const { data, error } = await _resend.emails.send(emailPayload);
   if (error) {
@@ -240,6 +261,7 @@ async function sendHelpVerifiedEmail({
   raiserName,
   raiserEmail,
   verifier,
+  attachments,
 }) {
   if (!_resend) {
     return { sent: false, error: 'Hub notify not initialized' };
@@ -307,6 +329,7 @@ async function sendHelpVerifiedEmail({
        <p style="margin:0;padding:12px;background:#f3f4f6;border-radius:6px;white-space:pre-wrap;">${escHtml(note)}</p>`
     : '';
 
+  const resendAttachments = toResendAttachments(attachments);
   const html = `<!DOCTYPE html>
 <html><body style="font-family:system-ui,sans-serif;color:#111827;max-width:560px;line-height:1.5;">
   <h2 style="margin:0 0 12px;font-size:18px;">KOMPASS Help Desk — verified by lead</h2>
@@ -314,6 +337,7 @@ async function sendHelpVerifiedEmail({
   ${detailsHtml}
   ${issueHtml}
   ${noteHtml}
+  ${photosNoteHtml(resendAttachments ? resendAttachments.length : 0)}
 </body></html>`;
 
   const from = buildHelpdeskFromAddress(subjectStore, categoryNumber);
@@ -328,6 +352,7 @@ async function sendHelpVerifiedEmail({
     subject,
     html,
   };
+  if (resendAttachments) emailPayload.attachments = resendAttachments;
 
   const { data, error } = await _resend.emails.send(emailPayload);
   if (error) {

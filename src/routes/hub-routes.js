@@ -63,6 +63,13 @@ const {
   clearBayPhotos,
 } = require('../hub-bay-photos');
 const {
+  parsePhotoDataUrls,
+  insertPendingPhotos,
+  listPendingPhotos,
+  loadPendingPhotoRow,
+  loadPendingPhotosForEmail,
+} = require('../hub-pending-photos');
+const {
   listThreads,
   listRecipients,
   getThreadMessages,
@@ -606,19 +613,27 @@ router.get('/:visitId/pending', requireAuth, requireHubRank(2), async (req, res)
       [visitIdNum],
     );
 
-    const items = rows.map((row) => ({
-      id: row.id,
-      visit_id: Number(row.visit_id),
-      dbkey: row.dbkey,
-      action_type: row.action_type,
-      payload: row.payload || {},
-      raised_by: row.raised_by,
-      raised_by_name: row.raised_by_name,
-      raised_by_email: row.raised_by_email,
-      raised_at: row.raised_at ? row.raised_at.toISOString() : null,
-      verified_by: row.verified_by,
-      verified_at: row.verified_at ? row.verified_at.toISOString() : null,
-      status: row.status,
+    const items = await Promise.all(rows.map(async (row) => {
+      const photos = await listPendingPhotos(visitIdNum, row.id);
+      return {
+        id: row.id,
+        visit_id: Number(row.visit_id),
+        dbkey: row.dbkey,
+        action_type: row.action_type,
+        payload: row.payload || {},
+        raised_by: row.raised_by,
+        raised_by_name: row.raised_by_name,
+        raised_by_email: row.raised_by_email,
+        raised_at: row.raised_at ? row.raised_at.toISOString() : null,
+        verified_by: row.verified_by,
+        verified_at: row.verified_at ? row.verified_at.toISOString() : null,
+        status: row.status,
+        photos: photos.map((p) => ({
+          id: p.id,
+          content_type: p.content_type,
+          url: `/api/hub/${visitIdNum}/pending/${row.id}/photos/${p.id}/image`,
+        })),
+      };
     }));
 
     return res.json({ visitId: visitIdNum, pending: items });
@@ -628,6 +643,29 @@ router.get('/:visitId/pending', requireAuth, requireHubRank(2), async (req, res)
     }
     console.error('[hub] pending list failed:', err.message);
     return res.status(500).json({ error: 'Failed to load pending actions' });
+  }
+});
+
+router.get('/:visitId/pending/:id/photos/:photoId/image', requireAuth, requireHubRank(2), async (req, res) => {
+  try {
+    const visitIdNum = parseVisitId(req.params.visitId);
+    const pendingId = Number(req.params.id);
+    const photoId = Number(req.params.photoId);
+    if (!Number.isFinite(pendingId) || !Number.isFinite(photoId)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    const row = await loadPendingPhotoRow(visitIdNum, pendingId, photoId);
+    if (!row) {
+      return res.status(404).json({ error: 'Photo not found' });
+    }
+    const buf = Buffer.from(row.photo_base64, 'base64');
+    res.set('Content-Type', row.content_type || 'image/jpeg');
+    res.set('Cache-Control', 'private, max-age=86400');
+    return res.send(buf);
+  } catch (err) {
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] pending photo image failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load photo' });
   }
 });
 
@@ -709,6 +747,9 @@ router.post('/:visitId/pending/:id/verify', requireAuth, requireHubRank(2), asyn
     });
 
     let emailResult = null;
+    const flagPhotoAttachments = verifiedPending
+      ? await loadPendingPhotosForEmail(visitIdNum, pendingId)
+      : [];
     if (verifiedPending?.action_type === 'nis') {
       const payload = verifiedPending.payload || {};
       emailResult = await sendNisVerifiedEmail({
@@ -719,6 +760,7 @@ router.post('/:visitId/pending/:id/verify', requireAuth, requireHubRank(2), asyn
         raiserName: verifiedPending.raised_by_name,
         raiserEmail: verifiedPending.raised_by_email,
         verifier,
+        attachments: flagPhotoAttachments,
       });
       if (!emailResult.sent) {
         return res.status(502).json({
@@ -738,6 +780,7 @@ router.post('/:visitId/pending/:id/verify', requireAuth, requireHubRank(2), asyn
         raiserName: verifiedPending.raised_by_name,
         raiserEmail: verifiedPending.raised_by_email,
         verifier,
+        attachments: flagPhotoAttachments,
       });
       if (!emailResult.sent) {
         return res.status(502).json({
@@ -952,6 +995,14 @@ router.post('/:visitId/sections/:dbkey/flag/help', requireAuth, attachHubContext
       return res.status(400).json({ error: 'Issue details are required' });
     }
 
+    // Validate any attached photos up front so a bad image never leaves a half-saved flag.
+    let parsedPhotos;
+    try {
+      parsedPhotos = parsePhotoDataUrls(req.body?.photos);
+    } catch (photoErr) {
+      return res.status(photoErr.status || 400).json({ error: photoErr.message });
+    }
+
     const visitIdNum = parseVisitId(visitId);
     const storeNumber = await resolveStoreForVisit(visitIdNum);
     const fixture = storeNumber ? lookupFixture({ storeNumber, lane, dbkey }) : null;
@@ -989,17 +1040,19 @@ router.post('/:visitId/sections/:dbkey/flag/help', requireAuth, attachHubContext
       );
 
       const id = inserted.rows[0].id;
+      await insertPendingPhotos(visitIdNumInner, id, parsedPhotos, raiser.id);
       await writeAuditLog(visitIdNumInner, raiser.id, 'flag_raised', dbkey, {
         type: 'help_request',
         pending_id: id,
         issue_type_id: issueTypeId,
+        photo_count: parsedPhotos.length,
         note,
       });
       return id;
     });
 
     await broadcastVisit(visitId);
-    return res.json({ ok: true, pendingId });
+    return res.json({ ok: true, pendingId, photoCount: parsedPhotos.length });
   } catch (err) {
     if (err.status === 409) return res.status(409).json({ error: err.message });
     if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
@@ -1054,6 +1107,13 @@ router.post('/:visitId/sections/:dbkey/flag/nis', requireAuth, attachHubContext,
     const action = req.body?.action ?? null;
     const raiser = req.hubUser;
 
+    let parsedPhotos;
+    try {
+      parsedPhotos = parsePhotoDataUrls(req.body?.photos);
+    } catch (photoErr) {
+      return res.status(photoErr.status || 400).json({ error: photoErr.message });
+    }
+
     const pendingId = await applyTransition(visitId, async (visitIdNum) => {
       const priorState = await setNeedsAttention(visitIdNum, dbkey, lane);
       const payload = {
@@ -1080,16 +1140,18 @@ router.post('/:visitId/sections/:dbkey/flag/nis', requireAuth, attachHubContext,
       );
 
       const id = inserted.rows[0].id;
+      await insertPendingPhotos(visitIdNum, id, parsedPhotos, raiser.id);
       await writeAuditLog(visitIdNum, raiser.id, 'flag_raised', dbkey, {
         type: 'nis',
         pending_id: id,
+        photo_count: parsedPhotos.length,
         note,
       });
       return id;
     });
 
     await broadcastVisit(visitId);
-    return res.json({ ok: true, pendingId });
+    return res.json({ ok: true, pendingId, photoCount: parsedPhotos.length });
   } catch (err) {
     if (err.status === 409) return res.status(409).json({ error: err.message });
     if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
