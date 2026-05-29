@@ -35,6 +35,9 @@ async function sendLinkEmail({ to, link }) {
     'It is unique to you, expires in 30 days, and can only be clicked once. Clicking',
     'it will keep you signed in for the next 45 days on this device.',
     '',
+    'On a phone, open the link in Chrome (or Safari) — not inside the Gmail or mail',
+    'app preview. Tap the button, then choose Chrome when your phone asks which browser to use.',
+    '',
     link,
     '',
     'If you did not request this, you can ignore this message.',
@@ -48,6 +51,10 @@ async function sendLinkEmail({ to, link }) {
       <p style="margin:0 0 12px;">Use the button below to sign in. One link signs you in to every Retail Odyssey tool on the site (EOD cover sheet, claims, shirt orders, suncare lookup, and more).
          The link is unique to you, expires in 30 days, and can only be clicked once.
          After signing in you will stay signed in for the next 45 days on this device.</p>
+      <p style="margin:0 0 16px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e3a8a;font-size:14px;line-height:1.5;">
+        <strong>On your phone:</strong> please choose <strong>Chrome</strong> (or Safari) when your device asks which browser to open this link in.
+        Email apps open links inside a mini browser where sign-in often fails.
+      </p>
       <p style="margin:0 0 24px;">
         <a href="${safeLink}" style="display:inline-block;background:#1a3a6e;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Sign in</a>
       </p>

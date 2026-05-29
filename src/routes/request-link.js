@@ -10,6 +10,7 @@ const { issueLinkToken } = require('../lib/tokens');
 const { query } = require('../lib/db');
 const { sendLinkEmail } = require('../lib/auth-email');
 const { isEmailAllowed } = require('../lib/allowed-emails');
+const { buildMagicLink } = require('../lib/magic-link');
 
 const router = express.Router();
 
@@ -22,28 +23,6 @@ const limiter = rateLimit({
 });
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const ALLOWED_RETURN_HOSTS = new Set([
-  'checklanes.the-dump-bin.com',
-]);
-
-function buildMagicLink(token, returnTo) {
-  if (returnTo) {
-    try {
-      const url = new URL(returnTo);
-      if (url.protocol !== 'https:' || !ALLOWED_RETURN_HOSTS.has(url.host)) {
-        return null;
-      }
-      url.searchParams.set('token', token);
-      return url.toString();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  const base = (process.env.FRONTEND_BASE_URL || 'https://the-dump-bin.com').replace(/\/+$/, '');
-  return `${base}/index.html?token=${encodeURIComponent(token)}`;
-}
 
 router.post('/', limiter, async (req, res) => {
   try {

@@ -9,6 +9,7 @@ const express = require('express');
 const crypto = require('node:crypto');
 const { query } = require('../lib/db');
 const { issueLinkToken } = require('../lib/tokens');
+const { buildMagicLink } = require('../lib/magic-link');
 const {
   getAccessRequest,
   markAccessRequestDecided,
@@ -225,10 +226,10 @@ async function handleDecision(req, res, action) {
             `INSERT INTO link_requests (email, jti, ip, user_agent) VALUES ($1, $2, $3, $4)`,
             [decided.email, jti, null, 'access-request-auto-link'],
           );
-          // FRONTEND_BASE_URL is the hub origin (the sign-in flow covers every
-          // app under the-dump-bin.com, not just /EOD).
-          const base = (process.env.FRONTEND_BASE_URL || 'https://the-dump-bin.com').replace(/\/+$/, '');
-          const link = `${base}/index.html?token=${encodeURIComponent(linkJwt)}`;
+          const link = buildMagicLink(linkJwt, null);
+          if (!link) {
+            throw new Error('Could not build magic link URL');
+          }
           await sendAccessApprovedEmail({ to: decided.email, name: decided.name, link });
           console.log(`[access-request-decision] magic link sent to ${decided.email}`);
         } catch (err) {
