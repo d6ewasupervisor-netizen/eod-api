@@ -19,6 +19,16 @@ const resend = new Resend(process.env.RESEND_API_KEY || 'unset');
 
 const FROM = process.env.AUTH_EMAIL_FROM || 'The Dump Bin <noreply@retail-odyssey.com>';
 
+const MOBILE_LINK_INSTRUCTIONS_TEXT =
+  'On a phone, do not tap the link — your mail app may open it in a mini browser where sign-in fails. '
+  + 'Press and hold the link, then choose "Open in browser" (or "Open in Chrome" / "Open in Safari").';
+
+const MOBILE_LINK_INSTRUCTIONS_HTML = `
+      <p style="margin:0 0 16px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e3a8a;font-size:14px;line-height:1.5;">
+        <strong>On your phone:</strong> do not tap the link. <strong>Press and hold</strong> the Sign in button or link below,
+        then choose <strong>Open in browser</strong> (or Open in Chrome / Open in Safari).
+      </p>`;
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -35,8 +45,7 @@ async function sendLinkEmail({ to, link }) {
     'It is unique to you, expires in 30 days, and can only be clicked once. Clicking',
     'it will keep you signed in for the next 45 days on this device.',
     '',
-    'On a phone, open the link in Chrome (or Safari) — not inside the Gmail or mail',
-    'app preview. Tap the button, then choose Chrome when your phone asks which browser to use.',
+    MOBILE_LINK_INSTRUCTIONS_TEXT,
     '',
     link,
     '',
@@ -51,10 +60,7 @@ async function sendLinkEmail({ to, link }) {
       <p style="margin:0 0 12px;">Use the button below to sign in. One link signs you in to every Retail Odyssey tool on the site (EOD cover sheet, claims, shirt orders, suncare lookup, and more).
          The link is unique to you, expires in 30 days, and can only be clicked once.
          After signing in you will stay signed in for the next 45 days on this device.</p>
-      <p style="margin:0 0 16px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e3a8a;font-size:14px;line-height:1.5;">
-        <strong>On your phone:</strong> please choose <strong>Chrome</strong> (or Safari) when your device asks which browser to open this link in.
-        Email apps open links inside a mini browser where sign-in often fails.
-      </p>
+${MOBILE_LINK_INSTRUCTIONS_HTML}
       <p style="margin:0 0 24px;">
         <a href="${safeLink}" style="display:inline-block;background:#1a3a6e;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Sign in</a>
       </p>
@@ -146,8 +152,9 @@ async function sendAccessApprovedEmail({ to, name, link }) {
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 16px;color:#1f2937;">
       <h2 style="color:#1a3a6e;margin:0 0 16px;">${greeting}</h2>
       <p style="margin:0 0 12px;">Your access to The Dump Bin has been approved.</p>
-      <p style="margin:0 0 24px;">Click the button below to sign in. The link is unique to you, expires in 30 days,
+      <p style="margin:0 0 12px;">Click the button below to sign in. The link is unique to you, expires in 30 days,
          and signs you in for 45 days on this device.</p>
+${MOBILE_LINK_INSTRUCTIONS_HTML}
       <p style="margin:0 0 24px;">
         <a href="${safeLink}" style="display:inline-block;background:#1a3a6e;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Sign in</a>
       </p>
@@ -160,6 +167,8 @@ async function sendAccessApprovedEmail({ to, name, link }) {
     '',
     'Your access to The Dump Bin has been approved.',
     'Use the link below to sign in. It is unique to you and expires in 30 days.',
+    '',
+    MOBILE_LINK_INSTRUCTIONS_TEXT,
     '',
     link,
     '',
