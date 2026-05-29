@@ -43,6 +43,10 @@ const {
 } = require('../hub-missing-tags');
 const { query } = require('../lib/db');
 const { resolveStoreForVisit, lookupFixture, enrichNisPayload } = require('../lib/hub-fixture-catalog');
+const {
+  rosterInviteFields,
+  sendTeamMemberInvite,
+} = require('../hub-team-invite');
 const { requireVisitAccess } = require('../hub-store-access');
 const {
   loadSectionRow,
@@ -930,9 +934,12 @@ router.get('/:visitId/roster', requireAuth, attachHubContext, async (req, res) =
     let rows;
     if (storeNumber) {
       const storeRoster = await query(
-        `SELECT u.id, u.name, a.store_role
+        `SELECT u.id, u.name, u.email, u.login_email, u.hub_invited_at, u.sas_user_id,
+                u.standing_rank, a.store_role,
+                e.email AS employee_email
          FROM hub_store_assignments a
          JOIN hub_users u ON u.id = a.user_id
+         LEFT JOIN employees e ON e.sas_employee_id = u.sas_user_id
          WHERE a.store_number = $1 AND u.is_active = true
          ORDER BY
            CASE a.store_role WHEN 'lead' THEN 0 ELSE 1 END,
@@ -944,10 +951,13 @@ router.get('/:visitId/roster', requireAuth, attachHubContext, async (req, res) =
 
     if (!rows?.length) {
       const fallback = await query(
-        `SELECT id, name, standing_rank AS store_role
-         FROM hub_users
-         WHERE is_active = true
-         ORDER BY name`,
+        `SELECT u.id, u.name, u.email, u.login_email, u.hub_invited_at, u.sas_user_id,
+                u.standing_rank, u.standing_rank AS store_role,
+                e.email AS employee_email
+         FROM hub_users u
+         LEFT JOIN employees e ON e.sas_employee_id = u.sas_user_id
+         WHERE u.is_active = true
+         ORDER BY u.name`,
       );
       rows = fallback.rows;
     }
@@ -955,14 +965,22 @@ router.get('/:visitId/roster', requireAuth, attachHubContext, async (req, res) =
     return res.json({
       visitId: visitIdNum,
       storeNumber: storeNumber || null,
-      roster: rows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        rank: row.store_role === 'lead' ? 2
+      roster: rows.map((row) => {
+        const rank = row.store_role === 'lead' ? 2
           : row.store_role === 'rep' ? 1
-          : (Number(row.standing_rank) || 1),
-        storeRole: row.store_role || null,
-      })),
+          : (Number(row.standing_rank) || 1);
+        const invite = rosterInviteFields(row);
+        return {
+          id: row.id,
+          name: row.name,
+          rank,
+          storeRole: row.store_role || null,
+          emailOnFile: invite.emailOnFile,
+          loginEmail: invite.loginEmail,
+          needsInvite: invite.needsInvite,
+          invitedAt: invite.invitedAt,
+        };
+      }),
       source: storeNumber ? 'store_assignments' : 'hub_users',
     });
   } catch (err) {
@@ -971,6 +989,49 @@ router.get('/:visitId/roster', requireAuth, attachHubContext, async (req, res) =
     }
     console.error('[hub] roster failed:', err.message);
     return res.status(500).json({ error: 'Failed to load roster' });
+  }
+});
+
+router.post('/:visitId/team-invite', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const rank = req.hubRank ?? 1;
+    if (rank < 2) {
+      return res.status(403).json({ error: 'Lead or supervisor required' });
+    }
+
+    const userId = Number(req.body?.userId);
+    if (!Number.isFinite(userId)) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const useOnFileEmail = req.body?.useOnFileEmail === true
+      || req.body?.sendToOnFile === true;
+    const customEmail = (req.body?.customEmail || req.body?.email || '').trim();
+
+    if (!useOnFileEmail && !customEmail) {
+      return res.status(400).json({ error: 'Choose email on file or enter a custom email' });
+    }
+
+    const result = await sendTeamMemberInvite({
+      visitId: req.params.visitId,
+      userId,
+      useOnFileEmail,
+      customEmail,
+      inviter: {
+        id: req.hubUser.id,
+        email: req.user.email,
+        name: req.hubUser.name,
+      },
+    });
+
+    return res.json(result);
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    if (err.status === 404) return res.status(404).json({ error: err.message });
+    if (err.status === 409) return res.status(409).json({ error: err.message });
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] team-invite failed:', err.message);
+    return res.status(500).json({ error: 'Failed to send team invite' });
   }
 });
 

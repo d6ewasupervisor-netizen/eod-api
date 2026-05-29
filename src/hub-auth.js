@@ -38,9 +38,9 @@ async function resolveHubUser(user) {
   const fallbackName = email.split('@')[0] || 'User';
 
   const existing = await query(
-    `SELECT id, email, name, standing_rank, is_active, is_hub_admin
+    `SELECT id, email, name, standing_rank, is_active, is_hub_admin, login_email
      FROM hub_users
-     WHERE email = $1`,
+     WHERE lower(email) = $1 OR lower(coalesce(login_email, '')) = $1`,
     [email],
   );
 

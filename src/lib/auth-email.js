@@ -35,6 +35,56 @@ function escapeHtml(s) {
   }[c]));
 }
 
+async function sendHubTeamInviteEmail({
+  to,
+  link,
+  inviteeName,
+  inviterName,
+  inviterEmail,
+  storeNumber,
+}) {
+  const storeLabel = storeNumber
+    ? `Store ${String(storeNumber).replace(/\D/g, '').padStart(5, '0')}`
+    : 'your store';
+  const greeting = inviteeName ? `Hi ${escapeHtml(inviteeName)},` : 'Hello,';
+  const subject = `Checklane assignments — sign in (${storeLabel})`;
+  const safeLink = escapeHtml(link);
+  const text = [
+    greeting,
+    '',
+    `${inviterName || 'Your lead'} invited you to work Checklane sets on ${storeLabel}.`,
+    'Use the link below to sign in and open your assignments. The link is unique to you,',
+    'expires in 30 days, and can only be used once. After signing in you stay signed in',
+    'for 45 days on this device.',
+    '',
+    MOBILE_LINK_INSTRUCTIONS_TEXT,
+    '',
+    link,
+    '',
+    'If you were not expecting this, contact your lead or supervisor.',
+    '',
+    '\u2014 Retail Odyssey',
+  ].join('\n');
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 16px;color:#1f2937;">
+      <h2 style="color:#1a3a6e;margin:0 0 16px;">Checklane assignments</h2>
+      <p style="margin:0 0 12px;">${greeting}</p>
+      <p style="margin:0 0 12px;"><strong>${escapeHtml(inviterName || 'Your lead')}</strong> invited you to work Checklane sets on <strong>${escapeHtml(storeLabel)}</strong>.
+         Open the link below to sign in and go straight to your assignments hub.</p>
+      <p style="margin:0 0 12px;color:#6b7280;font-size:14px;">The link is unique to you, expires in 30 days, and can only be used once.</p>
+${MOBILE_LINK_INSTRUCTIONS_HTML}
+      <p style="margin:0 0 24px;">
+        <a href="${safeLink}" style="display:inline-block;background:#1a3a6e;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Open assignments</a>
+      </p>
+      <p style="color:#6b7280;font-size:13px;margin:0;">Can&apos;t click the button? Copy and paste this link:<br>${safeLink}</p>
+      <p style="margin-top:24px;color:#9ca3af;font-size:12px;">If you were not expecting this, contact your lead. &mdash; Retail Odyssey</p>
+    </div>
+  `;
+  const payload = { from: FROM, to, subject, text, html };
+  addReplyTo(payload, { explicit: inviterEmail });
+  return resend.emails.send(payload);
+}
+
 async function sendLinkEmail({ to, link }) {
   const subject = 'Your sign-in link for The Dump Bin';
   const text = [
@@ -315,6 +365,7 @@ async function sendAccessRequestOtherApproverEmail({ to, decidedBy, action, reco
 
 module.exports = {
   sendLinkEmail,
+  sendHubTeamInviteEmail,
   sendAdminInviteEmail,
   sendAdminPasswordResetEmail,
   sendAccessApprovedEmail,
