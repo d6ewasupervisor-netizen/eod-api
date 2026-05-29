@@ -9,7 +9,6 @@ const {
   sectionDesignationKey,
 } = require('./lib/aisle-designations');
 const { parseVisitId, writeAuditLog } = require('./hub-auth');
-const { applyTransition } = require('./hub-state');
 const { broadcastVisit } = require('./hub-broadcast');
 const { normalizeLane } = require('./hub-section');
 
@@ -69,6 +68,12 @@ async function setSectionAisleDesignation(visitId, dbkey, lane, { preset, custom
 
   const validated = validateAisleDesignation(preset, custom);
   if (!validated.ok) return validated;
+
+  // Lazy require: hub-state <-> hub-aisle-designation form a require cycle.
+  // Importing applyTransition at module load captured `undefined` (hub-state
+  // hadn't finished exporting yet), so every aisle save threw and returned 500.
+  // Requiring at call time guarantees hub-state is fully initialized.
+  const { applyTransition } = require('./hub-state');
 
   await applyTransition(visitIdNum, async () => {
     await query(

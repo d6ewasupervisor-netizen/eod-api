@@ -1,6 +1,5 @@
 // Checklane Hub — SSE broadcast of per-client snapshots after mutations.
 
-const { getSnapshot } = require('./hub-state');
 const { parseVisitId } = require('./hub-auth');
 
 /** @type {Map<string, Set<{ res: import('express').Response, user: object }>>} */
@@ -71,6 +70,11 @@ async function broadcastChat(visitId, payloadBuilder) {
 }
 
 async function sendSnapshotToClient(res, user, visitId) {
+  // Lazy require: hub-state <-> hub-broadcast form a require cycle. Pulling
+  // getSnapshot at module load time can capture `undefined` (it isn't exported
+  // yet mid-cycle), which silently breaks every snapshot push. Requiring it at
+  // call time guarantees hub-state has finished initializing.
+  const { getSnapshot } = require('./hub-state');
   const snapshot = await getSnapshot(visitId, { user });
   writeSnapshotEvent(res, snapshot);
 }
