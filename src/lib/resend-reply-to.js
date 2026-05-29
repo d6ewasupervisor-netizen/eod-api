@@ -2,8 +2,11 @@
 
 /**
  * Reply-To for Resend sends: explicit mailbox (e.g. access requester) first,
- * then authenticated user email, then RESEND_REPLY_TO for a deployment default.
+ * then authenticated user email, then RESEND_REPLY_TO env override, then the
+ * deployment default below.
  */
+
+const DEFAULT_REPLY_TO = 'tyson.gauthier@retailodyssey.com';
 
 function trimAddr(value) {
   if (value == null || value === '') return undefined;
@@ -16,7 +19,7 @@ function resolveResendReplyTo({ explicit, userEmail } = {}) {
     trimAddr(explicit) ||
     trimAddr(userEmail) ||
     trimAddr(process.env.RESEND_REPLY_TO) ||
-    undefined
+    DEFAULT_REPLY_TO
   );
 }
 
@@ -33,4 +36,4 @@ function looksLikeEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-module.exports = { resolveResendReplyTo, addReplyTo, looksLikeEmail };
+module.exports = { DEFAULT_REPLY_TO, resolveResendReplyTo, addReplyTo, looksLikeEmail };

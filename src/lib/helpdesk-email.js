@@ -10,6 +10,8 @@
  *   Reply-To: lead email (special-cased for Alexandra Wright)
  */
 
+const { resolveResendReplyTo } = require('./resend-reply-to');
+
 const HELPDESK_TO = 'kompass@retail-odyssey.com';
 const HELPDESK_CC_FIXED = [
   'mashabranner@retailodyssey.com',
@@ -46,7 +48,7 @@ function resolveHelpdeskRouting({ userName, userEmail } = {}) {
       testMode: true,
       to: HELPDESK_TEST_TO,
       cc: initiator ? [initiator] : [],
-      replyTo: initiator || undefined,
+      replyTo: resolveHelpdeskReplyTo({ userEmail: initiator }),
     };
   }
   return {
@@ -76,7 +78,7 @@ function resolveHelpdeskReplyTo({ userName, userEmail } = {}) {
   ) {
     return ALEXANDRA_WRIGHT_REPLY_TO;
   }
-  return userEmail ? String(userEmail).trim() : undefined;
+  return resolveResendReplyTo({ userEmail });
 }
 
 function buildHelpdeskCc(userEmail) {

@@ -754,7 +754,7 @@ async function start() {
       html,
       attachments,
     };
-    if (replyTo) emailPayload.reply_to = replyTo;
+    addReplyTo(emailPayload, { explicit: replyTo, userEmail });
 
     try {
       const { data, error } = await resend.emails.send(emailPayload);

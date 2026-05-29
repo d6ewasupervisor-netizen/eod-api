@@ -17,6 +17,7 @@ const {
   buildHelpdeskSubject,
   resolveHelpdeskRouting,
 } = require('./lib/helpdesk-email');
+const { addReplyTo } = require('./lib/resend-reply-to');
 
 let _resend = null;
 
@@ -347,10 +348,10 @@ async function sendHelpVerifiedEmail({
     from,
     to: routing.to,
     cc,
-    reply_to: replyTo,
     subject,
     html,
   };
+  addReplyTo(emailPayload, { explicit: replyTo, userEmail: raiserEmail });
   if (resendAttachments) emailPayload.attachments = resendAttachments;
 
   const { data, error } = await _resend.emails.send(emailPayload);
