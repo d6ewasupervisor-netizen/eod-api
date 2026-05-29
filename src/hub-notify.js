@@ -13,11 +13,9 @@ const {
 const { parsePogMeta, buildNisHelpdeskSubject } = require('./lib/pog-meta');
 const { resolveNisSetMetadata } = require('./lib/hub-fixture-catalog');
 const {
-  HELPDESK_TO,
   buildHelpdeskFromAddress,
   buildHelpdeskSubject,
-  buildHelpdeskCc,
-  resolveHelpdeskReplyTo,
+  resolveHelpdeskRouting,
 } = require('./lib/helpdesk-email');
 
 let _resend = null;
@@ -341,12 +339,13 @@ async function sendHelpVerifiedEmail({
 </body></html>`;
 
   const from = buildHelpdeskFromAddress(subjectStore, categoryNumber);
-  const replyTo = resolveHelpdeskReplyTo({ userName: raiserName, userEmail: raiserEmail });
-  const cc = buildHelpdeskCc(raiserEmail);
+  const routing = resolveHelpdeskRouting({ userName: raiserName, userEmail: raiserEmail });
+  const replyTo = routing.replyTo;
+  const cc = routing.cc;
 
   const emailPayload = {
     from,
-    to: HELPDESK_TO,
+    to: routing.to,
     cc,
     reply_to: replyTo,
     subject,
@@ -360,7 +359,7 @@ async function sendHelpVerifiedEmail({
     return { sent: false, error: error.message || String(error), subject };
   }
 
-  const recipients = [HELPDESK_TO, ...cc];
+  const recipients = [routing.to, ...cc];
 
   await logHubEmail({
     visitIdNum,

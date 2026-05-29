@@ -17,6 +17,46 @@ const HELPDESK_CC_FIXED = [
   'tyson.gauthier@retailodyssey.com',
 ];
 
+// --- Test-phase routing -----------------------------------------------------
+// While testing, KOMPASS help desk tickets must NOT reach the real help desk.
+// Instead they go to a single test inbox, CC the person who initiated the
+// ticket, and set Reply-To to that same initiator. Controlled by env so it can
+// be flipped off for go-live without a code change:
+//   HELPDESK_TEST_MODE=off   → normal delivery to kompass@retail-odyssey.com
+//   HELPDESK_TEST_TO=<email> → override the test inbox (default below)
+const HELPDESK_TEST_TO = (process.env.HELPDESK_TEST_TO || 'tyson.gauthier@retailodyssey.com').trim();
+const HELPDESK_TEST_MODE_OFF = new Set(['off', 'false', '0', 'no', 'disabled']);
+
+function isHelpdeskTestMode() {
+  const raw = String(process.env.HELPDESK_TEST_MODE ?? 'on').trim().toLowerCase();
+  return raw !== '' && !HELPDESK_TEST_MODE_OFF.has(raw);
+}
+
+/**
+ * Resolve the To / CC / Reply-To for a help desk ticket.
+ *
+ * In test mode: To = test inbox, CC = initiator, Reply-To = initiator.
+ * In normal mode: To = KOMPASS, CC = fixed team + initiator, Reply-To resolved
+ * from the initiator (special-cased for Alexandra Wright).
+ */
+function resolveHelpdeskRouting({ userName, userEmail } = {}) {
+  const initiator = userEmail ? String(userEmail).trim() : '';
+  if (isHelpdeskTestMode()) {
+    return {
+      testMode: true,
+      to: HELPDESK_TEST_TO,
+      cc: initiator ? [initiator] : [],
+      replyTo: initiator || undefined,
+    };
+  }
+  return {
+    testMode: false,
+    to: HELPDESK_TO,
+    cc: buildHelpdeskCc(userEmail),
+    replyTo: resolveHelpdeskReplyTo({ userName, userEmail }),
+  };
+}
+
 // Alexandra Wright always uses a personal address for Reply-To so replies
 // don't go to an FM inbox she cannot access.
 const ALEXANDRA_WRIGHT_REPLY_TO = 'a.wrigh1470@gmail.com';
@@ -201,6 +241,9 @@ function enforceAttachmentBudget(attachments) {
 
 module.exports = {
   HELPDESK_TO,
+  HELPDESK_TEST_TO,
+  isHelpdeskTestMode,
+  resolveHelpdeskRouting,
   buildHelpdeskFromAddress,
   resolveHelpdeskReplyTo,
   buildHelpdeskCc,

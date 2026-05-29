@@ -16,10 +16,8 @@ const { runFullSync } = require('./sas-sync');
 const { addReplyTo } = require('./lib/resend-reply-to');
 const { CHECKLANES_FROM } = require('./lib/checklanes-email');
 const {
-  HELPDESK_TO,
+  resolveHelpdeskRouting,
   buildHelpdeskFromAddress,
-  resolveHelpdeskReplyTo,
-  buildHelpdeskCc,
   buildHelpdeskSubject,
   buildHelpdeskHtml,
   enforceAttachmentBudget,
@@ -699,8 +697,9 @@ async function start() {
     const from = dbkey
       ? CHECKLANES_FROM
       : buildHelpdeskFromAddress(storeNumber, categoryNumber);
-    const replyTo = resolveHelpdeskReplyTo({ userName, userEmail });
-    const cc = buildHelpdeskCc(userEmail);
+    const routing = resolveHelpdeskRouting({ userName, userEmail });
+    const replyTo = routing.replyTo;
+    const cc = routing.cc;
     const subject = buildHelpdeskSubject({
       storeNumber,
       categoryNumber,
@@ -749,7 +748,7 @@ async function start() {
 
     const emailPayload = {
       from,
-      to: [HELPDESK_TO],
+      to: [routing.to],
       cc,
       subject,
       html,
