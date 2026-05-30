@@ -102,6 +102,7 @@ router.get('/stores', requireAuth, async (req, res) => {
       isAdmin: data.isAdmin,
       isSupervisor: data.isSupervisor,
       canViewPresence: data.canViewPresence,
+      organizeBySupervisor: data.organizeBySupervisor,
       stores: data.stores,
     });
   } catch (err) {

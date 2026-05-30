@@ -44,6 +44,129 @@ function storeRoleToRank(role) {
   return role === 'lead' ? 2 : 1;
 }
 
+function formatPersonLabel(value) {
+  const s = (value || '').trim();
+  if (!s) return null;
+  if (s.includes('@')) {
+    const local = s.split('@')[0];
+    return local
+      .split(/[._+-]/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ');
+  }
+  return s;
+}
+
+function supervisorGroupKey(supervisor) {
+  const s = (supervisor || '').trim().toLowerCase();
+  if (!s) return '__unassigned__';
+  return s;
+}
+
+function formatScheduleDate(value) {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+async function enrichStoresWithShiftMeta(stores) {
+  if (!stores.length) return;
+
+  const visitIds = [...new Set(
+    stores.map((s) => Number(s.defaultVisitId)).filter((id) => Number.isFinite(id)),
+  )];
+  const storeNumbers = stores.map((s) => s.storeNumber);
+
+  const scheduleByVisit = new Map();
+  const scheduleByStore = new Map();
+
+  if (visitIds.length) {
+    const { rows } = await query(
+      `SELECT DISTINCT ON (visit_id)
+         visit_id, store_number, visit_lead, supervisor, scheduled_date,
+         shift_start_time, shift_end_time, current_status
+       FROM schedules
+       WHERE visit_id = ANY($1::int[])
+       ORDER BY visit_id, scheduled_date DESC`,
+      [visitIds],
+    );
+    for (const row of rows) {
+      scheduleByVisit.set(Number(row.visit_id), row);
+    }
+  }
+
+  const numericStoreIds = storeNumbers
+    .map((sn) => Number(sn))
+    .filter((n) => Number.isFinite(n));
+
+  if (numericStoreIds.length) {
+    const { rows } = await query(
+      `SELECT DISTINCT ON (store_number)
+         store_number, visit_id, visit_lead, supervisor, scheduled_date,
+         shift_start_time, shift_end_time, current_status
+       FROM schedules
+       WHERE store_number = ANY($1::int[])
+       ORDER BY store_number, scheduled_date DESC`,
+      [numericStoreIds],
+    );
+    for (const row of rows) {
+      scheduleByStore.set(normalizeStoreNumber(row.store_number), row);
+    }
+  }
+
+  const leadByStore = new Map();
+  if (storeNumbers.length) {
+    const { rows } = await query(
+      `SELECT a.store_number, u.name, u.email
+       FROM hub_store_assignments a
+       JOIN hub_users u ON u.id = a.user_id
+       WHERE a.store_role = 'lead'
+         AND a.store_number = ANY($1::text[])
+         AND u.is_active = true`,
+      [storeNumbers],
+    );
+    for (const row of rows) {
+      leadByStore.set(normalizeStoreNumber(row.store_number), row);
+    }
+  }
+
+  for (const store of stores) {
+    const sched = (store.defaultVisitId
+      ? scheduleByVisit.get(Number(store.defaultVisitId))
+      : null) || scheduleByStore.get(store.storeNumber) || null;
+    const hubLeadRow = leadByStore.get(store.storeNumber);
+
+    const supervisorRaw = sched?.supervisor || null;
+    const visitLead = sched?.visit_lead || null;
+    const hubLead = hubLeadRow
+      ? { name: hubLeadRow.name, email: hubLeadRow.email }
+      : null;
+
+    store.shift = {
+      visitLead,
+      hubLead,
+      leadName: hubLead?.name || visitLead || null,
+      leadSource: hubLead?.name ? (visitLead && visitLead !== hubLead.name ? 'hub+schedule' : 'hub')
+        : (visitLead ? 'schedule' : null),
+      supervisor: supervisorRaw,
+      supervisorLabel: formatPersonLabel(supervisorRaw) || 'No supervisor assigned',
+      supervisorKey: supervisorGroupKey(supervisorRaw),
+      scheduledDate: sched?.scheduled_date
+        ? (sched.scheduled_date instanceof Date
+          ? sched.scheduled_date.toISOString().slice(0, 10)
+          : String(sched.scheduled_date).slice(0, 10))
+        : null,
+      scheduledDateLabel: formatScheduleDate(sched?.scheduled_date),
+      shiftStart: sched?.shift_start_time || null,
+      shiftEnd: sched?.shift_end_time || null,
+      status: sched?.current_status || null,
+      visitId: sched?.visit_id != null ? String(sched.visit_id) : store.defaultVisitId,
+    };
+  }
+}
+
 function isEnvSupervisor(email) {
   const e = normalizeEmail(email);
   return ADMIN_EMAILS.includes(e) || SUPERVISOR_EMAILS.includes(e);
@@ -190,10 +313,15 @@ async function listAccessibleStores(user) {
     }
   }
 
+  await enrichStoresWithShiftMeta(stores);
+
+  const viewAll = admin || canViewHubPresence(user);
+
   return {
     isAdmin: admin,
     isSupervisor: isEnvSupervisor(user.email),
     canViewPresence: canViewHubPresence(user),
+    organizeBySupervisor: viewAll,
     stores,
     hubUserId: hubUser.id,
   };
