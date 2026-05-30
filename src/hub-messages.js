@@ -3,6 +3,7 @@
 const { query } = require('./lib/db');
 const { parseVisitId } = require('./hub-auth');
 const { resolveStoreForVisit } = require('./lib/hub-fixture-catalog');
+const { enrichThreadsForVisit, getRepQueueStatus } = require('./hub-chat-queue');
 
 const MAX_BODY_LENGTH = 2000;
 const DEFAULT_MESSAGE_LIMIT = 100;
@@ -221,7 +222,71 @@ async function listThreads(visitId, userId, rank) {
     return tb - ta;
   });
 
-  return { threads, unreadTotal };
+  const enriched = await enrichThreadsForVisit(visitIdNum, userId, rank, threads);
+  let myQueueStatus = null;
+
+  if (rank < 2) {
+    const allForQueue = await loadLeadThreadSummaries(visitIdNum);
+    myQueueStatus = await getRepQueueStatus(visitIdNum, userId, allForQueue);
+    const mine = enriched.threads.find((t) => Number(t.repId) === Number(userId)) || enriched.threads[0];
+    if (mine) {
+      mine.waitingForLead = myQueueStatus.waitingForLead;
+      if (myQueueStatus.position != null) mine.queuePosition = myQueueStatus.position;
+    }
+  }
+
+  return {
+    threads: enriched.threads,
+    unreadTotal,
+    chatQueue: enriched.chatQueue,
+    myQueueStatus,
+  };
+}
+
+/** All rep threads on a visit (for rep-side queue position). */
+async function loadLeadThreadSummaries(visitIdNum) {
+  const result = await query(
+    `SELECT t.id, t.rep_id, t.created_at, hu.name AS rep_name
+     FROM hub_message_threads t
+     JOIN hub_users hu ON hu.id = t.rep_id
+     WHERE t.visit_id = $1`,
+    [visitIdNum],
+  );
+  const threadRows = result.rows;
+  if (!threadRows.length) return [];
+
+  const threadIds = threadRows.map((r) => r.id).filter(Boolean);
+  const lastMsgResult = await query(
+    `SELECT DISTINCT ON (m.thread_id)
+            m.thread_id, m.id AS message_id, m.body, m.message_type, m.sender_id,
+            m.created_at, su.name AS sender_name
+     FROM hub_messages m
+     JOIN hub_users su ON su.id = m.sender_id
+     WHERE m.thread_id = ANY($1::int[])
+     ORDER BY m.thread_id, m.id DESC`,
+    [threadIds],
+  );
+  const lastByThread = new Map(lastMsgResult.rows.map((r) => [r.thread_id, r]));
+
+  return threadRows.map((row) => {
+    const last = lastByThread.get(row.id);
+    return {
+      id: row.id,
+      repId: row.rep_id,
+      repName: row.rep_name,
+      unreadCount: 0,
+      lastMessage: last
+        ? {
+            id: last.message_id,
+            body: last.body,
+            messageType: last.message_type,
+            senderId: last.sender_id,
+            senderName: last.sender_name,
+            createdAt: last.created_at.toISOString(),
+          }
+        : null,
+    };
+  });
 }
 
 async function getThreadMessages(visitId, threadId, userId, rank, options = {}) {
@@ -376,8 +441,13 @@ async function markThreadRead(visitId, threadId, userId, rank, lastMessageId) {
 }
 
 async function getChatSummary(visitId, userId, rank) {
-  const { threads, unreadTotal } = await listThreads(visitId, userId, rank);
-  return { unreadTotal, threadCount: threads.length };
+  const { threads, unreadTotal, chatQueue, myQueueStatus } = await listThreads(visitId, userId, rank);
+  return {
+    unreadTotal,
+    threadCount: threads.length,
+    queueWaitingCount: chatQueue?.waitingCount ?? myQueueStatus?.waitingCount ?? 0,
+    myQueuePosition: myQueueStatus?.position ?? null,
+  };
 }
 
 module.exports = {
