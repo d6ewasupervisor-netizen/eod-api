@@ -14,6 +14,11 @@ const {
 } = require('../hub-store-access');
 const { listFixturesForStore } = require('../lib/hub-fixture-catalog');
 const { touchSession, removeSession, listSessions } = require('../hub-presence');
+const {
+  recordPresenceHistory,
+  closeSessionHistory,
+  listPresenceHistory,
+} = require('../hub-presence-history');
 
 const { query } = require('../lib/db');
 
@@ -27,7 +32,7 @@ router.post('/presence', requireAuth, async (req, res) => {
     }
 
     const hubUser = await resolveHubUser(req.user);
-    touchSession(sessionId, {
+    const session = touchSession(sessionId, {
       email: req.user.email,
       name: hubUser.name || req.user.email,
       hubUserId: hubUser.id,
@@ -37,6 +42,11 @@ router.post('/presence', requireAuth, async (req, res) => {
       view: req.body?.view,
       detail: req.body?.detail,
     });
+    if (session) {
+      recordPresenceHistory(session).catch((err) => {
+        console.error('[hub-presence] history record failed:', err.message);
+      });
+    }
 
     return res.json({ ok: true });
   } catch (err) {
@@ -47,8 +57,38 @@ router.post('/presence', requireAuth, async (req, res) => {
 
 router.delete('/presence', requireAuth, async (req, res) => {
   const sessionId = (req.body?.sessionId || req.query?.sessionId || '').trim();
-  if (sessionId) removeSession(sessionId);
+  if (sessionId) {
+    removeSession(sessionId);
+    closeSessionHistory(sessionId).catch((err) => {
+      console.error('[hub-presence] history close failed:', err.message);
+    });
+  }
   return res.json({ ok: true });
+});
+
+router.get('/presence/history', requireAuth, async (req, res) => {
+  try {
+    if (!canViewHubPresence(req.user)) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+
+    const entries = await listPresenceHistory({
+      hours: req.query.hours,
+      limit: req.query.limit,
+      storeNumber: req.query.storeNumber,
+      email: req.query.email,
+    });
+
+    return res.json({
+      ok: true,
+      generatedAt: new Date().toISOString(),
+      hours: req.query.hours,
+      entries,
+    });
+  } catch (err) {
+    console.error('[hub-presence] history list failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load presence history' });
+  }
 });
 
 router.get('/presence', requireAuth, async (req, res) => {
