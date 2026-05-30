@@ -11,6 +11,7 @@ const {
   removeStoreAssignment,
   normalizeStoreNumber,
 } = require('../hub-store-access');
+const { listFixturesForStore } = require('../lib/hub-fixture-catalog');
 
 const { query } = require('../lib/db');
 
@@ -29,6 +30,28 @@ router.get('/stores', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[hub-stores] list failed:', err.message);
     return res.status(500).json({ error: 'Failed to load stores' });
+  }
+});
+
+router.get('/stores/:storeNumber/fixtures', requireAuth, async (req, res) => {
+  try {
+    const storeNumber = normalizeStoreNumber(req.params.storeNumber);
+    if (!storeNumber) return res.status(400).json({ error: 'Invalid store number' });
+
+    const fixtures = listFixturesForStore(storeNumber);
+    if (!fixtures) {
+      return res.status(404).json({ error: 'No fixture catalog for this store' });
+    }
+
+    return res.json({
+      storeNumber,
+      fixtures,
+      fixtureCount: fixtures.length,
+      laneCount: new Set(fixtures.map((f) => f.lane)).size,
+    });
+  } catch (err) {
+    console.error('[hub-stores] fixtures failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load store fixtures' });
   }
 });
 

@@ -62,9 +62,15 @@ function loadCatalog(storeNumber) {
     if (!byDbkey.has(dk)) byDbkey.set(dk, fixture);
   }
 
-  const catalog = { storeNumber: storeKey, byLaneDbkey, byDbkey };
+  const catalog = { storeNumber: storeKey, byLaneDbkey, byDbkey, fixtures };
   catalogCache.set(storeKey, catalog);
   return catalog;
+}
+
+function listFixturesForStore(storeNumber) {
+  const catalog = loadCatalog(storeNumber);
+  if (!catalog) return null;
+  return catalog.fixtures.slice();
 }
 
 function lookupFixture({ storeNumber, lane, dbkey }) {
@@ -140,4 +146,5 @@ module.exports = {
   enrichNisPayload,
   resolveNisSetMetadata,
   loadCatalog,
+  listFixturesForStore,
 };

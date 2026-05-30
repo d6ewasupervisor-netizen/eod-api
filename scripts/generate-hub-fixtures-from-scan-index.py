@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+"""Build hub-fixtures/*.json + section_state seed SQL from checklane scan_index."""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+SCAN_INDEX_DIR = ROOT.parent / "Checklanes" / "Checklanes" / "checklane-deploy" / "scan_index"
+AUDIT_MANIFEST = (
+    ROOT.parent / "Checklanes" / "Checklanes" / "checklane-deploy" / "audit" / "_manifest_163.json"
+)
+FIXTURES_DIR = ROOT / "src" / "data" / "hub-fixtures"
+MIGRATION_PATH = ROOT / "src" / "migrations" / "026_hub_section_state_from_fixtures.sql"
+SEED_PATH = ROOT / "src" / "data" / "kompass-cycle-242292-seed.json"
+
+TARGET_STORES = [
+    5, 13, 19, 23, 24, 28, 31, 53, 70, 90, 171, 180, 209, 215, 225,
+    325, 328, 355, 390, 417, 459, 603, 604, 608, 658, 665, 682,
+]
+
+
+def load_action_map() -> dict[str, str]:
+    if not AUDIT_MANIFEST.exists():
+        return {}
+    data = json.loads(AUDIT_MANIFEST.read_text(encoding="utf-8"))
+    out: dict[str, str] = {}
+    for dbkey, meta in (data.get("dbkeys") or {}).items():
+        ssn = meta.get("ssn") or ""
+        m = re.search(r"_D03_(.+)$", ssn)
+        if m:
+            out[str(dbkey)] = m.group(1)
+    return out
+
+
+def lane_code(short: str) -> str | None:
+    s = (short or "").strip().upper()
+    if s.isdigit():
+        n = int(s)
+        return f"6{n:02d}" if n < 100 else f"6{n}"
+    if s in {"AU", "FO"}:
+        return f"69{0 if s == 'AU' else 8}"
+    if s == "?":
+        return "690"
+    return None
+
+
+def infer_side(name: str) -> str:
+    upper = (name or "").upper()
+    if "CUSTOMER LEFT" in upper or " LEFT" in upper:
+        return "L"
+    if "CUSTOMER RIGHT" in upper or " RIGHT" in upper:
+        return "R"
+    return "E"
+
+
+def classify_type(name: str, action: str | None) -> str:
+    upper = (name or "").upper()
+    act = action or ""
+    if "COOLER" in upper and "ENDCAP" not in upper:
+        return "cooler"
+    if "ENDCAP" in upper or "END CAP" in upper:
+        return "endcap"
+    if "CIGARETTE" in upper:
+        return "cigarette"
+    if "BELTED" in upper or "SCO" in upper:
+        return "belted_sco"
+    if "USCAN" in upper and "RETRO" in upper:
+        return "side_shelf"
+    if "USCAN" in upper:
+        return "uscan_stand"
+    if "QUE" in upper or "QUEUE" in upper:
+        return "queue"
+    if "LIBERTY" in upper and "TAIL" in upper:
+        return "liberty_tail"
+    if act.startswith("C082"):
+        return "cooler"
+    if act.startswith("C121"):
+        return "cigarette"
+    if act.startswith("C201"):
+        return "register"
+    return "unclassified"
+
+
+def on_manifest(name: str, dbkey: str | None) -> bool:
+    if not dbkey:
+        return False
+    upper = (name or "").upper()
+    if "FRONT OFFICE" in upper or "GM FRONT OTHER" in upper:
+        return False
+    if upper.strip().startswith("AUTH ONLY"):
+        return False
+    return True
+
+
+def build_fixtures(store: int, scan: dict, action_map: dict[str, str]) -> list[dict]:
+    lanes = scan.get("lanes") or {}
+    pog_desc = scan.get("pogDesc") or {}
+    fixtures: list[dict] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    for dbkey, lane_rows in lanes.items():
+        name = pog_desc.get(dbkey) or f"POG {dbkey}"
+        action = action_map.get(str(dbkey))
+        if not action:
+            # Generic action stub — enough for layout + dbkey lookup.
+            action = f"C201_V000_F000_MX"
+        manifest = f"D701_L{store:05d}_D03_{action}_{dbkey}"
+        side = infer_side(name)
+        ftype = classify_type(name, action)
+        manifest_flag = on_manifest(name, dbkey)
+
+        for row in lane_rows:
+            lc = lane_code(row.get("s") or row.get("d", ""))
+            if not lc:
+                continue
+            key = (lc, str(dbkey), action)
+            if key in seen:
+                continue
+            seen.add(key)
+            fixtures.append(
+                {
+                    "lane": lc,
+                    "name": name,
+                    "action": action,
+                    "dbkey": str(dbkey),
+                    "manifest_pog_id": manifest if manifest_flag else None,
+                    "on_manifest": manifest_flag,
+                    "type": ftype,
+                    "side": side,
+                }
+            )
+
+    fixtures.sort(key=lambda f: (f["lane"], f["name"]))
+    return fixtures
+
+
+def visit_id_for_store(store: int) -> int:
+    return int("99999" + str(store).zfill(3)[-5:])
+
+
+def default_visit_id(store: int, seed_stores: dict[int, int]) -> int:
+    return seed_stores.get(store) or visit_id_for_store(store)
+
+
+def sql_str(value) -> str:
+    if value is None:
+        return "NULL"
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def render_section_state_sql(store_fixtures: dict[int, list[dict]], seed_stores: dict[int, int]) -> str:
+    lines = [
+        "-- Bootstrap section_state rows from hub fixture catalogs (27 FM stores).",
+        "-- Generated by scripts/generate-hub-fixtures-from-scan-index.py",
+        "",
+    ]
+    for store in TARGET_STORES:
+        fixtures = store_fixtures.get(store) or []
+        if not fixtures:
+            continue
+        visit_id = default_visit_id(store, seed_stores)
+        manifest = [f for f in fixtures if f.get("on_manifest") and f.get("dbkey")]
+        if not manifest:
+            continue
+        lines.append(f"-- Store {store} visit {visit_id} ({len(manifest)} sections)")
+        for f in manifest:
+            lines.append(
+                "INSERT INTO section_state (visit_id, lane, dbkey, state) "
+                f"VALUES ({visit_id}, {sql_str(f['lane'])}, {sql_str(f['dbkey'])}, 'not_started') "
+                "ON CONFLICT (visit_id, lane, dbkey) DO NOTHING;"
+            )
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def main() -> None:
+    action_map = load_action_map()
+    FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
+
+    seed_stores: dict[int, int] = {}
+    if SEED_PATH.exists():
+        seed = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+        for row in seed.get("stores") or []:
+            sn = int(row["store_number"])
+            seed_stores[sn] = int(row["default_visit_id"])
+
+    store_fixtures: dict[int, list[dict]] = {}
+    summary = []
+
+    for store in TARGET_STORES:
+        path = SCAN_INDEX_DIR / f"{store}.json"
+        if not path.exists():
+            print(f"WARN missing scan_index for store {store}")
+            continue
+        scan = json.loads(path.read_text(encoding="utf-8"))
+        fixtures = build_fixtures(store, scan, action_map)
+        store_fixtures[store] = fixtures
+        out = {"storeNumber": str(store), "fixtures": fixtures}
+        out_path = FIXTURES_DIR / f"{store}.json"
+        out_path.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+        lanes = len({f["lane"] for f in fixtures})
+        summary.append((store, len(fixtures), lanes))
+
+    # Store 163 keeps the hand-synced catalog (sync-hub-fixtures.js / hub.html).
+
+    print(f"Wrote {len(summary)} fixture catalogs -> {FIXTURES_DIR}")
+    print(f"Wrote {MIGRATION_PATH.name}")
+    for store, count, lanes in summary:
+        print(f"  FM {store}: {count} fixtures, {lanes} lanes")
+
+
+if __name__ == "__main__":
+    main()
