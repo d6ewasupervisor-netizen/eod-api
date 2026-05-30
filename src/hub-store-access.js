@@ -58,6 +58,11 @@ async function isHubAdmin(user, hubUserRow) {
   return false;
 }
 
+/** Owner-only live presence (both primary operator accounts). */
+function canViewHubPresence(user) {
+  return BUILTIN_HUB_ADMINS.has(normalizeEmail(user?.email));
+}
+
 async function getSupervisorStoreNumbers(email) {
   const e = normalizeEmail(email);
   if (!e) return [];
@@ -116,6 +121,7 @@ async function listAccessibleStores(user) {
       return {
         isAdmin: false,
         isSupervisor: true,
+        canViewPresence: canViewHubPresence(user),
         stores: [],
         hubUserId: hubUser.id,
       };
@@ -145,6 +151,7 @@ async function listAccessibleStores(user) {
       return {
         isAdmin: false,
         isSupervisor: false,
+        canViewPresence: canViewHubPresence(user),
         stores: [],
         hubUserId: hubUser.id,
       };
@@ -186,6 +193,7 @@ async function listAccessibleStores(user) {
   return {
     isAdmin: admin,
     isSupervisor: isEnvSupervisor(user.email),
+    canViewPresence: canViewHubPresence(user),
     stores,
     hubUserId: hubUser.id,
   };
@@ -366,6 +374,7 @@ function requireVisitAccess() {
 module.exports = {
   normalizeStoreNumber,
   isHubAdmin,
+  canViewHubPresence,
   listAccessibleStores,
   userHasVisitAccess,
   storeRankForUser,

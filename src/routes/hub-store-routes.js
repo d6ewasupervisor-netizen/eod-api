@@ -6,16 +6,92 @@ const { resolveHubUser } = require('../hub-auth');
 const {
   listAccessibleStores,
   canManageStore,
+  canViewHubPresence,
   listStoreAssignments,
   upsertStoreAssignment,
   removeStoreAssignment,
   normalizeStoreNumber,
 } = require('../hub-store-access');
 const { listFixturesForStore } = require('../lib/hub-fixture-catalog');
+const { touchSession, removeSession, listSessions } = require('../hub-presence');
 
 const { query } = require('../lib/db');
 
 const router = express.Router();
+
+router.post('/presence', requireAuth, async (req, res) => {
+  try {
+    const sessionId = (req.body?.sessionId || '').trim();
+    if (!sessionId || sessionId.length > 128) {
+      return res.status(400).json({ error: 'sessionId is required' });
+    }
+
+    const hubUser = await resolveHubUser(req.user);
+    touchSession(sessionId, {
+      email: req.user.email,
+      name: hubUser.name || req.user.email,
+      hubUserId: hubUser.id,
+      page: req.body?.page,
+      storeNumber: req.body?.storeNumber,
+      visitId: req.body?.visitId,
+      view: req.body?.view,
+      detail: req.body?.detail,
+    });
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[hub-presence] touch failed:', err.message);
+    return res.status(500).json({ error: 'Failed to update presence' });
+  }
+});
+
+router.delete('/presence', requireAuth, async (req, res) => {
+  const sessionId = (req.body?.sessionId || req.query?.sessionId || '').trim();
+  if (sessionId) removeSession(sessionId);
+  return res.json({ ok: true });
+});
+
+router.get('/presence', requireAuth, async (req, res) => {
+  try {
+    if (!canViewHubPresence(req.user)) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+
+    const sessions = listSessions();
+    const storeNumbers = [...new Set(sessions.map((s) => s.storeNumber).filter(Boolean))];
+    const storeNames = new Map();
+
+    if (storeNumbers.length) {
+      const { rows } = await query(
+        `SELECT store_number, name FROM hub_stores WHERE store_number = ANY($1::text[])`,
+        [storeNumbers],
+      );
+      for (const row of rows) {
+        storeNames.set(String(row.store_number), row.name);
+      }
+    }
+
+    const enriched = sessions.map((session) => {
+      const sn = session.storeNumber;
+      const padded = sn ? String(sn).padStart(5, '0') : null;
+      return {
+        ...session,
+        storeName: sn
+          ? (storeNames.get(sn) || storeNames.get(String(Number(sn))) || `Store ${padded}`)
+          : null,
+      };
+    });
+
+    return res.json({
+      ok: true,
+      generatedAt: new Date().toISOString(),
+      sessions: enriched,
+    });
+  } catch (err) {
+    console.error('[hub-presence] list failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load presence' });
+  }
+});
 
 router.get('/stores', requireAuth, async (req, res) => {
   try {
@@ -25,6 +101,7 @@ router.get('/stores', requireAuth, async (req, res) => {
       email: req.user.email,
       isAdmin: data.isAdmin,
       isSupervisor: data.isSupervisor,
+      canViewPresence: data.canViewPresence,
       stores: data.stores,
     });
   } catch (err) {
