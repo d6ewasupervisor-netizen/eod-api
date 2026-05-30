@@ -20,6 +20,9 @@
 		},
 		{
 			"path": "../district6"
+		},
+		{
+			"path": "../kompass-netcap"
 		}
 	],
 	"settings": {}
