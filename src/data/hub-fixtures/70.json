@@ -1,12 +1,25 @@
 {
   "storeNumber": "70",
+  "manifestEventDate": "2026-05-31",
+  "checklaneSetCount": 15,
+  "additionalSetCount": 18,
   "fixtures": [
+    {
+      "lane": "600",
+      "name": "CKLN REGISTER ENDCAP HYDRATION COOLER - LIBERTY LANES",
+      "action": "C082_V861_I021_MX",
+      "dbkey": "9007685",
+      "manifest_pog_id": "D701_L00070_D01_C082_V861_I021_MX_9007685",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
     {
       "lane": "601",
       "name": "CKLN USCAN RETRO FIT CUSTOMER LEFT (SECONDARY LOCATION)",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VS03_F024_MX",
       "dbkey": "8844800",
-      "manifest_pog_id": "D701_L00070_D03_C201_V000_F000_MX_8844800",
+      "manifest_pog_id": "D701_L00070_D03_C201_VS03_F024_MX_8844800",
       "on_manifest": true,
       "type": "side_shelf",
       "side": "L"
@@ -14,9 +27,9 @@
     {
       "lane": "601",
       "name": "CKLN USCAN RETRO FIT CUSTOMER RIGHT (SECONDARY LOCATION)",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VS04_F024_MX",
       "dbkey": "8844801",
-      "manifest_pog_id": "D701_L00070_D03_C201_V000_F000_MX_8844801",
+      "manifest_pog_id": "D701_L00070_D03_C201_VS04_F024_MX_8844801",
       "on_manifest": true,
       "type": "side_shelf",
       "side": "R"
@@ -34,9 +47,9 @@
     {
       "lane": "602",
       "name": "CKLN USCAN RETRO FIT CUSTOMER RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VS02_F024_MX",
       "dbkey": "8844799",
-      "manifest_pog_id": "D701_L00070_D03_C201_V000_F000_MX_8844799",
+      "manifest_pog_id": "D701_L00070_D03_C201_VS02_F024_MX_8844799",
       "on_manifest": true,
       "type": "side_shelf",
       "side": "R"
@@ -94,9 +107,9 @@
     {
       "lane": "605",
       "name": "CKLN TRADITIONAL LIBERTY GM-HBC ENDCAP",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V435_I024_MX",
       "dbkey": "8885979",
-      "manifest_pog_id": "D701_L00070_D03_C201_V000_F000_MX_8885979",
+      "manifest_pog_id": "D701_L00070_D03_C201_V435_I024_MX_8885979",
       "on_manifest": true,
       "type": "endcap",
       "side": "E"
@@ -204,9 +217,9 @@
     {
       "lane": "611",
       "name": "CKLN QUE KIT C - MEAT SNACK CUSTOMER LEFT ZINE RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ27_F002_MX",
       "dbkey": "8920132",
-      "manifest_pog_id": "D701_L00070_D03_C201_V000_F000_MX_8920132",
+      "manifest_pog_id": "D701_L00070_D03_C201_VQ27_F002_MX_8920132",
       "on_manifest": true,
       "type": "queue",
       "side": "L"
@@ -224,9 +237,9 @@
     {
       "lane": "614",
       "name": "CKLN QUE MERCH WALL CUSTOMER RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ31_F003_MX",
       "dbkey": "9086459",
-      "manifest_pog_id": "D701_L00070_D03_C201_V000_F000_MX_9086459",
+      "manifest_pog_id": "D701_L00070_D03_C201_VQ31_F003_MX_9086459",
       "on_manifest": true,
       "type": "queue",
       "side": "R"
@@ -234,9 +247,9 @@
     {
       "lane": "620",
       "name": "CKLN QUE KIT C ZINE CUSTOMER LEFT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ49_F002_MX",
       "dbkey": "8920140",
-      "manifest_pog_id": "D701_L00070_D03_C201_V000_F000_MX_8920140",
+      "manifest_pog_id": "D701_L00070_D03_C201_VQ49_F002_MX_8920140",
       "on_manifest": true,
       "type": "queue",
       "side": "L"
@@ -244,9 +257,9 @@
     {
       "lane": "620",
       "name": "CKLN QUE MERCH WALL CUSTOMER RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ31_F003_MX",
       "dbkey": "9086459",
-      "manifest_pog_id": "D701_L00070_D03_C201_V000_F000_MX_9086459",
+      "manifest_pog_id": "D701_L00070_D03_C201_VQ31_F003_MX_9086459",
       "on_manifest": true,
       "type": "queue",
       "side": "R"
@@ -258,7 +271,7 @@
       "dbkey": "7498138",
       "manifest_pog_id": "D701_L00070_D03_C201_V000_F000_MX_7498138",
       "on_manifest": true,
-      "type": "register",
+      "type": "checkstand",
       "side": "E"
     },
     {
@@ -268,7 +281,7 @@
       "dbkey": "9044474",
       "manifest_pog_id": "D701_L00070_D03_C201_V946_I002_MX_9044474",
       "on_manifest": true,
-      "type": "register",
+      "type": "checkstand",
       "side": "E"
     },
     {
@@ -278,7 +291,7 @@
       "dbkey": "9009221",
       "manifest_pog_id": "D701_L00070_D03_C201_V947_I002_MX_9009221",
       "on_manifest": true,
-      "type": "register",
+      "type": "checkstand",
       "side": "E"
     },
     {

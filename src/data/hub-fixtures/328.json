@@ -1,6 +1,19 @@
 {
   "storeNumber": "328",
+  "manifestEventDate": "2026-05-31",
+  "checklaneSetCount": 16,
+  "additionalSetCount": 19,
   "fixtures": [
+    {
+      "lane": "600",
+      "name": "CKLN REGISTER ENDCAP HYDRATION COOLER - LIBERTY LANES",
+      "action": "C082_V861_I021_MX",
+      "dbkey": "9007685",
+      "manifest_pog_id": "D701_L00328_D01_C082_V861_I021_MX_9007685",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
     {
       "lane": "601",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 125 INCH",
@@ -134,9 +147,9 @@
     {
       "lane": "607",
       "name": "CKLN TRADITIONAL LIBERTY GM-HBC ENDCAP",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V435_I024_MX",
       "dbkey": "8885979",
-      "manifest_pog_id": "D701_L00328_D03_C201_V000_F000_MX_8885979",
+      "manifest_pog_id": "D701_L00328_D03_C201_V435_I024_MX_8885979",
       "on_manifest": true,
       "type": "endcap",
       "side": "E"
@@ -254,9 +267,9 @@
     {
       "lane": "617",
       "name": "CKLN QUE KIT K NO SIDES",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ44_F004_MX",
       "dbkey": "8920138",
-      "manifest_pog_id": "D701_L00328_D03_C201_V000_F000_MX_8920138",
+      "manifest_pog_id": "D701_L00328_D03_C201_VQ44_F004_MX_8920138",
       "on_manifest": true,
       "type": "queue",
       "side": "E"
@@ -274,9 +287,9 @@
     {
       "lane": "619",
       "name": "CKLN QUE MERCH WALL CUSTOMER RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ31_F003_MX",
       "dbkey": "9086459",
-      "manifest_pog_id": "D701_L00328_D03_C201_V000_F000_MX_9086459",
+      "manifest_pog_id": "D701_L00328_D03_C201_VQ31_F003_MX_9086459",
       "on_manifest": true,
       "type": "queue",
       "side": "R"
@@ -284,9 +297,9 @@
     {
       "lane": "621",
       "name": "CKLN QUE KIT C - MEAT SNACK CUSTOMER LEFT ZINE RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ27_F002_MX",
       "dbkey": "8920132",
-      "manifest_pog_id": "D701_L00328_D03_C201_V000_F000_MX_8920132",
+      "manifest_pog_id": "D701_L00328_D03_C201_VQ27_F002_MX_8920132",
       "on_manifest": true,
       "type": "queue",
       "side": "L"
@@ -298,7 +311,7 @@
       "dbkey": "7498138",
       "manifest_pog_id": "D701_L00328_D03_C201_V000_F000_MX_7498138",
       "on_manifest": true,
-      "type": "register",
+      "type": "checkstand",
       "side": "E"
     }
   ]

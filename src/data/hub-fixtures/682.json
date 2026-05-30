@@ -1,12 +1,25 @@
 {
   "storeNumber": "682",
+  "manifestEventDate": "2026-05-31",
+  "checklaneSetCount": 19,
+  "additionalSetCount": 33,
   "fixtures": [
+    {
+      "lane": "600",
+      "name": "CKLN REGISTER ENDCAP HYDRATION COOLER - LIBERTY LANES - SUPER NATURAL",
+      "action": "C082_V841_I021_MX",
+      "dbkey": "9007693",
+      "manifest_pog_id": "D701_L00682_D01_C082_V841_I021_MX_9007693",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
     {
       "lane": "601",
       "name": "CKLN QUE KIT C - MEAT SNACK CUSTOMER LEFT ZINE RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ27_F002_MX",
       "dbkey": "8920132",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_8920132",
+      "manifest_pog_id": "D701_L00682_D03_C201_VQ27_F002_MX_8920132",
       "on_manifest": true,
       "type": "queue",
       "side": "L"
@@ -23,7 +36,7 @@
     },
     {
       "lane": "602",
-      "name": "CKLN USCAN KIT ATOSHIBA3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT SNACK",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT SNACK",
       "action": "C201_VU70_I078_MX",
       "dbkey": "9101042",
       "manifest_pog_id": "D701_L00682_D03_C201_VU70_I078_MX_9101042",
@@ -44,9 +57,9 @@
     {
       "lane": "604",
       "name": "CKLN QUE MERCH WALL CUSTOMER RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ31_F006_MX",
       "dbkey": "9086462",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9086462",
+      "manifest_pog_id": "D701_L00682_D03_C201_VQ31_F006_MX_9086462",
       "on_manifest": true,
       "type": "queue",
       "side": "R"
@@ -63,7 +76,7 @@
     },
     {
       "lane": "605",
-      "name": "CKLN USCAN KIT ATOSHIBA3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER LEFT SNACK",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER LEFT SNACK",
       "action": "C201_VU73_I078_MX",
       "dbkey": "9101043",
       "manifest_pog_id": "D701_L00682_D03_C201_VU73_I078_MX_9101043",
@@ -84,9 +97,9 @@
     {
       "lane": "607",
       "name": "CKLN QUE KIT K NO SIDES",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ44_F004_MX",
       "dbkey": "8920138",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_8920138",
+      "manifest_pog_id": "D701_L00682_D03_C201_VQ44_F004_MX_8920138",
       "on_manifest": true,
       "type": "queue",
       "side": "E"
@@ -113,7 +126,7 @@
     },
     {
       "lane": "608",
-      "name": "CKLN USCAN KIT ATOSHIBA3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT SNACK",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT SNACK",
       "action": "C201_VU70_I078_MX",
       "dbkey": "9101042",
       "manifest_pog_id": "D701_L00682_D03_C201_VU70_I078_MX_9101042",
@@ -153,7 +166,7 @@
     },
     {
       "lane": "611",
-      "name": "CKLN USCAN KIT ATOSHIBA3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER LEFT SNACK",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER LEFT SNACK",
       "action": "C201_VU73_I078_MX",
       "dbkey": "9101043",
       "manifest_pog_id": "D701_L00682_D03_C201_VU73_I078_MX_9101043",
@@ -174,9 +187,9 @@
     {
       "lane": "613",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00682_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -194,9 +207,9 @@
     {
       "lane": "614",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00682_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -204,9 +217,9 @@
     {
       "lane": "614",
       "name": "CKLN TRADITIONAL LIBERTY REAR FACING COOLER ENDCAP NATURAL",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VN02_I024_MX",
       "dbkey": "9087993",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9087993",
+      "manifest_pog_id": "D701_L00682_D03_C201_VN02_I024_MX_9087993",
       "on_manifest": true,
       "type": "endcap",
       "side": "E"
@@ -224,9 +237,9 @@
     {
       "lane": "615",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00682_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -234,9 +247,9 @@
     {
       "lane": "616",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00682_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -244,9 +257,9 @@
     {
       "lane": "616",
       "name": "CKLN TRADITIONAL LIBERTY REAR FACING COOLER ENDCAP - B NATURAL",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VN01_I024_MX",
       "dbkey": "9087992",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9087992",
+      "manifest_pog_id": "D701_L00682_D03_C201_VN01_I024_MX_9087992",
       "on_manifest": true,
       "type": "endcap",
       "side": "E"
@@ -264,9 +277,9 @@
     {
       "lane": "617",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00682_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -274,9 +287,9 @@
     {
       "lane": "618",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00682_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -284,9 +297,9 @@
     {
       "lane": "618",
       "name": "CKLN TRADITIONAL LIBERTY REAR FACING COOLER ENDCAP NATURAL",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VN02_I024_MX",
       "dbkey": "9087993",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9087993",
+      "manifest_pog_id": "D701_L00682_D03_C201_VN02_I024_MX_9087993",
       "on_manifest": true,
       "type": "endcap",
       "side": "E"
@@ -294,9 +307,9 @@
     {
       "lane": "619",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00682_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -314,9 +327,9 @@
     {
       "lane": "620",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00682_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -324,9 +337,9 @@
     {
       "lane": "620",
       "name": "CKLN TRADITIONAL LIBERTY REAR FACING COOLER ENDCAP - B NATURAL",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VN01_I024_MX",
       "dbkey": "9087992",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9087992",
+      "manifest_pog_id": "D701_L00682_D03_C201_VN01_I024_MX_9087992",
       "on_manifest": true,
       "type": "endcap",
       "side": "E"
@@ -334,9 +347,9 @@
     {
       "lane": "621",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00682_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -354,9 +367,9 @@
     {
       "lane": "622",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00682_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -364,9 +377,9 @@
     {
       "lane": "622",
       "name": "CKLN TRADITIONAL LIBERTY REAR FACING COOLER ENDCAP NATURAL",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VN02_I024_MX",
       "dbkey": "9087993",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9087993",
+      "manifest_pog_id": "D701_L00682_D03_C201_VN02_I024_MX_9087993",
       "on_manifest": true,
       "type": "endcap",
       "side": "E"
@@ -374,9 +387,9 @@
     {
       "lane": "624",
       "name": "CKLN QUE KIT C - MEAT SNACK CUSTOMER LEFT ZINE RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ27_F002_MX",
       "dbkey": "8920132",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_8920132",
+      "manifest_pog_id": "D701_L00682_D03_C201_VQ27_F002_MX_8920132",
       "on_manifest": true,
       "type": "queue",
       "side": "L"
@@ -394,9 +407,9 @@
     {
       "lane": "627",
       "name": "CKLN QUE KIT C ZINE CUSTOMER LEFT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ49_F002_MX",
       "dbkey": "8920140",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_8920140",
+      "manifest_pog_id": "D701_L00682_D03_C201_VQ49_F002_MX_8920140",
       "on_manifest": true,
       "type": "queue",
       "side": "L"
@@ -404,9 +417,9 @@
     {
       "lane": "627",
       "name": "CKLN QUE MERCH WALL CUSTOMER RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ31_F006_MX",
       "dbkey": "9086462",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_9086462",
+      "manifest_pog_id": "D701_L00682_D03_C201_VQ31_F006_MX_9086462",
       "on_manifest": true,
       "type": "queue",
       "side": "R"
@@ -414,9 +427,9 @@
     {
       "lane": "627",
       "name": "CKLN USCAN RETRO FIT CUSTOMER LEFT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VS01_F024_MX",
       "dbkey": "8844844",
-      "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_8844844",
+      "manifest_pog_id": "D701_L00682_D03_C201_VS01_F024_MX_8844844",
       "on_manifest": true,
       "type": "side_shelf",
       "side": "L"
@@ -428,7 +441,7 @@
       "dbkey": "7498138",
       "manifest_pog_id": "D701_L00682_D03_C201_V000_F000_MX_7498138",
       "on_manifest": true,
-      "type": "register",
+      "type": "checkstand",
       "side": "E"
     },
     {
@@ -438,7 +451,7 @@
       "dbkey": "9044474",
       "manifest_pog_id": "D701_L00682_D03_C201_V946_I002_MX_9044474",
       "on_manifest": true,
-      "type": "register",
+      "type": "checkstand",
       "side": "E"
     },
     {
@@ -448,7 +461,7 @@
       "dbkey": "9009221",
       "manifest_pog_id": "D701_L00682_D03_C201_V947_I002_MX_9009221",
       "on_manifest": true,
-      "type": "register",
+      "type": "checkstand",
       "side": "E"
     },
     {

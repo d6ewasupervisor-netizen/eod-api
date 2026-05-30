@@ -1,6 +1,19 @@
 {
   "storeNumber": "24",
+  "manifestEventDate": "2026-05-31",
+  "checklaneSetCount": 23,
+  "additionalSetCount": 32,
   "fixtures": [
+    {
+      "lane": "600",
+      "name": "CKLN REGISTER ENDCAP HYDRATION COOLER - LIBERTY LANES",
+      "action": "C082_V861_I021_MX",
+      "dbkey": "9007685",
+      "manifest_pog_id": "D701_L00024_D01_C082_V861_I021_MX_9007685",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
     {
       "lane": "601",
       "name": "CKLN QUE KIT C ZINE CUSTOMER RIGHT",
@@ -14,9 +27,9 @@
     {
       "lane": "601",
       "name": "CKLN QUE MERCH WALL CUSTOMER LEFT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ30_F005_MX",
       "dbkey": "9086457",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_9086457",
+      "manifest_pog_id": "D701_L00024_D03_C201_VQ30_F005_MX_9086457",
       "on_manifest": true,
       "type": "queue",
       "side": "L"
@@ -53,7 +66,7 @@
     },
     {
       "lane": "602",
-      "name": "CKLN USCAN KIT ATOSHIBA3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER LEFT SNACK",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER LEFT SNACK",
       "action": "C201_VU73_I078_MX",
       "dbkey": "9101043",
       "manifest_pog_id": "D701_L00024_D03_C201_VU73_I078_MX_9101043",
@@ -113,7 +126,7 @@
     },
     {
       "lane": "605",
-      "name": "CKLN USCAN KIT ATOSHIBA3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT SNACK",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT SNACK",
       "action": "C201_VU70_I078_MX",
       "dbkey": "9101042",
       "manifest_pog_id": "D701_L00024_D03_C201_VU70_I078_MX_9101042",
@@ -183,7 +196,7 @@
     },
     {
       "lane": "608",
-      "name": "CKLN USCAN KIT ATOSHIBA3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER LEFT SNACK",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER LEFT SNACK",
       "action": "C201_VU73_I078_MX",
       "dbkey": "9101043",
       "manifest_pog_id": "D701_L00024_D03_C201_VU73_I078_MX_9101043",
@@ -214,9 +227,9 @@
     {
       "lane": "610",
       "name": "CKLN BELTED SYSTEM 7 SCO -KIT S724B - CUSTOMER RIGHT FRED MEYER",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V306_I078_MX",
       "dbkey": "8841496",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_8841496",
+      "manifest_pog_id": "D701_L00024_D03_C201_V306_I078_MX_8841496",
       "on_manifest": true,
       "type": "belted_sco",
       "side": "R"
@@ -233,7 +246,7 @@
     },
     {
       "lane": "611",
-      "name": "CKLN BELTED SCO KIT S 24 INCH MERCH PANEL (MAINSTREAM)",
+      "name": "CKLN BELTED SCO  KIT S 24 INCH MERCH PANEL (MAINSTREAM)",
       "action": "C201_VU51_F002_MX",
       "dbkey": "8841499",
       "manifest_pog_id": "D701_L00024_D03_C201_VU51_F002_MX_8841499",
@@ -244,9 +257,9 @@
     {
       "lane": "611",
       "name": "CKLN BELTED SYSTEM 7 SCO -KIT S724B - CUSTOMER RIGHT FRED MEYER",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V306_I078_MX",
       "dbkey": "8841496",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_8841496",
+      "manifest_pog_id": "D701_L00024_D03_C201_V306_I078_MX_8841496",
       "on_manifest": true,
       "type": "belted_sco",
       "side": "R"
@@ -254,9 +267,9 @@
     {
       "lane": "612",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00024_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -274,9 +287,9 @@
     {
       "lane": "613",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00024_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -294,9 +307,9 @@
     {
       "lane": "614",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00024_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -314,9 +327,9 @@
     {
       "lane": "615",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00024_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -344,9 +357,9 @@
     {
       "lane": "616",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00024_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -354,9 +367,9 @@
     {
       "lane": "617",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00024_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -384,9 +397,9 @@
     {
       "lane": "619",
       "name": "CKLN QUE KIT C - MEAT SNACK CUSTOMER LEFT ZINE RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ27_F002_MX",
       "dbkey": "8920132",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_8920132",
+      "manifest_pog_id": "D701_L00024_D03_C201_VQ27_F002_MX_8920132",
       "on_manifest": true,
       "type": "queue",
       "side": "L"
@@ -394,9 +407,9 @@
     {
       "lane": "619",
       "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 132 INCH",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V415_I132_MX",
       "dbkey": "9088145",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_9088145",
+      "manifest_pog_id": "D701_L00024_D03_C201_V415_I132_MX_9088145",
       "on_manifest": true,
       "type": "liberty_tail",
       "side": "E"
@@ -404,9 +417,9 @@
     {
       "lane": "623",
       "name": "CKLN QUE MERCH WALL CUSTOMER RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ31_F003_MX",
       "dbkey": "9086459",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_9086459",
+      "manifest_pog_id": "D701_L00024_D03_C201_VQ31_F003_MX_9086459",
       "on_manifest": true,
       "type": "queue",
       "side": "R"
@@ -434,9 +447,9 @@
     {
       "lane": "627",
       "name": "CKLN QUE KIT C - MEAT SNACK CUSTOMER LEFT ZINE RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ27_F002_MX",
       "dbkey": "8920132",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_8920132",
+      "manifest_pog_id": "D701_L00024_D03_C201_VQ27_F002_MX_8920132",
       "on_manifest": true,
       "type": "queue",
       "side": "L"
@@ -444,9 +457,9 @@
     {
       "lane": "630",
       "name": "CKLN QUE KIT C ZINE CUSTOMER LEFT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ49_F002_MX",
       "dbkey": "8920140",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_8920140",
+      "manifest_pog_id": "D701_L00024_D03_C201_VQ49_F002_MX_8920140",
       "on_manifest": true,
       "type": "queue",
       "side": "L"
@@ -454,9 +467,9 @@
     {
       "lane": "630",
       "name": "CKLN QUE MERCH WALL CUSTOMER RIGHT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ31_F005_MX",
       "dbkey": "9086461",
-      "manifest_pog_id": "D701_L00024_D03_C201_V000_F000_MX_9086461",
+      "manifest_pog_id": "D701_L00024_D03_C201_VQ31_F005_MX_9086461",
       "on_manifest": true,
       "type": "queue",
       "side": "R"

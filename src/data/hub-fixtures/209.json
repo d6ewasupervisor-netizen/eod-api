@@ -1,6 +1,19 @@
 {
   "storeNumber": "209",
+  "manifestEventDate": "2026-05-31",
+  "checklaneSetCount": 15,
+  "additionalSetCount": 40,
   "fixtures": [
+    {
+      "lane": "600",
+      "name": "CKLN REGISTER ENDCAP HYDRATION COOLER - LIBERTY LANES",
+      "action": "C082_V861_I021_MX",
+      "dbkey": "9007685",
+      "manifest_pog_id": "D701_L00209_D01_C082_V861_I021_MX_9007685",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
     {
       "lane": "601",
       "name": "CKLN QUE KIT C - MEAT SNACK CUSTOMER RIGHT ZINE LEFT",
@@ -14,9 +27,9 @@
     {
       "lane": "607",
       "name": "CKLN QUE KIT K MEAT SNACKS CUSTOMER RIGHT ZINE LEFT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ41_F004_MX",
       "dbkey": "8920136",
-      "manifest_pog_id": "D701_L00209_D03_C201_V000_F000_MX_8920136",
+      "manifest_pog_id": "D701_L00209_D03_C201_VQ41_F004_MX_8920136",
       "on_manifest": true,
       "type": "queue",
       "side": "L"
@@ -43,7 +56,7 @@
     },
     {
       "lane": "608",
-      "name": "CKLN USCAN KIT ATOSHIBA3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT SNACK",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT SNACK",
       "action": "C201_VU70_I078_MX",
       "dbkey": "9101042",
       "manifest_pog_id": "D701_L00209_D03_C201_VU70_I078_MX_9101042",
@@ -328,7 +341,7 @@
       "dbkey": "7498138",
       "manifest_pog_id": "D701_L00209_D03_C201_V000_F000_MX_7498138",
       "on_manifest": true,
-      "type": "register",
+      "type": "checkstand",
       "side": "E"
     },
     {

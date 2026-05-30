@@ -1,6 +1,19 @@
 {
   "storeNumber": "171",
+  "manifestEventDate": "2026-05-31",
+  "checklaneSetCount": 21,
+  "additionalSetCount": 18,
   "fixtures": [
+    {
+      "lane": "600",
+      "name": "CKLN REGISTER ENDCAP HYDRATION COOLER - LIBERTY LANES",
+      "action": "C082_V861_I021_MX",
+      "dbkey": "9007685",
+      "manifest_pog_id": "D701_L00171_D01_C082_V861_I021_MX_9007685",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
     {
       "lane": "601",
       "name": "CKLN QUE KIT C - MEAT SNACK CUSTOMER RIGHT ZINE LEFT",
@@ -43,7 +56,7 @@
     },
     {
       "lane": "602",
-      "name": "CKLN USCAN KIT ATOSHIBA3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT SNACK",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT SNACK",
       "action": "C201_VU70_I078_MX",
       "dbkey": "9101042",
       "manifest_pog_id": "D701_L00171_D03_C201_VU70_I078_MX_9101042",
@@ -84,9 +97,9 @@
     {
       "lane": "604",
       "name": "CKLN QUE MERCH WALL CUSTOMER LEFT",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_VQ30_F005_MX",
       "dbkey": "9086457",
-      "manifest_pog_id": "D701_L00171_D03_C201_V000_F000_MX_9086457",
+      "manifest_pog_id": "D701_L00171_D03_C201_VQ30_F005_MX_9086457",
       "on_manifest": true,
       "type": "queue",
       "side": "L"
@@ -103,7 +116,7 @@
     },
     {
       "lane": "605",
-      "name": "CKLN USCAN KIT ATOSHIBA3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER LEFT SNACK",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER LEFT SNACK",
       "action": "C201_VU73_I078_MX",
       "dbkey": "9101043",
       "manifest_pog_id": "D701_L00171_D03_C201_VU73_I078_MX_9101043",
@@ -314,9 +327,9 @@
     {
       "lane": "622",
       "name": "CKLN TRADITIONAL LIBERTY GM-HBC ENDCAP",
-      "action": "C201_V000_F000_MX",
+      "action": "C201_V435_I024_MX",
       "dbkey": "8885979",
-      "manifest_pog_id": "D701_L00171_D03_C201_V000_F000_MX_8885979",
+      "manifest_pog_id": "D701_L00171_D03_C201_V435_I024_MX_8885979",
       "on_manifest": true,
       "type": "endcap",
       "side": "E"
@@ -423,10 +436,10 @@
     },
     {
       "lane": "690",
-      "name": "CKLN CANDY 79IN LONG PEG (FM)",
-      "action": "C201_V000_F000_MX",
+      "name": "CKLN CANDY 79IN LONG PEG  (FM)",
+      "action": "C201_V892_I083_MX",
       "dbkey": "9009215",
-      "manifest_pog_id": "D701_L00171_D03_C201_V000_F000_MX_9009215",
+      "manifest_pog_id": "D701_L00171_D03_C201_V892_I083_MX_9009215",
       "on_manifest": true,
       "type": "register",
       "side": "E"
@@ -448,7 +461,7 @@
       "dbkey": "7498138",
       "manifest_pog_id": "D701_L00171_D03_C201_V000_F000_MX_7498138",
       "on_manifest": true,
-      "type": "register",
+      "type": "checkstand",
       "side": "E"
     },
     {
@@ -458,7 +471,7 @@
       "dbkey": "9044474",
       "manifest_pog_id": "D701_L00171_D03_C201_V946_I002_MX_9044474",
       "on_manifest": true,
-      "type": "register",
+      "type": "checkstand",
       "side": "E"
     },
     {
@@ -468,7 +481,7 @@
       "dbkey": "9009221",
       "manifest_pog_id": "D701_L00171_D03_C201_V947_I002_MX_9009221",
       "on_manifest": true,
-      "type": "register",
+      "type": "checkstand",
       "side": "E"
     }
   ]
