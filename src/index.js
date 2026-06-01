@@ -20,7 +20,10 @@ const {
   buildHelpdeskFromAddress,
   buildHelpdeskSubject,
   buildHelpdeskHtml,
+  buildHelpdeskAttachments,
   enforceAttachmentBudget,
+  MAX_HELPDESK_PHOTOS,
+  MAX_HELPDESK_DOCUMENTS,
 } = require('./lib/helpdesk-email');
 
 // New email-link + admin routes (Phase A of the Cloudflare Access removal).
@@ -664,6 +667,7 @@ async function start() {
       additionalNotes,
       photos,
       photoCaptions,
+      documents,
       userName,
       userEmail,
       shiftLeadEmail,
@@ -689,10 +693,18 @@ async function start() {
         error: 'For manually entered categories, at least one of dbkey or version is required.',
       });
     }
-    if (photos.length > 12) {
+    if (photos.length > MAX_HELPDESK_PHOTOS) {
       return res.status(400).json({
         success: false,
-        error: 'Maximum 12 photos per ticket.',
+        error: `Maximum ${MAX_HELPDESK_PHOTOS} photos per ticket.`,
+      });
+    }
+
+    const docList = Array.isArray(documents) ? documents : [];
+    if (docList.length > MAX_HELPDESK_DOCUMENTS) {
+      return res.status(400).json({
+        success: false,
+        error: `Maximum ${MAX_HELPDESK_DOCUMENTS} documents per ticket.`,
       });
     }
 
@@ -714,24 +726,24 @@ async function start() {
       issueLabel: issueTypeLabel,
     });
 
-    const attachments = photos.map((photo, i) => {
-      const match = photo.match(/^data:(image\/\w+);base64,/);
-      const contentType = match ? match[1] : 'image/jpeg';
-      const ext = contentType.split('/')[1] || 'jpg';
-      const rawBase64 = photo.replace(/^data:image\/\w+;base64,/, '');
-      return {
-        filename: `helpdesk_${i}.${ext}`,
-        content: rawBase64,
-        contentId: `helpdesk_${i}`,
-        content_type: contentType,
-      };
-    });
+    let attachments;
+    try {
+      attachments = buildHelpdeskAttachments(photos, docList);
+    } catch (attachErr) {
+      const status = attachErr.statusCode || 400;
+      return res.status(status).json({ success: false, error: attachErr.message });
+    }
 
     try {
       enforceAttachmentBudget(attachments);
     } catch (sizeErr) {
       return res.status(413).json({ success: false, error: sizeErr.message });
     }
+
+    const documentNames = docList.map((doc, i) => {
+      const name = doc?.name ? String(doc.name).trim() : '';
+      return name || `document_${i + 1}`;
+    });
 
     const html = buildHelpdeskHtml({
       storeName,
@@ -750,6 +762,7 @@ async function start() {
       additionalNotes,
       photoCount: photos.length,
       photoCaptions,
+      documentNames,
     });
 
     const emailPayload = {

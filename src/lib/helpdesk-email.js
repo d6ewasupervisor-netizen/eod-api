@@ -166,6 +166,94 @@ function extractPlanogramMeta(planogramId) {
   return { dbkey: null, version: null };
 }
 
+const HELPDESK_DOC_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/csv',
+]);
+
+const HELPDESK_DOC_EXT_BY_MIME = {
+  'application/pdf': 'pdf',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-powerpoint': 'ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  'text/plain': 'txt',
+  'text/csv': 'csv',
+};
+
+const MAX_HELPDESK_PHOTOS = 12;
+const MAX_HELPDESK_DOCUMENTS = 5;
+
+function sanitizeHelpdeskFilename(name, fallback) {
+  const base = String(name || fallback)
+    .replace(/[^\w.\- ()]/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 120);
+  return base || fallback;
+}
+
+function parseHelpdeskDataUrl(value, fallbackMime = 'application/octet-stream') {
+  const raw = String(value || '');
+  const match = raw.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) {
+    return {
+      contentType: fallbackMime,
+      content: raw.replace(/^data:[^;]+;base64,/, ''),
+    };
+  }
+  return {
+    contentType: match[1] || fallbackMime,
+    content: match[2],
+  };
+}
+
+/**
+ * Build Resend attachment objects for help desk photos (inline CID) and documents.
+ */
+function buildHelpdeskAttachments(photos = [], documents = []) {
+  const attachments = [];
+
+  photos.forEach((photo, i) => {
+    const { contentType, content } = parseHelpdeskDataUrl(photo, 'image/jpeg');
+    const ext = (contentType.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+    attachments.push({
+      filename: `helpdesk_photo_${i + 1}.${ext}`,
+      content,
+      contentId: `helpdesk_${i}`,
+      content_type: contentType,
+    });
+  });
+
+  documents.forEach((doc, i) => {
+    const name = sanitizeHelpdeskFilename(doc.name, `document_${i + 1}`);
+    const fallbackMime = doc.mimeType || 'application/octet-stream';
+    const { contentType, content } = parseHelpdeskDataUrl(doc.dataUrl || doc.content, fallbackMime);
+    if (!HELPDESK_DOC_MIME_TYPES.has(contentType)) {
+      const err = new Error(`Unsupported document type: ${contentType}`);
+      err.statusCode = 400;
+      throw err;
+    }
+    const ext = HELPDESK_DOC_EXT_BY_MIME[contentType];
+    const hasExt = /\.[a-z0-9]{2,5}$/i.test(name);
+    attachments.push({
+      filename: hasExt ? name : `${name}.${ext || 'bin'}`,
+      content,
+      content_type: contentType,
+    });
+  });
+
+  return attachments;
+}
+
 /**
  * Build the HTML email body for a help desk ticket.
  * Photos are embedded as inline CIDs (helpdesk_0, helpdesk_1, …).
@@ -187,6 +275,7 @@ function buildHelpdeskHtml({
   additionalNotes,
   photoCount,
   photoCaptions,
+  documentNames,
 }) {
   const storeLine = storeName
     ? `FM${String(storeNumber).padStart(3, '0')} — ${storeName}`
@@ -220,6 +309,14 @@ function buildHelpdeskHtml({
           .join('')
       : '';
 
+  const docs = Array.isArray(documentNames) ? documentNames.filter(Boolean) : [];
+  const documentsHtml =
+    docs.length > 0
+      ? `<p><strong>Supporting documents (${docs.length} attached):</strong></p><ul>${docs
+          .map((name) => `<li>${escHtml(name)}</li>`)
+          .join('')}</ul>`
+      : '';
+
   return `<!DOCTYPE html>
 <html>
 <body style="font-family:sans-serif;color:#222;max-width:700px;margin:0 auto;">
@@ -241,6 +338,7 @@ ${measurementsHtml}
 ${notesHtml}
 ${photoCount > 0 ? `<p><strong>Visual evidence (${photoCount} photo${photoCount !== 1 ? 's' : ''} attached):</strong></p>` : ''}
 ${photosHtml}
+${documentsHtml}
 <p>Thank you for your assistance.</p>
 <hr>
 <p style="font-size:13px;color:#555;">
@@ -281,7 +379,7 @@ function enforceAttachmentBudget(attachments) {
   if (bytes > MAX_ATTACHMENT_BYTES) {
     const mb = (bytes / (1024 * 1024)).toFixed(1);
     const err = new Error(
-      `Attachments too large (${mb} MB). Please reduce photo count or quality and try again.`
+      `Attachments too large (${mb} MB). Please reduce photo/document count or size and try again.`
     );
     err.statusCode = 413;
     throw err;
@@ -300,7 +398,12 @@ module.exports = {
   buildHelpdeskSubject,
   extractPlanogramMeta,
   buildHelpdeskHtml,
+  buildHelpdeskAttachments,
+  sanitizeHelpdeskFilename,
   enforceAttachmentBudget,
   estimateAttachmentBytes,
   MAX_ATTACHMENT_BYTES,
+  MAX_HELPDESK_PHOTOS,
+  MAX_HELPDESK_DOCUMENTS,
+  HELPDESK_DOC_MIME_TYPES,
 };
