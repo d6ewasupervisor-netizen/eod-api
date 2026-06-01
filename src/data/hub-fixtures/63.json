@@ -1,0 +1,438 @@
+{
+  "storeNumber": "63",
+  "manifestEventDate": "2026-05-31",
+  "checklaneSetCount": 1,
+  "additionalSetCount": 36,
+  "fixtures": [
+    {
+      "lane": "600",
+      "name": "CKLN REGISTER ENDCAP HYDRATION COOLER - LIBERTY LANES",
+      "action": "C082_V861_I021_MX",
+      "dbkey": "9007685",
+      "manifest_pog_id": "D701_L00063_D01_C082_V861_I021_MX_9007685",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
+    {
+      "lane": "601",
+      "name": "CKLN QUE KIT C ZINE CUSTOMER LEFT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "8920140",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_8920140",
+      "on_manifest": true,
+      "type": "queue",
+      "side": "L"
+    },
+    {
+      "lane": "601",
+      "name": "CKLN QUE MERCH WALL CUSTOMER RIGHT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9086461",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9086461",
+      "on_manifest": true,
+      "type": "queue",
+      "side": "R"
+    },
+    {
+      "lane": "603",
+      "name": "CKLN CLR LARGE TAIL SECTION FRED MEYER WITH POLE",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "8999794",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_8999794",
+      "on_manifest": true,
+      "type": "register",
+      "side": "E"
+    },
+    {
+      "lane": "603",
+      "name": "CKLN SCO STANDARD BAR TWO TIER RACK",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "5070945",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_5070945",
+      "on_manifest": true,
+      "type": "belted_sco",
+      "side": "E"
+    },
+    {
+      "lane": "604",
+      "name": "CKLN QUE KIT C - MEAT SNACK CUSTOMER LEFT ZINE RIGHT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "8920132",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_8920132",
+      "on_manifest": true,
+      "type": "queue",
+      "side": "L"
+    },
+    {
+      "lane": "608",
+      "name": "CKLN SCO STANDARD BAR TWO TIER RACK",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "5070945",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_5070945",
+      "on_manifest": true,
+      "type": "belted_sco",
+      "side": "E"
+    },
+    {
+      "lane": "608",
+      "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 125 INCH",
+      "action": "C201_V414_I125_MX",
+      "dbkey": "9088143",
+      "manifest_pog_id": "D701_L00063_D03_C201_V414_I125_MX_9088143",
+      "on_manifest": true,
+      "type": "liberty_tail",
+      "side": "E"
+    },
+    {
+      "lane": "608",
+      "name": "CKLN TRADITIONAL LIBERTY SNACK ENDCAP - HI THEFT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9010915",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9010915",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
+    {
+      "lane": "609",
+      "name": "CKLN SCO STANDARD BAR TWO TIER RACK",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "5070945",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_5070945",
+      "on_manifest": true,
+      "type": "belted_sco",
+      "side": "E"
+    },
+    {
+      "lane": "609",
+      "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 125 INCH",
+      "action": "C201_V414_I125_MX",
+      "dbkey": "9088143",
+      "manifest_pog_id": "D701_L00063_D03_C201_V414_I125_MX_9088143",
+      "on_manifest": true,
+      "type": "liberty_tail",
+      "side": "E"
+    },
+    {
+      "lane": "609",
+      "name": "CKLN TRADITIONAL LIBERTY KPF ENDCAP - HI THEFT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9009207",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9009207",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
+    {
+      "lane": "610",
+      "name": "CKLN SCO STANDARD BAR TWO TIER RACK",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "5070945",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_5070945",
+      "on_manifest": true,
+      "type": "belted_sco",
+      "side": "E"
+    },
+    {
+      "lane": "610",
+      "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 112 INCH",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9088147",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9088147",
+      "on_manifest": true,
+      "type": "liberty_tail",
+      "side": "E"
+    },
+    {
+      "lane": "610",
+      "name": "CKLN TRADITIONAL LIBERTY SNACK ENDCAP - HI THEFT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9010915",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9010915",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
+    {
+      "lane": "611",
+      "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 112 INCH",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9088147",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9088147",
+      "on_manifest": true,
+      "type": "liberty_tail",
+      "side": "E"
+    },
+    {
+      "lane": "611",
+      "name": "CKLN TRADITIONAL LIBERTY REAR FACING COOLER ENDCAP - B - HI THEFT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9088289",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9088289",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
+    {
+      "lane": "612",
+      "name": "CKLN SCO STANDARD BAR TWO TIER RACK",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "5070945",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_5070945",
+      "on_manifest": true,
+      "type": "belted_sco",
+      "side": "E"
+    },
+    {
+      "lane": "612",
+      "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 112 INCH",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9088147",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9088147",
+      "on_manifest": true,
+      "type": "liberty_tail",
+      "side": "E"
+    },
+    {
+      "lane": "612",
+      "name": "CKLN TRADITIONAL LIBERTY GM-HBC ENDCAP - HI THEFT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9009204",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9009204",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
+    {
+      "lane": "613",
+      "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 112 INCH",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9088147",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9088147",
+      "on_manifest": true,
+      "type": "liberty_tail",
+      "side": "E"
+    },
+    {
+      "lane": "613",
+      "name": "CKLN TRADITIONAL LIBERTY REAR FACING COOLER ENDCAP - HI THEFT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9088288",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9088288",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
+    {
+      "lane": "614",
+      "name": "CKLN SCO STANDARD BAR TWO TIER RACK",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "5070945",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_5070945",
+      "on_manifest": true,
+      "type": "belted_sco",
+      "side": "E"
+    },
+    {
+      "lane": "614",
+      "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 112 INCH",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9088147",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9088147",
+      "on_manifest": true,
+      "type": "liberty_tail",
+      "side": "E"
+    },
+    {
+      "lane": "614",
+      "name": "CKLN TRADITIONAL LIBERTY MEAL REPLACEMENT-BFAST ENDCAP - HI THEFT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9009211",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9009211",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
+    {
+      "lane": "615",
+      "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 112 INCH",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9088147",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9088147",
+      "on_manifest": true,
+      "type": "liberty_tail",
+      "side": "E"
+    },
+    {
+      "lane": "615",
+      "name": "CKLN TRADITIONAL LIBERTY REAR FACING COOLER ENDCAP - B - HI THEFT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9088289",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9088289",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
+    {
+      "lane": "616",
+      "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 112 INCH",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9088147",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9088147",
+      "on_manifest": true,
+      "type": "liberty_tail",
+      "side": "E"
+    },
+    {
+      "lane": "616",
+      "name": "CKLN TRADITIONAL LIBERTY MAGAZINE ENDCAP - HI THEFT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9009209",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9009209",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
+    {
+      "lane": "617",
+      "name": "CKLN TRADITIONAL LIBERTY EXTRA LARGE TAIL 112 INCH",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9088147",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9088147",
+      "on_manifest": true,
+      "type": "liberty_tail",
+      "side": "E"
+    },
+    {
+      "lane": "617",
+      "name": "CKLN TRADITIONAL LIBERTY REAR FACING COOLER ENDCAP - HI THEFT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9088288",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9088288",
+      "on_manifest": true,
+      "type": "endcap",
+      "side": "E"
+    },
+    {
+      "lane": "618",
+      "name": "CKLN QUE KIT C ZINE CUSTOMER LEFT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "8920140",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_8920140",
+      "on_manifest": true,
+      "type": "queue",
+      "side": "L"
+    },
+    {
+      "lane": "618",
+      "name": "CKLN QUE MERCH WALL CUSTOMER RIGHT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "9086461",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_9086461",
+      "on_manifest": true,
+      "type": "queue",
+      "side": "R"
+    },
+    {
+      "lane": "618",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT",
+      "action": "C201_VU81_I078_MX",
+      "dbkey": "8790016",
+      "manifest_pog_id": "D701_L00063_D03_C201_VU81_I078_MX_8790016",
+      "on_manifest": true,
+      "type": "cooler",
+      "side": "R"
+    },
+    {
+      "lane": "619",
+      "name": "CKLN USCAN KIT ATOSHIBA3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT SNACK",
+      "action": "C201_VU70_I078_MX",
+      "dbkey": "9101042",
+      "manifest_pog_id": "D701_L00063_D03_C201_VU70_I078_MX_9101042",
+      "on_manifest": true,
+      "type": "cooler",
+      "side": "R"
+    },
+    {
+      "lane": "620",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT",
+      "action": "C201_VU81_I078_MX",
+      "dbkey": "8790016",
+      "manifest_pog_id": "D701_L00063_D03_C201_VU81_I078_MX_8790016",
+      "on_manifest": true,
+      "type": "cooler",
+      "side": "R"
+    },
+    {
+      "lane": "621",
+      "name": "CKLN QUE KIT C - MEAT SNACK CUSTOMER LEFT ZINE RIGHT",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "8920132",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_8920132",
+      "on_manifest": true,
+      "type": "queue",
+      "side": "L"
+    },
+    {
+      "lane": "621",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER LEFT",
+      "action": "C201_VU80_I078_MX",
+      "dbkey": "8790015",
+      "manifest_pog_id": "D701_L00063_D03_C201_VU80_I078_MX_8790015",
+      "on_manifest": true,
+      "type": "cooler",
+      "side": "L"
+    },
+    {
+      "lane": "622",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT",
+      "action": "C201_VU81_I078_MX",
+      "dbkey": "8790016",
+      "manifest_pog_id": "D701_L00063_D03_C201_VU81_I078_MX_8790016",
+      "on_manifest": true,
+      "type": "cooler",
+      "side": "R"
+    },
+    {
+      "lane": "623",
+      "name": "CKLN USCAN KIT A TOSHIBA 3 BAG-CAROUSEL NO COOLER WITH 12IN SIDE SHELF CUSTOMER RIGHT",
+      "action": "C201_VU81_I078_MX",
+      "dbkey": "8790016",
+      "manifest_pog_id": "D701_L00063_D03_C201_VU81_I078_MX_8790016",
+      "on_manifest": true,
+      "type": "cooler",
+      "side": "R"
+    },
+    {
+      "lane": "690",
+      "name": "CKLN CHECKSTAND BATTERY END BRANDED PRIMARY DS",
+      "action": "C201_V000_F000_MX",
+      "dbkey": "7498138",
+      "manifest_pog_id": "D701_L00063_D03_C201_V000_F000_MX_7498138",
+      "on_manifest": true,
+      "type": "checkstand",
+      "side": "E"
+    },
+    {
+      "lane": "690",
+      "name": "CKLN GM WITH HCC CHECKSTAND MEDIUM A N PRO TYPE",
+      "action": "C201_V946_I002_MX",
+      "dbkey": "9044474",
+      "manifest_pog_id": "D701_L00063_D03_C201_V946_I002_MX_9044474",
+      "on_manifest": true,
+      "type": "checkstand",
+      "side": "E"
+    },
+    {
+      "lane": "690",
+      "name": "CKLN GM WITH HCC CHECKSTAND MEDIUM B N PRO TYPE",
+      "action": "C201_V947_I002_MX",
+      "dbkey": "9009221",
+      "manifest_pog_id": "D701_L00063_D03_C201_V947_I002_MX_9009221",
+      "on_manifest": true,
+      "type": "checkstand",
+      "side": "E"
+    }
+  ]
+}

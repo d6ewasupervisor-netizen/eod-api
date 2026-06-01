@@ -345,9 +345,9 @@
       "lane": "618",
       "name": "CKLN REGISTER ENDCAP HYDRATION COOLER - LIBERTY LANES",
       "action": "C082_V861_I021_MX",
-      "dbkey": null,
-      "manifest_pog_id": null,
-      "on_manifest": false,
+      "dbkey": "9007685",
+      "manifest_pog_id": "D701_L00163_D01_C082_V861_I021_MX_9007685",
+      "on_manifest": true,
       "type": "endcap",
       "side": "E"
     },
@@ -485,9 +485,9 @@
       "lane": "622",
       "name": "CKLN REGISTER ENDCAP HYDRATION COOLER - LIBERTY LANES",
       "action": "C082_V861_I021_MX",
-      "dbkey": null,
-      "manifest_pog_id": null,
-      "on_manifest": false,
+      "dbkey": "9007685",
+      "manifest_pog_id": "D701_L00163_D01_C082_V861_I021_MX_9007685",
+      "on_manifest": true,
       "type": "endcap",
       "side": "E"
     },
@@ -625,9 +625,9 @@
       "lane": "626",
       "name": "CKLN REGISTER ENDCAP HYDRATION COOLER - LIBERTY LANES",
       "action": "C082_V861_I021_MX",
-      "dbkey": null,
-      "manifest_pog_id": null,
-      "on_manifest": false,
+      "dbkey": "9007685",
+      "manifest_pog_id": "D701_L00163_D01_C082_V861_I021_MX_9007685",
+      "on_manifest": true,
       "type": "endcap",
       "side": "E"
     },
@@ -831,5 +831,8 @@
       "type": "bag_rack",
       "side": "E"
     }
-  ]
+  ],
+  "manifestEventDate": "2026-05-31",
+  "checklaneSetCount": 1,
+  "additionalSetCount": 63
 }

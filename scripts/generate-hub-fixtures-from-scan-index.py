@@ -320,15 +320,89 @@ def render_section_state_sql(store_fixtures: dict[int, list[dict]], seed_stores:
     return "\n".join(lines).rstrip() + "\n"
 
 
+HYDRATION_ACTION = "C082_V861_I021_MX"
+
+
+def is_hydration_fixture(fixture: dict) -> bool:
+    name = (fixture.get("name") or "").upper()
+    return fixture.get("action") == HYDRATION_ACTION or (
+        "HYDRATION COOLER" in name and "SUPER NATURAL" not in name
+    )
+
+
+def patch_manifest_hydration(
+    store: int,
+    fixtures: list[dict],
+    manifest_ckln: dict[str, dict],
+    *,
+    dbkey: str = "9007685",
+) -> int:
+    mf = manifest_ckln.get(dbkey) or {}
+    pog_id = mf.get("pog_id_store") or store_pog_id(
+        mf.get("pog_id") or f"D701_L00000_D01_C082_V861_I021_MX_{dbkey}",
+        store,
+    )
+    changed = 0
+    for fixture in fixtures:
+        if not is_hydration_fixture(fixture):
+            continue
+        if (
+            fixture.get("dbkey") == dbkey
+            and fixture.get("on_manifest")
+            and fixture.get("manifest_pog_id") == pog_id
+        ):
+            continue
+        fixture["dbkey"] = dbkey
+        fixture["manifest_pog_id"] = pog_id
+        fixture["on_manifest"] = True
+        changed += 1
+    return changed
+
+
+def resolve_target_stores(
+    manifest_by_store: dict,
+    *,
+    manifest_dbkey: str | None,
+    store_args: list[int] | None,
+) -> list[int]:
+    if store_args:
+        return sorted(store_args)
+    if manifest_dbkey:
+        return sorted(
+            int(store)
+            for store, pogs in manifest_by_store.items()
+            if manifest_dbkey in pogs and (SCAN_INDEX_DIR / f"{store}.json").exists()
+        )
+    return list(TARGET_STORES)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate hub fixture catalogs")
     parser.add_argument("--manifest-xlsx", type=Path, default=DEFAULT_MANIFEST_XLSX)
     parser.add_argument("--manifest-json", type=Path, default=DEFAULT_MANIFEST_JSON)
+    parser.add_argument(
+        "--manifest-dbkey",
+        help="Generate for every store that has this dbkey on the Kroger manifest",
+    )
+    parser.add_argument(
+        "--stores",
+        nargs="+",
+        type=int,
+        help="Explicit store numbers (overrides TARGET_STORES / --manifest-dbkey)",
+    )
+    parser.add_argument(
+        "--preserve-stores",
+        nargs="+",
+        type=int,
+        default=[163],
+        help="Keep existing fixture layout; only patch manifest hydration rows",
+    )
     args = parser.parse_args()
 
     action_map = load_action_map()
     kroger = load_kroger_manifest(args.manifest_xlsx, args.manifest_json)
     manifest_by_store = kroger.get("checklanes_by_store") or {}
+    preserve_stores = set(args.preserve_stores or [])
 
     FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -340,14 +414,36 @@ def main() -> None:
 
     store_fixtures: dict[int, list[dict]] = {}
     summary = []
+    target_stores = resolve_target_stores(
+        manifest_by_store,
+        manifest_dbkey=args.manifest_dbkey,
+        store_args=args.stores,
+    )
 
-    for store in TARGET_STORES:
+    for store in target_stores:
         path = SCAN_INDEX_DIR / f"{store}.json"
         if not path.exists():
             print(f"WARN missing scan_index for store {store}")
             continue
         scan = json.loads(path.read_text(encoding="utf-8"))
         manifest_ckln = manifest_by_store.get(str(store), {})
+        out_path = FIXTURES_DIR / f"{store}.json"
+        if store in preserve_stores and out_path.exists():
+            out = json.loads(out_path.read_text(encoding="utf-8"))
+            fixtures = out.get("fixtures") or []
+            patched = patch_manifest_hydration(store, fixtures, manifest_ckln)
+            out["manifestEventDate"] = kroger.get("event_date")
+            out["checklaneSetCount"] = len(manifest_ckln)
+            out["additionalSetCount"] = len(
+                (kroger.get("additional_sets_by_store") or {}).get(str(store), [])
+            )
+            out["fixtures"] = fixtures
+            store_fixtures[store] = fixtures
+            out_path.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+            lanes = len({f["lane"] for f in fixtures})
+            summary.append((store, len(fixtures), lanes, len(manifest_ckln), f"patched {patched}"))
+            continue
+
         fixtures = build_fixtures(store, scan, manifest_ckln, action_map)
         store_fixtures[store] = fixtures
         out = {
@@ -357,17 +453,17 @@ def main() -> None:
             "additionalSetCount": len((kroger.get("additional_sets_by_store") or {}).get(str(store), [])),
             "fixtures": fixtures,
         }
-        out_path = FIXTURES_DIR / f"{store}.json"
         out_path.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
         lanes = len({f["lane"] for f in fixtures})
-        summary.append((store, len(fixtures), lanes, len(manifest_ckln)))
+        summary.append((store, len(fixtures), lanes, len(manifest_ckln), "generated"))
 
-    MIGRATION_PATH.write_text(render_section_state_sql(store_fixtures, seed_stores), encoding="utf-8")
+    if not args.manifest_dbkey and not args.stores:
+        MIGRATION_PATH.write_text(render_section_state_sql(store_fixtures, seed_stores), encoding="utf-8")
+        print(f"Wrote {MIGRATION_PATH.name}")
 
     print(f"Wrote {len(summary)} fixture catalogs -> {FIXTURES_DIR}")
-    print(f"Wrote {MIGRATION_PATH.name}")
-    for store, count, lanes, ckln in summary:
-        print(f"  FM {store}: {count} fixtures, {lanes} lanes, {ckln} manifest CKLN sets")
+    for store, count, lanes, ckln, mode in summary:
+        print(f"  FM {store}: {count} fixtures, {lanes} lanes, {ckln} manifest CKLN sets ({mode})")
 
 
 if __name__ == "__main__":
