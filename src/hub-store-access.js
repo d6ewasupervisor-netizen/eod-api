@@ -82,6 +82,37 @@ function pickUpcomingSchedule(rows, visitKey, week) {
   return upcoming || pool[pool.length - 1];
 }
 
+async function loadBlitzWeekStoreRows(week) {
+  const { rows } = await query(
+    `SELECT DISTINCT ON (s.store_number)
+            hs.store_number,
+            hs.name,
+            hs.default_visit_id,
+            hs.is_test
+     FROM schedules s
+     INNER JOIN hub_stores hs ON hs.store_number = s.store_number::text
+     WHERE s.project_id = $1
+       AND s.scheduled_date >= $2::date
+       AND s.scheduled_date <= $3::date
+       AND hs.is_test = FALSE
+     ORDER BY s.store_number::int, s.scheduled_date ASC`,
+    [BLITZ_PROJECT_ID, week.from, week.to],
+  );
+  return rows;
+}
+
+async function loadBlitzWeekStoreNumberSet(week) {
+  const rows = await loadBlitzWeekStoreRows(week);
+  return new Set(rows.map((row) => normalizeStoreNumber(row.store_number)).filter(Boolean));
+}
+
+function filterStoresToBlitzWeek(stores, week) {
+  return stores.filter((store) => {
+    const d = store.shift?.scheduledDate;
+    return d && d >= week.from && d <= week.to;
+  });
+}
+
 async function enrichStoresWithShiftMeta(stores) {
   if (!stores.length) return;
 
@@ -104,8 +135,10 @@ async function enrichStoresWithShiftMeta(stores) {
        FROM schedules
        WHERE visit_id = ANY($1::int[])
          AND project_id = $2
+         AND scheduled_date >= $3::date
+         AND scheduled_date <= $4::date
        ORDER BY scheduled_date ASC, visit_id ASC`,
-      [visitIds, BLITZ_PROJECT_ID],
+      [visitIds, BLITZ_PROJECT_ID, week.from, week.to],
     );
     for (const row of rows) {
       scheduleByVisit.set(Number(row.visit_id), row);
@@ -304,32 +337,36 @@ async function getDirectAssignment(userId) {
 async function listAccessibleStores(user) {
   const hubUser = await resolveHubUser(user);
   const admin = await isHubAdmin(user, hubUser);
+  const week = remainderOfWeekWindow();
+  const blitzStoreNumbers = await loadBlitzWeekStoreNumberSet(week);
   const assignments = await getDirectAssignment(hubUser.id);
   const assignmentByStore = new Map(
     assignments.map((row) => [normalizeStoreNumber(row.store_number), row]),
   );
   const scheduleSupervisorStores = await getSupervisorStoreNumbers(user.email);
-  const assignedStores = assignments.map((a) => normalizeStoreNumber(a.store_number));
+  const assignedStores = assignments
+    .map((a) => normalizeStoreNumber(a.store_number))
+    .filter((sn) => blitzStoreNumbers.has(sn));
   const isSupervisorUser = isEnvSupervisor(user.email) || scheduleSupervisorStores.length > 0;
 
   let storeRows;
   if (admin) {
-    const { rows } = await query(
-      `SELECT store_number, name, default_visit_id, is_test
-       FROM hub_stores
-       WHERE is_test = FALSE
-       ORDER BY name NULLS LAST, store_number`,
-    );
-    storeRows = rows;
+    storeRows = await loadBlitzWeekStoreRows(week);
   } else {
-    const storeSet = new Set([...scheduleSupervisorStores, ...assignedStores]);
+    const storeSet = new Set([
+      ...scheduleSupervisorStores.filter((sn) => blitzStoreNumbers.has(sn)),
+      ...assignedStores,
+    ]);
 
     if (!storeSet.size) {
       return {
         isAdmin: false,
         isSupervisor: isSupervisorUser,
         canViewPresence: canViewHubPresence(user),
+        organizeBySupervisor: false,
+        storeHubFilters: null,
         stores: [],
+        blitzWeek: week,
         hubUserId: hubUser.id,
       };
     }
@@ -338,6 +375,7 @@ async function listAccessibleStores(user) {
       `SELECT store_number, name, default_visit_id, is_test
        FROM hub_stores
        WHERE store_number = ANY($1::text[])
+         AND is_test = FALSE
        ORDER BY name NULLS LAST, store_number`,
       [[...storeSet]],
     );
@@ -347,7 +385,7 @@ async function listAccessibleStores(user) {
       if (!storeRows.some((r) => normalizeStoreNumber(r.store_number) === sn)) {
         storeRows.push({
           store_number: sn,
-          name: `Store ${String(sn).padStart(5, '0')}`,
+          name: `FM ${sn}`,
           default_visit_id: null,
           is_test: false,
         });
@@ -388,16 +426,8 @@ async function listAccessibleStores(user) {
   await applyLiveVisitsToStores(stores);
   await enrichStoresWithShiftMeta(stores);
 
-  const week = remainderOfWeekWindow();
   const viewAll = admin || canViewHubPresence(user);
-  let visibleStores = stores;
-  if (viewAll) {
-    visibleStores = stores.filter((store) => {
-      const d = store.shift?.scheduledDate;
-      return d && d >= week.from && d <= week.to;
-    });
-  }
-
+  const visibleStores = filterStoresToBlitzWeek(stores, week);
   const filters = buildStoreHubFilters(visibleStores);
   const sortedStores = viewAll ? sortStoresForHubPicker(visibleStores) : visibleStores;
 
@@ -408,6 +438,7 @@ async function listAccessibleStores(user) {
     organizeBySupervisor: viewAll,
     storeHubFilters: viewAll ? filters : null,
     stores: sortedStores,
+    blitzWeek: week,
     hubUserId: hubUser.id,
   };
 }

@@ -93,6 +93,14 @@ async function purgeStaleFixtureSchedules(client, options = {}) {
     return { staleSchedulesRemoved: 0, from, to, projectId };
   }
 
+  const nonFixtureRes = await client.query(
+    `DELETE FROM schedules
+     WHERE project_id = $1
+       AND store_number IS NOT NULL
+       AND NOT (store_number = ANY($2::int[]))`,
+    [projectId, numericIds],
+  );
+
   const { rowCount } = await client.query(
     `DELETE FROM schedules
      WHERE store_number = ANY($1::int[])
@@ -105,7 +113,8 @@ async function purgeStaleFixtureSchedules(client, options = {}) {
   );
 
   return {
-    staleSchedulesRemoved: rowCount || 0,
+    staleSchedulesRemoved: (rowCount || 0) + (nonFixtureRes.rowCount || 0),
+    nonFixtureSchedulesRemoved: nonFixtureRes.rowCount || 0,
     from,
     to,
     projectId,

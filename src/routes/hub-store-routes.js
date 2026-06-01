@@ -154,6 +154,7 @@ router.get('/stores', requireAuth, async (req, res) => {
       canViewPresence: data.canViewPresence,
       organizeBySupervisor: data.organizeBySupervisor,
       storeHubFilters: data.storeHubFilters,
+      blitzWeek: data.blitzWeek,
       stores: data.stores,
     });
   } catch (err) {
