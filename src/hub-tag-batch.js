@@ -44,10 +44,9 @@ function resolveTagBatchRecipient() {
 
 /**
  * Barcode print batch subject — store token only, e.g. #31 or #163.
- * Hardcoded #999 during hub testing; flip to tagBatchEmailSubjectLive when live.
  */
-function tagBatchEmailSubject(_storeNumber) {
-  return '#999';
+function tagBatchEmailSubject(storeNumber) {
+  return tagBatchEmailSubjectLive(storeNumber);
 }
 
 function tagBatchEmailSubjectLive(storeNumber) {

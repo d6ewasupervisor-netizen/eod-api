@@ -5,14 +5,14 @@
  *
  * Sending pattern:
  *   From:     FM035_C1234@retail-odyssey.com
- *   To:       kompass@retail-odyssey.com
+ *   To:       kompass@retailodyssey.com
  *   CC:       lead + fixed Retail Odyssey team
  *   Reply-To: lead email (special-cased for Alexandra Wright)
  */
 
 const { resolveResendReplyTo } = require('./resend-reply-to');
 
-const HELPDESK_TO = 'kompass@retail-odyssey.com';
+const HELPDESK_TO = 'kompass@retailodyssey.com';
 const HELPDESK_CC_FIXED = [
   'mashabranner@retailodyssey.com',
   'seth.newman@retailodyssey.com',
@@ -20,41 +20,38 @@ const HELPDESK_CC_FIXED = [
 ];
 
 // --- Test-phase routing -----------------------------------------------------
-// While testing, KOMPASS help desk tickets must NOT reach the real help desk.
-// Instead they go to a single test inbox, CC the person who initiated the
-// ticket, and set Reply-To to that same initiator. Controlled by env so it can
-// be flipped off for go-live without a code change:
-//   HELPDESK_TEST_MODE=off   → normal delivery to kompass@retail-odyssey.com
-//   HELPDESK_TEST_TO=<email> → override the test inbox (default below)
+// While testing, redirect To away from the real help desk inbox. CC and
+// Reply-To stay on the normal production spec (fixed team + initiator).
+//   HELPDESK_TEST_MODE=off   → To = kompass@retailodyssey.com
+//   HELPDESK_TEST_TO=<email> → override the test To inbox (default below)
 const HELPDESK_TEST_TO = (process.env.HELPDESK_TEST_TO || 'tyson.gauthier@retailodyssey.com').trim();
 const HELPDESK_TEST_MODE_OFF = new Set(['off', 'false', '0', 'no', 'disabled']);
 
 function isHelpdeskTestMode() {
-  const raw = String(process.env.HELPDESK_TEST_MODE ?? 'on').trim().toLowerCase();
+  const raw = String(process.env.HELPDESK_TEST_MODE ?? 'off').trim().toLowerCase();
   return raw !== '' && !HELPDESK_TEST_MODE_OFF.has(raw);
 }
 
 /**
  * Resolve the To / CC / Reply-To for a help desk ticket.
  *
- * In test mode: To = test inbox, CC = initiator, Reply-To = initiator.
- * In normal mode: To = KOMPASS, CC = fixed team + initiator, Reply-To resolved
- * from the initiator (special-cased for Alexandra Wright).
+ * CC is always fixed Retail Odyssey team + initiator (see buildHelpdeskCc).
+ * Test mode only redirects To to HELPDESK_TEST_TO; CC/Reply-To are unchanged.
  */
 function resolveHelpdeskRouting({ userName, userEmail } = {}) {
-  const initiator = userEmail ? String(userEmail).trim() : '';
+  const cc = buildHelpdeskCc(userEmail);
   if (isHelpdeskTestMode()) {
     return {
       testMode: true,
       to: HELPDESK_TEST_TO,
-      cc: initiator ? [initiator] : [],
-      replyTo: resolveHelpdeskReplyTo({ userEmail: initiator }),
+      cc,
+      replyTo: resolveHelpdeskReplyTo({ userName, userEmail }),
     };
   }
   return {
     testMode: false,
     to: HELPDESK_TO,
-    cc: buildHelpdeskCc(userEmail),
+    cc,
     replyTo: resolveHelpdeskReplyTo({ userName, userEmail }),
   };
 }

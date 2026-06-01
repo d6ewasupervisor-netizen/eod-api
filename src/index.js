@@ -642,7 +642,7 @@ async function start() {
   });
 
   // ─── KOMPASS Help Desk ticket email ────────────────────────────────────────
-  // Sends a structured issue report to kompass@retail-odyssey.com.
+  // Sends a structured issue report to kompass@retailodyssey.com.
   // From address: FM###_C###@retail-odyssey.com
   // Reply-To: lead email (Alexandra Wright → personal alias)
   // CC: fixed team + lead (deduped)
