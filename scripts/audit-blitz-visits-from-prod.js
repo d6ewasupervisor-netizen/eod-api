@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const { query, pool } = require('../src/lib/db');
+const { BLITZ_PROJECT_ID } = require('../src/lib/hub-blitz-config');
 
 const BASE = 'https://prod.sasretail.com';
 const KOMPASS_PROJECT_ID = Number(process.env.CHECKLANES_BLITZ_PROJECT_ID || 1715);
@@ -180,8 +181,9 @@ async function main() {
             visit_lead, supervisor
      FROM schedules
      WHERE scheduled_date BETWEEN $1::date AND $2::date
+       AND project_id = $3
      ORDER BY scheduled_date, store_number::int`,
-    [from, to],
+    [from, to, BLITZ_PROJECT_ID],
   );
 
   const { rows: hubStores } = await query(
@@ -199,12 +201,13 @@ async function main() {
        FROM schedules
        WHERE store_number::text = hs.store_number
          AND scheduled_date = $1::date
+         AND project_id = $2
        ORDER BY visit_id DESC
        LIMIT 1
      ) s ON TRUE
      WHERE hs.default_visit_id IS NOT NULL
      ORDER BY hs.store_number::int`,
-    [tomorrowOnly],
+    [tomorrowOnly, BLITZ_PROJECT_ID],
   );
 
   console.log(`\n[audit] Hub default_visit_id vs schedule for ${tomorrowOnly}:`);
