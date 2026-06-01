@@ -125,9 +125,10 @@ async function resolveShiftLeadEmailForVisit(visitIdNum) {
        AND hsa.store_role = 'lead'
      LEFT JOIN hub_users hu ON hu.id = hsa.user_id AND hu.is_active = true
      WHERE s.visit_id = $1
+       AND s.project_id = $2
      ORDER BY s.scheduled_date DESC NULLS LAST
      LIMIT 1`,
-    [visitIdNum],
+    [visitIdNum, require('./hub-blitz-config').BLITZ_PROJECT_ID],
   );
   const row = rows[0];
   if (!row) return null;

@@ -81,13 +81,14 @@ function formatStoreNumber(storeNumber) {
 }
 
 async function resolveStore(visitIdNum) {
+  const { BLITZ_PROJECT_ID } = require('./lib/hub-blitz-config');
   const { rows } = await query(
     `SELECT store_number
      FROM schedules
      WHERE visit_id = $1
-     ORDER BY scheduled_date DESC
+     ORDER BY (project_id = $2) DESC, scheduled_date DESC
      LIMIT 1`,
-    [visitIdNum],
+    [visitIdNum, BLITZ_PROJECT_ID],
   );
   if (rows.length && rows[0].store_number != null) {
     return formatStoreNumber(rows[0].store_number);

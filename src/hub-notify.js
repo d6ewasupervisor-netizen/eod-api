@@ -39,9 +39,9 @@ async function resolveStore(visitIdNum) {
     `SELECT store_number
      FROM schedules
      WHERE visit_id = $1
-     ORDER BY scheduled_date DESC
+     ORDER BY (project_id = $2) DESC, scheduled_date DESC
      LIMIT 1`,
-    [visitIdNum],
+    [visitIdNum, require('./hub-blitz-config').BLITZ_PROJECT_ID],
   );
   if (!rows.length || rows[0].store_number == null) return null;
   const n = Number(rows[0].store_number);

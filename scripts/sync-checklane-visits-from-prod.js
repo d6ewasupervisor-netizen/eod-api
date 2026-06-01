@@ -20,6 +20,7 @@ const {
   remainderOfWeekWindow,
 } = require('../src/lib/hub-supervisor-resolve');
 const { BLITZ_PROJECT_ID, BLITZ_PROJECT_NAME } = require('../src/lib/hub-blitz-config');
+const { purgeStaleFixtureSchedules } = require('../src/lib/purge-mock-hub-data');
 
 const BASE = 'https://prod.sasretail.com';
 const KOMPASS_PROJECT_ID = BLITZ_PROJECT_ID;
@@ -362,6 +363,23 @@ async function main() {
         );
         cleared += 1;
       }
+    }
+  }
+
+  if (!DRY_RUN) {
+    const client = await pool.connect();
+    try {
+      const stale = await purgeStaleFixtureSchedules(client, {
+        from,
+        to,
+        fixtureStores: [...fixtureStores],
+      });
+      console.log(
+        `[sync] Removed ${stale.staleSchedulesRemoved} stale fixture schedules `
+        + `(kept project ${BLITZ_PROJECT_ID} ${from}..${to})`,
+      );
+    } finally {
+      client.release();
     }
   }
 

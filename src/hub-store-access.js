@@ -268,17 +268,20 @@ async function getSupervisorStoreNumbers(email) {
   const e = normalizeEmail(email);
   if (!e) return [];
 
+  const week = remainderOfWeekWindow();
   const { rows } = await query(
     `SELECT DISTINCT store_number::text AS store_number
      FROM schedules
      WHERE store_number IS NOT NULL
        AND project_id = $2
+       AND scheduled_date >= $3::date
+       AND scheduled_date <= $4::date
        AND (
          lower(coalesce(supervisor, '')) LIKE '%' || $1 || '%'
          OR lower(coalesce(visit_lead, '')) LIKE '%' || $1 || '%'
        )
      ORDER BY store_number`,
-    [e, BLITZ_PROJECT_ID],
+    [e, BLITZ_PROJECT_ID, week.from, week.to],
   );
 
   return rows
@@ -314,7 +317,8 @@ async function listAccessibleStores(user) {
     const { rows } = await query(
       `SELECT store_number, name, default_visit_id, is_test
        FROM hub_stores
-       ORDER BY is_test DESC, name NULLS LAST, store_number`,
+       WHERE is_test = FALSE
+       ORDER BY name NULLS LAST, store_number`,
     );
     storeRows = rows;
   } else {
@@ -384,9 +388,18 @@ async function listAccessibleStores(user) {
   await applyLiveVisitsToStores(stores);
   await enrichStoresWithShiftMeta(stores);
 
+  const week = remainderOfWeekWindow();
   const viewAll = admin || canViewHubPresence(user);
-  const filters = buildStoreHubFilters(stores);
-  const sortedStores = viewAll ? sortStoresForHubPicker(stores) : stores;
+  let visibleStores = stores;
+  if (viewAll) {
+    visibleStores = stores.filter((store) => {
+      const d = store.shift?.scheduledDate;
+      return d && d >= week.from && d <= week.to;
+    });
+  }
+
+  const filters = buildStoreHubFilters(visibleStores);
+  const sortedStores = viewAll ? sortStoresForHubPicker(visibleStores) : visibleStores;
 
   return {
     isAdmin: admin,
