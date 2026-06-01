@@ -2,6 +2,7 @@
 
 const { query } = require('./lib/db');
 const { listSessions } = require('./hub-presence');
+const { BLITZ_PROJECT_ID } = require('./lib/hub-blitz-config');
 
 function normalizeStoreNumber(value) {
   if (value == null || value === '') return null;
@@ -102,10 +103,11 @@ async function loadStoreVisitMeta(storeNumbers) {
               shift_start_time, shift_end_time, current_status
        FROM schedules
        WHERE store_number = ANY($1::int[])
-         AND scheduled_date >= ($2::date - INTERVAL '1 day')
-         AND scheduled_date <= ($2::date + INTERVAL '7 days')
+         AND project_id = $2
+         AND scheduled_date >= ($3::date - INTERVAL '1 day')
+         AND scheduled_date <= ($3::date + INTERVAL '7 days')
        ORDER BY store_number, scheduled_date ASC, visit_id ASC`,
-      [numericIds, today],
+      [numericIds, BLITZ_PROJECT_ID, today],
     )).rows
     : [];
 
@@ -125,11 +127,11 @@ async function loadStoreVisitMeta(storeNumbers) {
                 WHERE ss.state NOT IN ('not_started', 'signed_off')
               )::int AS active_sections
        FROM section_state ss
-       JOIN schedules s ON s.visit_id = ss.visit_id
+       JOIN schedules s ON s.visit_id = ss.visit_id AND s.project_id = $2
        WHERE s.store_number = ANY($1::int[])
        GROUP BY s.store_number, ss.visit_id
        ORDER BY s.store_number, active_sections DESC, last_activity DESC`,
-      [numericIds],
+      [numericIds, BLITZ_PROJECT_ID],
     );
     activityRows = activityResult.rows;
   }

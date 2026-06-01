@@ -4,6 +4,7 @@ const { query } = require('./lib/db');
 const { resolveHubUser } = require('./hub-auth');
 const { resolveStoreForVisit } = require('./lib/hub-fixture-catalog');
 const { applyLiveVisitsToStores } = require('./hub-live-visit');
+const { BLITZ_PROJECT_ID } = require('./lib/hub-blitz-config');
 const {
   formatPersonLabel,
   supervisorGroupKey,
@@ -102,8 +103,9 @@ async function enrichStoresWithShiftMeta(stores) {
               shift_start_time, shift_end_time, current_status
        FROM schedules
        WHERE visit_id = ANY($1::int[])
+         AND project_id = $2
        ORDER BY scheduled_date ASC, visit_id ASC`,
-      [visitIds],
+      [visitIds, BLITZ_PROJECT_ID],
     );
     for (const row of rows) {
       scheduleByVisit.set(Number(row.visit_id), row);
@@ -120,10 +122,11 @@ async function enrichStoresWithShiftMeta(stores) {
               shift_start_time, shift_end_time, current_status
        FROM schedules
        WHERE store_number = ANY($1::int[])
-         AND scheduled_date >= $2::date
-         AND scheduled_date <= $3::date
+         AND project_id = $2
+         AND scheduled_date >= $3::date
+         AND scheduled_date <= $4::date
        ORDER BY store_number, scheduled_date ASC, visit_id ASC`,
-      [numericStoreIds, week.from, week.to],
+      [numericStoreIds, BLITZ_PROJECT_ID, week.from, week.to],
     );
     for (const row of rows) {
       const sn = normalizeStoreNumber(row.store_number);
@@ -269,12 +272,13 @@ async function getSupervisorStoreNumbers(email) {
     `SELECT DISTINCT store_number::text AS store_number
      FROM schedules
      WHERE store_number IS NOT NULL
+       AND project_id = $2
        AND (
          lower(coalesce(supervisor, '')) LIKE '%' || $1 || '%'
          OR lower(coalesce(visit_lead, '')) LIKE '%' || $1 || '%'
        )
      ORDER BY store_number`,
-    [e],
+    [e, BLITZ_PROJECT_ID],
   );
 
   return rows

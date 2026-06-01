@@ -19,9 +19,10 @@ const {
   resolveHubOverseerEmail,
   remainderOfWeekWindow,
 } = require('../src/lib/hub-supervisor-resolve');
+const { BLITZ_PROJECT_ID, BLITZ_PROJECT_NAME } = require('../src/lib/hub-blitz-config');
 
 const BASE = 'https://prod.sasretail.com';
-const KOMPASS_PROJECT_ID = Number(process.env.CHECKLANES_BLITZ_PROJECT_ID || 1715);
+const KOMPASS_PROJECT_ID = BLITZ_PROJECT_ID;
 const FIXTURES_DIR = path.join(__dirname, '../src/data/hub-fixtures');
 const DEFAULT_STATE = path.join(__dirname, '../../sas-auth/.sas-session/auth-state.json');
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -148,6 +149,29 @@ async function fetchFieldDataSupervisors(session, from, to) {
   return byVisitId;
 }
 
+function visitProjectId(visit) {
+  const raw = visit?.project?.project_id
+    ?? visit?.project?.id
+    ?? visit?.project_id;
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function clearBlitzSchedulesInWindow(fixtureStoreNumbers, from, to) {
+  const numericIds = fixtureStoreNumbers.map((sn) => Number(sn)).filter((n) => Number.isFinite(n));
+  if (!numericIds.length) return 0;
+  const { rowCount } = await query(
+    `DELETE FROM schedules
+     WHERE project_id = $1
+       AND scheduled_date >= $2::date
+       AND scheduled_date <= $3::date
+       AND store_number = ANY($4::int[])`,
+    [BLITZ_PROJECT_ID, from, to, numericIds],
+  );
+  return rowCount || 0;
+}
+
 function pickCycles(cycles, from, to) {
   const fromMs = new Date(`${from}T00:00:00`).getTime();
   const toMs = new Date(`${to}T23:59:59`).getTime();
@@ -187,14 +211,15 @@ async function upsertScheduleFromVisit(visit, cycleId, supervisorEmail, fieldSup
        supervisor, synced_at
      ) VALUES (
        $1, $2, $3, $4, $5,
-       'Fred Meyer Blitz Kompass ISE', $6, $7, $8,
-       $9, $10, $11, $12,
-       $13, NOW()
+       $6, $7, $8, $9, $10, $11, $12, $13,
+       $14, NOW()
      )
      ON CONFLICT (visit_id, scheduled_date) DO UPDATE SET
        store_number = EXCLUDED.store_number,
        store_name = EXCLUDED.store_name,
        cycle_id = EXCLUDED.cycle_id,
+       project_name = EXCLUDED.project_name,
+       project_id = EXCLUDED.project_id,
        shift_start_time = EXCLUDED.shift_start_time,
        shift_end_time = EXCLUDED.shift_end_time,
        current_status = EXCLUDED.current_status,
@@ -207,6 +232,7 @@ async function upsertScheduleFromVisit(visit, cycleId, supervisorEmail, fieldSup
       cycleId,
       Number(storeNumber),
       visit.store?.store?.name || `FM ${storeNumber}`,
+      BLITZ_PROJECT_NAME,
       KOMPASS_PROJECT_ID,
       visit.scheduled_date,
       visit.shift_start_time || null,
@@ -232,8 +258,14 @@ async function main() {
   const matchedCycles = pickCycles(cycles, from, to);
   if (!matchedCycles.length) throw new Error('No Kompass cycles overlap window');
 
+  console.log(`[sync] Blitz project ${BLITZ_PROJECT_ID} (${BLITZ_PROJECT_NAME})`);
   console.log(`[sync] Window ${from} .. ${to} (remainder of week, PT)`);
   console.log(`[sync] PROD cycles: ${matchedCycles.map((c) => `${c.id} (${c.start_date}→${c.end_date})`).join(', ')}`);
+
+  if (!DRY_RUN) {
+    const clearedRows = await clearBlitzSchedulesInWindow([...fixtureStores], from, to);
+    console.log(`[sync] Cleared ${clearedRows} existing project-${BLITZ_PROJECT_ID} schedule rows for fixture stores`);
+  }
 
   const fieldSupervisors = await fetchFieldDataSupervisors(session, from, to);
   console.log(`[sync] Field-data supervisors loaded for ${fieldSupervisors.size} visits`);
@@ -243,6 +275,8 @@ async function main() {
     const visits = await fetchVisitsForCycle(session, cycle.id);
     for (const v of visits) {
       if (!['active', 'in-progress'].includes(String(v.current_status || ''))) continue;
+      const projectId = visitProjectId(v);
+      if (projectId != null && projectId !== BLITZ_PROJECT_ID) continue;
       const d = String(v.scheduled_date || '');
       if (d < from || d > to) continue;
       const sn = storeNum(v);
