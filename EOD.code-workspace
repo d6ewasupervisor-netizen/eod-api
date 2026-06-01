@@ -23,6 +23,9 @@
 		},
 		{
 			"path": "../kompass-netcap"
+		},
+		{
+			"path": "../sas-retail-automator"
 		}
 	],
 	"settings": {}
