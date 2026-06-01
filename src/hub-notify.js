@@ -16,6 +16,7 @@ const {
   buildHelpdeskFromAddress,
   buildHelpdeskSubject,
   resolveHelpdeskRouting,
+  resolveShiftLeadEmailForVisit,
 } = require('./lib/helpdesk-email');
 const { addReplyTo } = require('./lib/resend-reply-to');
 
@@ -340,7 +341,13 @@ async function sendHelpVerifiedEmail({
 </body></html>`;
 
   const from = buildHelpdeskFromAddress(subjectStore, categoryNumber);
-  const routing = resolveHelpdeskRouting({ userName: raiserName, userEmail: raiserEmail });
+  const shiftLeadEmail = await resolveShiftLeadEmailForVisit(visitIdNum);
+  const routing = resolveHelpdeskRouting({
+    userName: raiserName,
+    userEmail: raiserEmail,
+    shiftLeadEmail,
+    extraCc: verifier?.email ? [verifier.email] : [],
+  });
   const replyTo = routing.replyTo;
   const cc = routing.cc;
 

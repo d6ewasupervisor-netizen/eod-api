@@ -6,11 +6,12 @@
  * Sending pattern:
  *   From:     FM035_C1234@retail-odyssey.com
  *   To:       kompass@retailodyssey.com
- *   CC:       lead + fixed Retail Odyssey team
+ *   CC:       shift lead + initiator + fixed Retail Odyssey team
  *   Reply-To: lead email (special-cased for Alexandra Wright)
  */
 
 const { resolveResendReplyTo } = require('./resend-reply-to');
+const { query } = require('./db');
 
 const HELPDESK_TO = 'kompass@retailodyssey.com';
 const HELPDESK_CC_FIXED = [
@@ -35,11 +36,11 @@ function isHelpdeskTestMode() {
 /**
  * Resolve the To / CC / Reply-To for a help desk ticket.
  *
- * CC is always fixed Retail Odyssey team + initiator (see buildHelpdeskCc).
+ * CC is always fixed Retail Odyssey team + initiator + shift lead (see buildHelpdeskCc).
  * Test mode only redirects To to HELPDESK_TEST_TO; CC/Reply-To are unchanged.
  */
-function resolveHelpdeskRouting({ userName, userEmail } = {}) {
-  const cc = buildHelpdeskCc(userEmail);
+function resolveHelpdeskRouting({ userName, userEmail, shiftLeadEmail, extraCc } = {}) {
+  const cc = buildHelpdeskCc(userEmail, collectHelpdeskExtraCc({ shiftLeadEmail, extraCc }));
   if (isHelpdeskTestMode()) {
     return {
       testMode: true,
@@ -78,10 +79,59 @@ function resolveHelpdeskReplyTo({ userName, userEmail } = {}) {
   return resolveResendReplyTo({ userEmail });
 }
 
-function buildHelpdeskCc(userEmail) {
+function normalizeHelpdeskEmail(value) {
+  if (value == null || value === '') return null;
+  const trimmed = String(value).trim();
+  return trimmed ? trimmed.toLowerCase() : null;
+}
+
+function collectHelpdeskExtraCc({ shiftLeadEmail, extraCc } = {}) {
+  const extras = [];
+  const lead = normalizeHelpdeskEmail(shiftLeadEmail);
+  if (lead) extras.push(lead);
+  if (Array.isArray(extraCc)) {
+    for (const addr of extraCc) {
+      const normalized = normalizeHelpdeskEmail(addr);
+      if (normalized) extras.push(normalized);
+    }
+  }
+  return extras;
+}
+
+function buildHelpdeskCc(userEmail, extraEmails = []) {
   const set = new Set(HELPDESK_CC_FIXED.map((e) => e.toLowerCase()));
-  if (userEmail) set.add(String(userEmail).trim().toLowerCase());
+  const initiator = normalizeHelpdeskEmail(userEmail);
+  if (initiator) set.add(initiator);
+  for (const addr of extraEmails) {
+    const normalized = normalizeHelpdeskEmail(addr);
+    if (normalized) set.add(normalized);
+  }
   return [...set];
+}
+
+/**
+ * Resolve the shift lead inbox for a hub visit (hub assignment, then schedule).
+ */
+async function resolveShiftLeadEmailForVisit(visitIdNum) {
+  if (!Number.isFinite(visitIdNum)) return null;
+  const { rows } = await query(
+    `SELECT hu.email AS hub_lead_email, e.email AS schedule_lead_email
+     FROM schedules s
+     LEFT JOIN employees e
+       ON LOWER(TRIM(e.name)) = LOWER(TRIM(s.visit_lead))
+       OR LOWER(TRIM(e.preferred_name)) = LOWER(TRIM(s.visit_lead))
+     LEFT JOIN hub_store_assignments hsa
+       ON hsa.store_number = regexp_replace(CAST(s.store_number AS TEXT), '^0+', '')
+       AND hsa.store_role = 'lead'
+     LEFT JOIN hub_users hu ON hu.id = hsa.user_id AND hu.is_active = true
+     WHERE s.visit_id = $1
+     ORDER BY s.scheduled_date DESC NULLS LAST
+     LIMIT 1`,
+    [visitIdNum],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return row.hub_lead_email || row.schedule_lead_email || null;
 }
 
 /**
@@ -246,6 +296,7 @@ module.exports = {
   buildHelpdeskFromAddress,
   resolveHelpdeskReplyTo,
   buildHelpdeskCc,
+  resolveShiftLeadEmailForVisit,
   buildHelpdeskSubject,
   extractPlanogramMeta,
   buildHelpdeskHtml,

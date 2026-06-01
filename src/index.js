@@ -645,7 +645,7 @@ async function start() {
   // Sends a structured issue report to kompass@retailodyssey.com.
   // From address: FM###_C###@retail-odyssey.com
   // Reply-To: lead email (Alexandra Wright → personal alias)
-  // CC: fixed team + lead (deduped)
+  // CC: fixed team + shift lead + submitter (deduped)
   app.post('/send-helpdesk-ticket', storeConfirmation.requireDayConfirm, async (req, res) => {
     const {
       storeNumber,
@@ -666,6 +666,8 @@ async function start() {
       photoCaptions,
       userName,
       userEmail,
+      shiftLeadEmail,
+      leadEmail,
     } = req.body;
 
     // Required fields
@@ -697,7 +699,11 @@ async function start() {
     const from = dbkey
       ? CHECKLANES_FROM
       : buildHelpdeskFromAddress(storeNumber, categoryNumber);
-    const routing = resolveHelpdeskRouting({ userName, userEmail });
+    const routing = resolveHelpdeskRouting({
+      userName,
+      userEmail,
+      shiftLeadEmail: shiftLeadEmail || leadEmail,
+    });
     const replyTo = routing.replyTo;
     const cc = routing.cc;
     const subject = buildHelpdeskSubject({
