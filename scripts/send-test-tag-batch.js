@@ -5,9 +5,9 @@
  * (subject #999, To: CHECKLANES_OPS_EMAIL, CC: lead sender).
  *
  * Usage:
- *   node scripts/send-test-tag-batch.js [visitId] [leadEmail]
+ *   node scripts/send-test-tag-batch.js <visitId> [leadEmail]
  *
- * Defaults: visitId 99999163, leadEmail d6ewa.supervisor@gmail.com
+ * visitId must be a live blitz visit (see hub_stores.default_visit_id).
  */
 
 // Prefer public proxy when running locally via `railway run` (internal hostname won't resolve).
@@ -22,8 +22,13 @@ const { query, pool } = require('../src/lib/db');
 const { initHubTagBatch, sendTagBatch } = require('../src/hub-tag-batch');
 const { validateUpc } = require('../src/lib/barcode');
 
-const visitId = Number(process.argv[2] || 99999163);
+const visitId = Number(process.argv[2]);
 const leadEmail = (process.argv[3] || 'd6ewa.supervisor@gmail.com').trim().toLowerCase();
+
+if (!Number.isFinite(visitId) || visitId <= 0) {
+  console.error('Usage: node scripts/send-test-tag-batch.js <visitId> [leadEmail]');
+  process.exit(1);
+}
 
 const PRODUCTS_PATH = path.join(
   __dirname,

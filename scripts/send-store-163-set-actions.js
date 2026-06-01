@@ -16,9 +16,14 @@
  *   railway run node scripts/send-store-163-set-actions.js --dry-run
  */
 
+if (process.env.DATABASE_PUBLIC_URL) {
+  process.env.DATABASE_URL = process.env.DATABASE_PUBLIC_URL;
+}
+
 const fs = require('fs');
 const path = require('path');
 const { Resend } = require('resend');
+const { query, pool } = require('../src/lib/db');
 const { generateBarcode, validateUpc } = require('../src/lib/barcode');
 const { buildTagBatchPdf } = require('../src/lib/tag-batch-pdf');
 const { buildSetRelatedEmailPayload } = require('../src/lib/checklanes-email');
@@ -184,6 +189,22 @@ async function buildTagItem(row, productsCatalog) {
   };
 }
 
+async function resolveLiveVisitId(storeNumber) {
+  const { rows } = await query(
+    `SELECT default_visit_id, live_visit_id
+     FROM hub_stores
+     WHERE store_number = $1
+     LIMIT 1`,
+    [String(storeNumber)],
+  );
+  const row = rows[0];
+  const visitId = Number(row?.live_visit_id || row?.default_visit_id);
+  if (!Number.isFinite(visitId) || visitId <= 0) {
+    throw new Error(`No live visit for store ${storeNumber}; run sync-checklane-visits-from-prod.js first`);
+  }
+  return visitId;
+}
+
 async function main() {
   const productsCatalog = loadJson(PRODUCTS_PATH);
 
@@ -199,7 +220,7 @@ async function main() {
   const sorted = sortTagsByAisle(items);
 
   const dateLabel = formatLocalDate();
-  const visitId = 99999163;
+  const visitId = await resolveLiveVisitId(STORE);
   const pdfBuffer = await buildTagBatchPdf({
     store: STORE,
     visitId,
@@ -253,7 +274,9 @@ async function main() {
   console.log(`\nSent subject ${SUBJECT} → ${RECIPIENT} (resendId ${data?.id || '(none)'})`);
 }
 
-main().catch((err) => {
-  console.error(err.message || err);
-  process.exit(1);
-});
+main()
+  .catch((err) => {
+    console.error(err.message || err);
+    process.exit(1);
+  })
+  .finally(() => pool.end().catch(() => {}));

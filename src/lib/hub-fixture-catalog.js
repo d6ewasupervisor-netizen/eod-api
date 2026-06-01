@@ -8,6 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { query } = require('./db');
+const { BLITZ_PROJECT_ID } = require('./hub-blitz-config');
 
 const DATA_DIR = path.join(__dirname, '../data/hub-fixtures');
 const catalogCache = new Map();
@@ -95,9 +96,10 @@ async function resolveStoreForVisit(visitIdNum) {
       `SELECT store_number
        FROM schedules
        WHERE visit_id = $1
+         AND project_id = $2
        ORDER BY scheduled_date DESC
        LIMIT 1`,
-      [visitIdNum],
+      [visitIdNum, BLITZ_PROJECT_ID],
     );
     if (rows.length && rows[0].store_number != null) {
       return normalizeStoreNumber(rows[0].store_number);
@@ -105,10 +107,6 @@ async function resolveStoreForVisit(visitIdNum) {
   } catch (err) {
     console.error('[hub-fixture-catalog] schedule lookup failed:', err.message);
   }
-
-  // Hub test visits: 99999163 → store 163 (see migrations/008_hub.sql).
-  const m = String(visitIdNum).match(/^99999(\d{3,5})$/);
-  if (m) return normalizeStoreNumber(m[1]);
 
   return null;
 }

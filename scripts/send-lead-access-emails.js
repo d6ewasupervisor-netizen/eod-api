@@ -4,7 +4,7 @@
  *
  *   node scripts/send-lead-access-emails.js [--dry-run]
  *
- * Defaults to cycle 242292 seed associates; override with LEAD_EMAILS env (comma-separated hub emails).
+ * Override recipients with LEAD_EMAILS env (comma-separated hub emails).
  */
 'use strict';
 
@@ -12,7 +12,6 @@ if (process.env.DATABASE_PUBLIC_URL) {
   process.env.DATABASE_URL = process.env.DATABASE_PUBLIC_URL;
 }
 
-const fs = require('fs');
 const path = require('path');
 const { query, pool } = require('../src/lib/db');
 const { issueLinkToken } = require('../src/lib/tokens');
@@ -20,9 +19,8 @@ const { buildMagicLink } = require('../src/lib/magic-link');
 const { sendHubLeadAccessEmail } = require('../src/lib/auth-email');
 
 const DRY_RUN = process.argv.includes('--dry-run');
-const SEED_PATH = path.join(__dirname, '../src/data/kompass-cycle-242292-seed.json');
 
-/** Hub user email keys from kompass-cycle-242292 seed (Tyson's team leads). */
+/** Default team lead emails (Tyson's blitz team). */
 const DEFAULT_LEAD_EMAILS = [
   'alex.wright2@retailodyssey.com',
   'james.duchene@retailodyssey.com',
@@ -51,21 +49,22 @@ function buildChecklanesUrl(storeNumber, visitId) {
   return `${hubBase()}/checklanes/`;
 }
 
-function pickPrimaryStore(associate, storeMap) {
-  const stores = associate?.stores || {};
-  const leadStores = Object.entries(stores)
-    .filter(([, role]) => role === 'lead')
-    .map(([sn]) => sn)
-    .sort((a, b) => Number(a) - Number(b));
-  const allStores = Object.keys(stores).sort((a, b) => Number(a) - Number(b));
-  const primary = (leadStores[0] || allStores[0] || null);
-  if (!primary) return { storeNumber: null, visitId: null, labels: [] };
-  const visitId = storeMap.get(primary)?.default_visit_id || null;
-  const labels = allStores.map((sn) => {
-    const role = stores[sn];
-    return role === 'lead' ? `FM ${sn} (lead)` : `FM ${sn}`;
-  });
-  return { storeNumber: primary, visitId, labels };
+function pickPrimaryStore(accessRows) {
+  if (!accessRows.length) {
+    return { storeNumber: null, visitId: null, labels: [] };
+  }
+  const leadStores = accessRows
+    .filter((row) => row.role === 'lead')
+    .sort((a, b) => Number(a.store_number) - Number(b.store_number));
+  const primary = leadStores[0] || accessRows[0];
+  const labels = accessRows.map((row) => (
+    row.role === 'lead' ? `FM ${row.store_number} (lead)` : `FM ${row.store_number}`
+  ));
+  return {
+    storeNumber: primary.store_number,
+    visitId: primary.default_visit_id || null,
+    labels,
+  };
 }
 
 async function grantLeadAccess(hubUserId) {
@@ -84,15 +83,17 @@ async function grantLeadAccess(hubUserId) {
   );
 }
 
-async function loadStoreMap() {
+async function loadStoreAccess(hubUserId) {
   const { rows } = await query(
-    'SELECT store_number, default_visit_id FROM hub_stores ORDER BY store_number',
+    `SELECT hsa.store_number, hsa.store_role AS role, hs.default_visit_id
+     FROM hub_store_assignments hsa
+     JOIN hub_stores hs ON hs.store_number = hsa.store_number
+     WHERE hsa.user_id = $1
+       AND hs.is_test = FALSE
+     ORDER BY hsa.store_number::int`,
+    [hubUserId],
   );
-  const map = new Map();
-  for (const row of rows) {
-    map.set(String(row.store_number), row);
-  }
-  return map;
+  return rows;
 }
 
 async function resolveHubUserByEmail(email) {
@@ -111,9 +112,9 @@ function signInEmail(hubUser) {
   return normalizeEmail(hubUser.email);
 }
 
-async function sendLeadInvite({ hubUser, associate, storeMap }) {
+async function sendLeadInvite({ hubUser, accessRows }) {
   const loginEmail = signInEmail(hubUser);
-  const { storeNumber, visitId, labels } = pickPrimaryStore(associate, storeMap);
+  const { storeNumber, visitId, labels } = pickPrimaryStore(accessRows);
   const returnTo = buildChecklanesUrl(storeNumber, visitId);
 
   await grantLeadAccess(hubUser.id);
@@ -161,14 +162,6 @@ async function main() {
   if (!process.env.DATABASE_URL && !process.env.DATABASE_PUBLIC_URL) {
     throw new Error('DATABASE_URL is not set');
   }
-  if (!fs.existsSync(SEED_PATH)) {
-    throw new Error(`Missing seed file: ${SEED_PATH}`);
-  }
-
-  const seed = JSON.parse(fs.readFileSync(SEED_PATH, 'utf8'));
-  const associateByEmail = new Map(
-    (seed.associates || []).map((a) => [normalizeEmail(a.email), a]),
-  );
 
   const leadEmails = (process.env.LEAD_EMAILS || '')
     .split(',')
@@ -176,7 +169,6 @@ async function main() {
     .filter(Boolean);
   const targets = leadEmails.length ? leadEmails : DEFAULT_LEAD_EMAILS;
 
-  const storeMap = await loadStoreMap();
   console.log(`${DRY_RUN ? '[dry-run] ' : ''}Sending lead access to ${targets.length} team leads...`);
 
   for (const email of targets) {
@@ -186,12 +178,12 @@ async function main() {
       continue;
     }
 
-    const associate = associateByEmail.get(normalizeEmail(hubUser.email)) || null;
+    const accessRows = await loadStoreAccess(hubUser.id);
     console.log(`\n${hubUser.name} <${hubUser.email}>`);
     console.log(`  standing_rank was ${hubUser.standing_rank}`);
 
     try {
-      const sent = await sendLeadInvite({ hubUser, associate, storeMap });
+      const sent = await sendLeadInvite({ hubUser, accessRows });
       console.log(`  sent to ${sent.loginEmail}`);
       console.log(`  link target: ${sent.returnTo}`);
       if (sent.resendId) console.log(`  resendId: ${sent.resendId}`);
