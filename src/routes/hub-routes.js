@@ -49,6 +49,7 @@ const {
   sendTeamMemberInvite,
 } = require('../hub-team-invite');
 const { requireVisitAccess } = require('../hub-store-access');
+const { maybePinLiveVisitFromUser } = require('../hub-live-visit');
 const {
   loadSectionRow,
   upsertSectionState,
@@ -121,6 +122,19 @@ async function attachHubContext(req, res, next) {
   try {
     req.hubUser = await resolveHubUser(req.user);
     req.hubRank = await resolveRank(req.user, req.params.visitId);
+    if (req.hubRank >= 2) {
+      const storeNumber = await resolveStoreForVisit(parseVisitId(req.params.visitId));
+      if (storeNumber) {
+        maybePinLiveVisitFromUser(
+          req.user,
+          req.hubUser,
+          storeNumber,
+          req.params.visitId,
+        ).catch((err) => {
+          console.error('[hub-live-visit] pin from hub context failed:', err.message);
+        });
+      }
+    }
     next();
   } catch (err) {
     if (err.message === 'Invalid visitId') {

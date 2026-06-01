@@ -21,6 +21,10 @@ const {
 } = require('../hub-presence-history');
 
 const { query } = require('../lib/db');
+const {
+  resolveLiveVisitForStore,
+  maybePinLiveVisitFromUser,
+} = require('../hub-live-visit');
 
 const router = express.Router();
 
@@ -42,6 +46,12 @@ router.post('/presence', requireAuth, async (req, res) => {
       view: req.body?.view,
       detail: req.body?.detail,
     });
+    if (session?.storeNumber && session?.visitId && session.page === 'hub') {
+      maybePinLiveVisitFromUser(req.user, hubUser, session.storeNumber, session.visitId)
+        .catch((err) => {
+          console.error('[hub-live-visit] pin from presence failed:', err.message);
+        });
+    }
     if (session) {
       recordPresenceHistory(session).catch((err) => {
         console.error('[hub-presence] history record failed:', err.message);
@@ -148,6 +158,39 @@ router.get('/stores', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[hub-stores] list failed:', err.message);
     return res.status(500).json({ error: 'Failed to load stores' });
+  }
+});
+
+router.get('/stores/:storeNumber/live-visit', requireAuth, async (req, res) => {
+  try {
+    const storeNumber = normalizeStoreNumber(req.params.storeNumber);
+    if (!storeNumber) return res.status(400).json({ error: 'Invalid store number' });
+
+    const storesPayload = await listAccessibleStores(req.user);
+    const allowedStore = storesPayload.stores.some((s) => s.storeNumber === storeNumber);
+    if (!allowedStore && !storesPayload.isAdmin) {
+      return res.status(403).json({ error: 'Not allowed to view this store' });
+    }
+
+    const live = await resolveLiveVisitForStore(storeNumber);
+    return res.json({
+      storeNumber,
+      visitId: live.visitId,
+      source: live.source,
+      schedule: live.schedule
+        ? {
+          visitId: String(live.schedule.visit_id),
+          scheduledDate: live.schedule.scheduled_date,
+          visitLead: live.schedule.visit_lead,
+          status: live.schedule.current_status,
+          shiftStart: live.schedule.shift_start_time,
+          shiftEnd: live.schedule.shift_end_time,
+        }
+        : null,
+    });
+  } catch (err) {
+    console.error('[hub-stores] live-visit failed:', err.message);
+    return res.status(500).json({ error: 'Failed to resolve live visit' });
   }
 });
 

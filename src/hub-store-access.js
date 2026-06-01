@@ -3,6 +3,7 @@
 const { query } = require('./lib/db');
 const { resolveHubUser } = require('./hub-auth');
 const { resolveStoreForVisit } = require('./lib/hub-fixture-catalog');
+const { applyLiveVisitsToStores } = require('./hub-live-visit');
 
 function parseVisitId(visitId) {
   const visitIdNum = Number(visitId);
@@ -133,8 +134,9 @@ async function enrichStoresWithShiftMeta(stores) {
   }
 
   for (const store of stores) {
-    const sched = (store.defaultVisitId
-      ? scheduleByVisit.get(Number(store.defaultVisitId))
+    const visitKey = store.liveVisitId || store.defaultVisitId;
+    const sched = (visitKey
+      ? scheduleByVisit.get(Number(visitKey))
       : null) || scheduleByStore.get(store.storeNumber) || null;
     const hubLeadRow = leadByStore.get(store.storeNumber);
 
@@ -162,7 +164,9 @@ async function enrichStoresWithShiftMeta(stores) {
       shiftStart: sched?.shift_start_time || null,
       shiftEnd: sched?.shift_end_time || null,
       status: sched?.current_status || null,
-      visitId: sched?.visit_id != null ? String(sched.visit_id) : store.defaultVisitId,
+      visitId: sched?.visit_id != null
+        ? String(sched.visit_id)
+        : (visitKey != null ? String(visitKey) : null),
     };
   }
 }
@@ -313,6 +317,7 @@ async function listAccessibleStores(user) {
     }
   }
 
+  await applyLiveVisitsToStores(stores);
   await enrichStoresWithShiftMeta(stores);
 
   const viewAll = admin || canViewHubPresence(user);
