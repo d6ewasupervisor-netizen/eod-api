@@ -176,6 +176,14 @@ function isEnvSupervisor(email) {
   return ADMIN_EMAILS.includes(e) || SUPERVISOR_EMAILS.includes(e);
 }
 
+/** True when schedules list this email as supervisor (or visit lead) for the store. */
+async function isScheduleSupervisorForStore(email, storeNumber) {
+  const sn = normalizeStoreNumber(storeNumber);
+  if (!sn) return false;
+  const stores = await getSupervisorStoreNumbers(email);
+  return stores.includes(sn);
+}
+
 async function isHubAdmin(user, hubUserRow) {
   const email = normalizeEmail(user?.email);
   if (BUILTIN_HUB_ADMINS.has(email)) return true;
@@ -230,6 +238,9 @@ async function listAccessibleStores(user) {
   const assignmentByStore = new Map(
     assignments.map((row) => [normalizeStoreNumber(row.store_number), row]),
   );
+  const scheduleSupervisorStores = await getSupervisorStoreNumbers(user.email);
+  const assignedStores = assignments.map((a) => normalizeStoreNumber(a.store_number));
+  const isSupervisorUser = isEnvSupervisor(user.email) || scheduleSupervisorStores.length > 0;
 
   let storeRows;
   if (admin) {
@@ -239,15 +250,13 @@ async function listAccessibleStores(user) {
        ORDER BY is_test DESC, name NULLS LAST, store_number`,
     );
     storeRows = rows;
-  } else if (isEnvSupervisor(user.email)) {
-    const supervisorStores = await getSupervisorStoreNumbers(user.email);
-    const assignedStores = assignments.map((a) => normalizeStoreNumber(a.store_number));
-    const storeSet = new Set([...supervisorStores, ...assignedStores]);
+  } else {
+    const storeSet = new Set([...scheduleSupervisorStores, ...assignedStores]);
 
     if (!storeSet.size) {
       return {
         isAdmin: false,
-        isSupervisor: true,
+        isSupervisor: isSupervisorUser,
         canViewPresence: canViewHubPresence(user),
         stores: [],
         hubUserId: hubUser.id,
@@ -273,28 +282,13 @@ async function listAccessibleStores(user) {
         });
       }
     }
-  } else {
-    if (!assignments.length) {
-      return {
-        isAdmin: false,
-        isSupervisor: false,
-        canViewPresence: canViewHubPresence(user),
-        stores: [],
-        hubUserId: hubUser.id,
-      };
-    }
-    storeRows = assignments.map((a) => ({
-      store_number: a.store_number,
-      name: a.name,
-      default_visit_id: a.default_visit_id,
-      is_test: a.is_test,
-    }));
   }
 
   const stores = storeRows.map((row) => {
     const sn = normalizeStoreNumber(row.store_number);
     const assignment = assignmentByStore.get(sn);
-    const canManage = admin || isEnvSupervisor(user.email);
+    const isScheduleSup = scheduleSupervisorStores.includes(sn);
+    const canManage = admin || isEnvSupervisor(user.email) || isScheduleSup;
     return {
       storeNumber: sn,
       name: row.name || `Store ${String(sn).padStart(5, '0')}`,
@@ -302,15 +296,18 @@ async function listAccessibleStores(user) {
       isTest: !!row.is_test,
       myRole: assignment?.store_role || (canManage && !admin ? 'supervisor' : null),
       isAssigned: !!assignment,
-      canManage: admin || (isEnvSupervisor(user.email) && (
-        admin || assignment?.store_role === 'lead' || !assignment
-      )),
+      canManage: admin || (
+        (isEnvSupervisor(user.email) || isScheduleSup) && (
+          assignment?.store_role === 'lead' || !assignment || isScheduleSup
+        )
+      ),
       myRank: assignment ? storeRoleToRank(assignment.store_role) : (canManage ? 3 : 1),
     };
   });
 
   for (const store of stores) {
-    if (admin || isEnvSupervisor(user.email)) {
+    const isScheduleSup = scheduleSupervisorStores.includes(store.storeNumber);
+    if (admin || isEnvSupervisor(user.email) || isScheduleSup) {
       store.canManage = true;
       if (!store.myRole) store.myRole = 'supervisor';
       store.myRank = Math.max(store.myRank || 1, 3);
@@ -324,7 +321,7 @@ async function listAccessibleStores(user) {
 
   return {
     isAdmin: admin,
-    isSupervisor: isEnvSupervisor(user.email),
+    isSupervisor: isSupervisorUser,
     canViewPresence: canViewHubPresence(user),
     organizeBySupervisor: viewAll,
     stores,
@@ -343,11 +340,9 @@ async function userHasVisitAccess(user, visitId) {
     return { allowed: false, reason: 'unknown_store' };
   }
 
-  if (isEnvSupervisor(user.email)) {
-    const supervisorStores = await getSupervisorStoreNumbers(user.email);
-    if (supervisorStores.includes(storeNumber)) {
-      return { allowed: true, reason: 'supervisor', storeNumber };
-    }
+  const supervisorStores = await getSupervisorStoreNumbers(user.email);
+  if (supervisorStores.includes(storeNumber)) {
+    return { allowed: true, reason: 'supervisor', storeNumber };
   }
 
   const { rows } = await query(
@@ -373,6 +368,7 @@ async function storeRankForUser(user, storeNumber) {
   if (admin || isEnvSupervisor(user.email)) return 3;
 
   const sn = normalizeStoreNumber(storeNumber);
+  if (await isScheduleSupervisorForStore(user.email, sn)) return 3;
   const { rows } = await query(
     `SELECT store_role FROM hub_store_assignments
      WHERE user_id = $1 AND store_number = $2`,
@@ -388,6 +384,7 @@ async function canManageStore(user, storeNumber) {
   if (isEnvSupervisor(user.email)) return true;
 
   const sn = normalizeStoreNumber(storeNumber);
+  if (await isScheduleSupervisorForStore(user.email, sn)) return true;
   const { rows } = await query(
     `SELECT store_role FROM hub_store_assignments
      WHERE user_id = $1 AND store_number = $2`,
@@ -507,6 +504,9 @@ function requireVisitAccess() {
 module.exports = {
   normalizeStoreNumber,
   isHubAdmin,
+  isEnvSupervisor,
+  isScheduleSupervisorForStore,
+  getSupervisorStoreNumbers,
   canViewHubPresence,
   listAccessibleStores,
   userHasVisitAccess,
