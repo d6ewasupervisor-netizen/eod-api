@@ -11,6 +11,11 @@ const { pool } = require('../lib/db');
 const { verifyReviewToken } = require('../lib/decision-review-jwt');
 const { applyStoreConfirmDecision, STORE_CONFIRM_REQUEST_EXPIRY_MS } = require('../store-confirmation');
 const { applyShiftDecision, SHIFT_REQUEST_EXPIRY_MS } = require('../shift-management');
+const {
+  getRequestById,
+  loadBayPhotoPayload,
+  applyProdDispatchDecision,
+} = require('../hub-prod-dispatch');
 
 function iso(ms) {
   return new Date(ms).toISOString();
@@ -19,6 +24,7 @@ function iso(ms) {
 function mapType(param) {
   if (param === 'store') return 'store';
   if (param === 'shift') return 'shift';
+  if (param === 'prod') return 'prod';
   return null;
 }
 
@@ -31,6 +37,34 @@ function jwtExpMs(verified) {
 
 function createDecideRouter({ resend }) {
   const router = express.Router();
+
+  router.get('/prod/:id/bay/:bayNum/image', async (req, res) => {
+    const id = String(req.params.id || '').trim();
+    const bayNum = Number(req.params.bayNum);
+    const token = req.query.token;
+    if (!id || !Number.isFinite(bayNum) || !token) {
+      return res.status(400).json({ ok: false, error: 'missing_params' });
+    }
+    try {
+      verifyReviewToken(String(token), { expectedRequestId: id, expectedType: 'prod' });
+    } catch (e) {
+      return res.status(401).json({ ok: false, error: 'invalid_token' });
+    }
+    try {
+      const row = await getRequestById(Number(id));
+      if (!row) return res.status(404).end();
+      const { loadBayPhotoRow } = require('../hub-bay-photos');
+      const photo = await loadBayPhotoRow(Number(row.visit_id), row.dbkey, row.lane, bayNum);
+      if (!photo) return res.status(404).end();
+      const buf = Buffer.from(photo.photo_base64, 'base64');
+      res.setHeader('Content-Type', photo.content_type || 'image/jpeg');
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+      return res.send(buf);
+    } catch (err) {
+      console.error('[decide prod image]', err);
+      return res.status(500).end();
+    }
+  });
 
   router.get('/:type/:id', async (req, res) => {
     const t = mapType(req.params.type);
@@ -51,6 +85,52 @@ function createDecideRouter({ resend }) {
     }
 
     try {
+      if (t === 'prod') {
+        const { rows } = await pool.query(
+          'SELECT * FROM hub_prod_dispatch_requests WHERE id = $1',
+          [id],
+        );
+        if (!rows.length) {
+          return res.status(404).json({ ok: false, error: 'not_found' });
+        }
+        const r = rows[0];
+        const created = new Date(r.created_at).getTime();
+        const requestCutoff = created + 24 * 60 * 60 * 1000;
+        let status = r.status;
+        if (status === 'pending' && Date.now() > requestCutoff) {
+          status = 'expired';
+        }
+        const expiresMs = Math.min(jwtExpMs(verified), requestCutoff);
+        const photos = await loadBayPhotoPayload(
+          Number(r.visit_id),
+          r.lane,
+          r.dbkey,
+        );
+        const photoUrls = photos.map((p) => ({
+          bay_num: p.bay_num,
+          url: `/api/decide/prod/${id}/bay/${p.bay_num}/image?token=${encodeURIComponent(String(token))}`,
+        }));
+        return res.json({
+          ok: true,
+          status,
+          requestedBy: r.signed_off_by_email,
+          signedOffByName: r.signed_off_by_name,
+          storeNumber: r.store_number,
+          visitId: Number(r.visit_id),
+          lane: r.lane || '',
+          dbkey: r.dbkey,
+          setName: r.set_name,
+          manifestPogId: r.manifest_pog_id,
+          actionCode: r.action_code,
+          matchedResetName: r.matched_reset_name,
+          uploadResult: r.upload_result,
+          bayCount: photos.length,
+          photos: photoUrls,
+          requestedAt: r.signed_off_at || r.created_at,
+          expiresAt: iso(expiresMs),
+        });
+      }
+
       if (t === 'store') {
         const { rows } = await pool.query(
           'SELECT * FROM store_confirm_requests WHERE id = $1',
@@ -78,6 +158,10 @@ function createDecideRouter({ resend }) {
           requestedAt: r.created_at,
           expiresAt: iso(expiresMs),
         });
+      }
+
+      if (t !== 'shift') {
+        return res.status(400).json({ ok: false, error: 'invalid_type' });
       }
 
       const { rows } = await pool.query('SELECT * FROM shift_requests WHERE id = $1', [id]);
@@ -139,6 +223,20 @@ function createDecideRouter({ resend }) {
     void verified;
 
     try {
+      if (t === 'prod') {
+        const out = await applyProdDispatchDecision(Number(id), decision);
+        if (!out.ok && out.error === 'not_found') {
+          return res.status(404).json({ ok: false, error: 'not_found' });
+        }
+        if (!out.ok && out.error === 'sas_inactive') {
+          return res.status(503).json({ ok: false, error: 'sas_inactive' });
+        }
+        if (!out.ok) {
+          return res.status(500).json({ ok: false, error: out.error || 'server' });
+        }
+        return res.json({ ok: true, status: out.status, uploadResult: out.uploadResult || null });
+      }
+
       if (t === 'store') {
         const out = await applyStoreConfirmDecision(pool, id, decision);
         if (!out.ok && out.error === 'not_found') {
@@ -148,6 +246,10 @@ function createDecideRouter({ resend }) {
           return res.status(500).json({ ok: false, error: out.error || 'server' });
         }
         return res.json({ ok: true, status: out.status });
+      }
+
+      if (t !== 'shift') {
+        return res.status(400).json({ ok: false, error: 'invalid_type' });
       }
 
       const out = await applyShiftDecision(pool, resend, id, decision);

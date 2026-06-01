@@ -1279,6 +1279,10 @@ async function init(app, pool) {
   }
 }
 
+async function uploadCategoryResetPhoto(visitId, resetId, photoBase64, slot, filename, filetype) {
+  return uploadPhoto(visitId, resetId, photoBase64, slot, filename, filetype);
+}
+
 module.exports = {
   init,
   getHeaders,
@@ -1286,4 +1290,5 @@ module.exports = {
   sasPatch,
   isSessionAlive: () => sasSession.alive,
   applySession,
+  uploadCategoryResetPhoto,
 };

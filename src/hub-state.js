@@ -5,6 +5,7 @@ const { resolveRank, resolveHubUser } = require('./hub-auth');
 const { resolveAisleLabel } = require('./hub-aisle-designation');
 const { PRESET_CATALOG } = require('./lib/aisle-designations');
 const { getChatSummary } = require('./hub-messages');
+const { isHubAdmin } = require('./hub-store-access');
 
 const STATE_KEYS = [
   'not_started',
@@ -205,6 +206,9 @@ async function getSnapshot(visitId, options = {}) {
   let myUserId = null;
   let chatSummary = { unreadTotal: 0, threadCount: 0 };
   let myTagSweepAisleKeys = [];
+  let isHubAdminUser = false;
+  let isProdDispatchApproverUser = false;
+  let prodDispatchInbox = [];
   if (user) {
     myRank = await resolveRank(user, visitIdNum);
     const hubUser = await resolveHubUser(user);
@@ -213,6 +217,16 @@ async function getSnapshot(visitId, options = {}) {
     // Lazy require avoids a hub-state <-> hub-tag-sweep require cycle.
     const { userAssignedAisleKeys } = require('./hub-tag-sweep');
     myTagSweepAisleKeys = await userAssignedAisleKeys(visitIdNum, myUserId);
+    isHubAdminUser = await isHubAdmin(user, hubUser);
+    try {
+      const { isProdDispatchEnabled, isProdDispatchApprover, listPendingForApprover } = require('./hub-prod-dispatch');
+      isProdDispatchApproverUser = isProdDispatchApprover(user.email);
+      if (isProdDispatchEnabled() && isProdDispatchApproverUser) {
+        prodDispatchInbox = await listPendingForApprover(user.email);
+      }
+    } catch (err) {
+      console.error('[hub-state] prod dispatch inbox failed:', err.message);
+    }
   }
 
   return {
@@ -222,6 +236,9 @@ async function getSnapshot(visitId, options = {}) {
     stats,
     myRank,
     myUserId,
+    isHubAdmin: isHubAdminUser,
+    isProdDispatchApprover: isProdDispatchApproverUser,
+    prodDispatchInbox,
     pendingActions,
     aislePresets: PRESET_CATALOG,
     chatSummary,

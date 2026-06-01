@@ -5,6 +5,32 @@ const { parseVisitId } = require('./hub-auth');
 /** @type {Map<string, Set<{ res: import('express').Response, user: object }>>} */
 const subscribersByVisit = new Map();
 
+/** @type {Set<{ res: import('express').Response, user: object, cleanup: Function }>} */
+const prodDispatchAdminSubs = new Set();
+
+function writeProdDispatchEvent(res, payload) {
+  res.write(`event: prod_dispatch\ndata: ${JSON.stringify(payload)}\n\n`);
+}
+
+async function maybeRegisterProdDispatchAdmin(res, user) {
+  try {
+    const { isProdDispatchEnabled, isProdDispatchApprover } = require('./hub-prod-dispatch');
+    if (!isProdDispatchEnabled() || !isProdDispatchApprover(user?.email)) return null;
+    const entry = { res, user };
+    prodDispatchAdminSubs.add(entry);
+    const cleanup = () => {
+      prodDispatchAdminSubs.delete(entry);
+    };
+    res.on('close', cleanup);
+    res.on('finish', cleanup);
+    entry.cleanup = cleanup;
+    return cleanup;
+  } catch (err) {
+    console.error('[hub-broadcast] prod dispatch admin register failed:', err.message);
+    return null;
+  }
+}
+
 function addSubscriber(visitId, res, user) {
   const key = String(parseVisitId(visitId));
   const entry = { res, user };
@@ -23,6 +49,7 @@ function addSubscriber(visitId, res, user) {
 
   res.on('close', cleanup);
   res.on('finish', cleanup);
+  maybeRegisterProdDispatchAdmin(res, user);
   return cleanup;
 }
 
@@ -79,6 +106,48 @@ async function sendSnapshotToClient(res, user, visitId) {
   writeSnapshotEvent(res, snapshot);
 }
 
+async function broadcastProdDispatch(payload) {
+  const dead = [];
+  for (const sub of prodDispatchAdminSubs) {
+    try {
+      if (sub.res.writableEnded || sub.res.destroyed) {
+        dead.push(sub);
+        continue;
+      }
+      writeProdDispatchEvent(sub.res, payload);
+    } catch (err) {
+      console.error('[hub-broadcast] prod_dispatch push failed:', err.message);
+      dead.push(sub);
+    }
+  }
+  for (const sub of dead) {
+    prodDispatchAdminSubs.delete(sub);
+  }
+
+  const visitKey = payload.visitId != null ? String(parseVisitId(payload.visitId)) : null;
+  if (!visitKey) return;
+  const subs = subscribersByVisit.get(visitKey);
+  if (!subs || !subs.size) return;
+
+  const visitDead = [];
+  for (const sub of subs) {
+    try {
+      const { isProdDispatchApprover } = require('./hub-prod-dispatch');
+      if (!isProdDispatchApprover(sub.user?.email)) continue;
+      if (sub.res.writableEnded || sub.res.destroyed) {
+        visitDead.push(sub);
+        continue;
+      }
+      writeProdDispatchEvent(sub.res, payload);
+    } catch (err) {
+      visitDead.push(sub);
+    }
+  }
+  for (const sub of visitDead) {
+    subs.delete(sub);
+  }
+}
+
 async function broadcastVisit(visitId) {
   const key = String(parseVisitId(visitId));
   const subs = subscribersByVisit.get(key);
@@ -106,9 +175,11 @@ async function broadcastVisit(visitId) {
 module.exports = {
   addSubscriber,
   broadcastVisit,
+  broadcastProdDispatch,
   broadcastChat,
   sendSnapshotToClient,
   writeSnapshotEvent,
   writeChatEvent,
+  writeProdDispatchEvent,
   writeHeartbeat,
 };

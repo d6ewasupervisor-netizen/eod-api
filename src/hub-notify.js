@@ -375,9 +375,87 @@ async function sendHelpVerifiedEmail({
   return { sent: true, resendId: data?.id, subject };
 }
 
+async function sendProdDispatchReviewEmail({
+  request,
+  photos,
+  reviewUrl,
+  signedOffBy,
+}) {
+  if (!_resend) {
+    return { sent: false, error: 'Hub notify not initialized' };
+  }
+
+  const storeLabel = request.store_number || 'unknown';
+  const setLabel = request.set_name || request.dbkey;
+  const subject =
+    `[Checklanes PROD review] Store ${storeLabel} · Lane ${request.lane || '—'} · ${setLabel}`;
+
+  const detailRows = [
+    ['Store', storeLabel],
+    ['Visit', String(request.visit_id)],
+    ['Lane', request.lane || '—'],
+    ['DBKey', request.dbkey],
+    request.set_name ? ['Set', request.set_name] : null,
+    request.manifest_pog_id ? ['Manifest POG', request.manifest_pog_id] : null,
+    request.action_code ? ['Action', request.action_code] : null,
+    ['Signed off by', formatPerson(signedOffBy?.name, signedOffBy?.email)],
+    ['Bay photos', String(photos?.length || 0)],
+  ].filter(Boolean);
+
+  const detailsHtml = detailRows
+    .map(
+      ([label, value]) =>
+        `<p style="margin:0 0 8px;"><strong>${escHtml(label)}:</strong> ${escHtml(value)}</p>`,
+    )
+    .join('');
+
+  const resendAttachments = toResendAttachments(
+    (photos || []).map((p, i) => ({
+      filename: `bay-${p.bay_num || i + 1}.jpg`,
+      content: p.base64,
+      content_type: p.content_type || 'image/jpeg',
+    })),
+  );
+
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:system-ui,sans-serif;color:#111827;max-width:560px;line-height:1.5;">
+  <h2 style="margin:0 0 12px;font-size:18px;">PROD photo upload — approval needed</h2>
+  <p style="margin:0 0 12px;color:#374151;">A lead signed off a Checklanes set. Review the bay photos and approve or deny uploading them to the matching PROD category reset.</p>
+  ${detailsHtml}
+  ${photosNoteHtml(resendAttachments ? resendAttachments.length : 0)}
+  <p style="margin:20px 0 0;">
+    <a href="${escHtml(reviewUrl)}" style="display:inline-block;background:#0d4f8b;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Review photos &amp; approve/deny</a>
+  </p>
+  <p style="margin:12px 0 0;color:#6b7280;font-size:13px;">Link expires in 24 hours.</p>
+</body></html>`;
+
+  const to = (
+    process.env.HUB_PROD_DISPATCH_APPROVER ||
+    process.env.CHECKLANES_OPS_EMAIL ||
+    'tyson.gauthier@retailodyssey.com'
+  ).trim().toLowerCase();
+  const emailPayload = buildSetRelatedEmailPayload({
+    to,
+    subject,
+    html,
+    actorEmail: signedOffBy?.email,
+    replyToExplicit: signedOffBy?.email,
+  });
+  if (resendAttachments) emailPayload.attachments = resendAttachments;
+
+  const { data, error } = await _resend.emails.send(emailPayload);
+  if (error) {
+    console.error('[hub-notify] PROD dispatch email failed:', error.message || String(error));
+    return { sent: false, error: error.message || String(error), subject };
+  }
+
+  return { sent: true, resendId: data?.id, subject };
+}
+
 module.exports = {
   initHubNotify,
   sendSectionReopenEmail,
   sendNisVerifiedEmail,
   sendHelpVerifiedEmail,
+  sendProdDispatchReviewEmail,
 };

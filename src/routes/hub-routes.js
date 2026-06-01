@@ -31,6 +31,7 @@ const {
   removePendingTag,
 } = require('../hub-tag-sweep');
 const { sendSectionReopenEmail, sendNisVerifiedEmail, sendHelpVerifiedEmail } = require('../hub-notify');
+const { createProdDispatchRequest, isProdDispatchEnabled } = require('../hub-prod-dispatch');
 const { parsePogMeta } = require('../lib/pog-meta');
 const {
   getSectionTagDrafts,
@@ -1616,7 +1617,22 @@ router.post('/:visitId/sections/:dbkey/signoff', requireAuth, attachHubContext, 
     markVisitDirtyAndBackupNow(visitId).catch((err) => {
       console.error('[hub] signoff backup failed:', err.message);
     });
-    return res.json({ ok: true });
+
+    let prodDispatch = null;
+    if (isProdDispatchEnabled()) {
+      try {
+        prodDispatch = await createProdDispatchRequest({
+          visitIdNum: parseVisitId(visitId),
+          lane,
+          dbkey,
+          actor,
+        });
+      } catch (err) {
+        console.error('[hub] prod dispatch request failed:', err.message);
+      }
+    }
+
+    return res.json({ ok: true, prodDispatch: prodDispatch ? { id: prodDispatch.request?.id, reviewUrl: prodDispatch.reviewUrl } : null });
   } catch (err) {
     return handleTransitionError(err, res, 'Failed to sign off section');
   }

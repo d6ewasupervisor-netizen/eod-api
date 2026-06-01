@@ -22,9 +22,15 @@ function ensureSecret() {
 }
 
 /** 24h review links — matches product expectation */
+function normalizeDecisionType(decisionType) {
+  if (decisionType === 'shift') return 'shift';
+  if (decisionType === 'prod') return 'prod';
+  return 'store';
+}
+
 function issueReviewToken({ requestId, decisionType, approverEmail }) {
   const rid = String(requestId || '').trim();
-  const dt = decisionType === 'shift' ? 'shift' : 'store';
+  const dt = normalizeDecisionType(decisionType);
   const em = normalizeEmail(approverEmail);
   if (!rid || !em) {
     throw new Error('issueReviewToken requires requestId and approverEmail');
@@ -57,7 +63,7 @@ function verifyReviewToken(token, { expectedRequestId, expectedType }) {
     e.name = 'JsonWebTokenError';
     throw e;
   }
-  const dt = payload.decisionType === 'shift' ? 'shift' : 'store';
+  const dt = normalizeDecisionType(payload.decisionType);
   if (dt !== expectedType) {
     const e = new Error('Decision type mismatch');
     e.name = 'JsonWebTokenError';
@@ -74,6 +80,7 @@ function verifyReviewToken(token, { expectedRequestId, expectedType }) {
 module.exports = {
   issueReviewToken,
   verifyReviewToken,
+  normalizeDecisionType,
   normalizeApproverEmail: normalizeEmail,
   REVIEW_JWT_TYP: TYP,
 };
