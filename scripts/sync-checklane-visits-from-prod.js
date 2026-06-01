@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * Sync hub_stores + section_state from prod.sasretail.com cycle management.
+ * Sync hub_stores + schedules from prod.sasretail.com blitz cycle management.
  *
  *   node scripts/sync-checklane-visits-from-prod.js [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--dry-run]
  *
- * For each checklane fixture store, uses the earliest active/in-progress PROD visit
- * in the date window and sets hub_stores.default_visit_id to that visit id.
+ * Upserts every active blitz visit in the window into schedules (supervisor resolved
+ * via employees + field-data). Sets hub_stores.default_visit_id to each store's
+ * earliest upcoming visit on or after --from.
  */
 'use strict';
 
@@ -13,6 +14,11 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const { query, pool } = require('../src/lib/db');
+const {
+  loadEmployeeLookup,
+  resolveHubOverseerEmail,
+  remainderOfWeekWindow,
+} = require('../src/lib/hub-supervisor-resolve');
 
 const BASE = 'https://prod.sasretail.com';
 const KOMPASS_PROJECT_ID = Number(process.env.CHECKLANES_BLITZ_PROJECT_ID || 1715);
@@ -66,8 +72,11 @@ function normalizeList(body) {
   return [];
 }
 
-async function sasGet(session, urlPath) {
-  const resp = await axios.get(`${BASE}${urlPath}`, { headers: headers(session) });
+async function sasGet(session, urlPath, params) {
+  const qs = params
+    ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString()}`
+    : '';
+  const resp = await axios.get(`${BASE}${urlPath}${qs}`, { headers: headers(session) });
   return resp.data;
 }
 
@@ -80,7 +89,14 @@ function storeNum(visit) {
 async function fetchCycles(session) {
   const data = await sasGet(
     session,
-    `/api/v1/projects/project-cycles/?current_status=active&page=1&page_size=100&project=${KOMPASS_PROJECT_ID}&sort=start_date`,
+    '/api/v1/projects/project-cycles/',
+    {
+      current_status: 'active',
+      page: '1',
+      page_size: '100',
+      project: String(KOMPASS_PROJECT_ID),
+      sort: 'start_date',
+    },
   );
   return normalizeList(data);
 }
@@ -91,7 +107,8 @@ async function fetchVisitsForCycle(session, cycleId) {
   while (page <= 20) {
     const data = await sasGet(
       session,
-      `/api/v1/team-scheduling/visits/?cycle=${cycleId}&page=${page}&page_size=500`,
+      '/api/v1/team-scheduling/visits/',
+      { cycle: String(cycleId), page: String(page), page_size: '500' },
     );
     const rows = normalizeList(data);
     all.push(...rows);
@@ -99,6 +116,36 @@ async function fetchVisitsForCycle(session, cycleId) {
     page += 1;
   }
   return all;
+}
+
+async function fetchFieldDataSupervisors(session, from, to) {
+  const byVisitId = new Map();
+  let page = 1;
+  while (page <= 30) {
+    const data = await sasGet(
+      session,
+      '/api/v1/operations/field-data/',
+      {
+        customer_id: '2',
+        scheduled_dt_from: from,
+        scheduled_dt_to: to,
+        merchandiser: '',
+        supervisor_id: '',
+        project_id: String(KOMPASS_PROJECT_ID),
+        page: String(page),
+        page_size: '500',
+      },
+    );
+    const rows = normalizeList(data);
+    for (const row of rows) {
+      if (row.id != null && row.supervisor) {
+        byVisitId.set(Number(row.id), row.supervisor);
+      }
+    }
+    if (rows.length < 500) break;
+    page += 1;
+  }
+  return byVisitId;
 }
 
 function pickCycles(cycles, from, to) {
@@ -127,7 +174,7 @@ async function seedSections(visitId, storeNumber) {
   return inserted;
 }
 
-async function upsertScheduleFromVisit(visit, cycleId) {
+async function upsertScheduleFromVisit(visit, cycleId, supervisorEmail, fieldSupervisor) {
   const storeNumber = storeNum(visit);
   const leadName = visit.visit_lead?.person_name
     || visit.visit_lead_name
@@ -142,7 +189,7 @@ async function upsertScheduleFromVisit(visit, cycleId) {
        $1, $2, $3, $4, $5,
        'Fred Meyer Blitz Kompass ISE', $6, $7, $8,
        $9, $10, $11, $12,
-       'tyson.gauthier@retailodyssey.com', NOW()
+       $13, NOW()
      )
      ON CONFLICT (visit_id, scheduled_date) DO UPDATE SET
        store_number = EXCLUDED.store_number,
@@ -167,26 +214,29 @@ async function upsertScheduleFromVisit(visit, cycleId) {
       visit.total_hours != null ? String(visit.total_hours) : null,
       visit.current_status || 'active',
       leadName,
+      supervisorEmail || fieldSupervisor || null,
     ],
   );
 }
 
 async function main() {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const from = parseArg('--from', tomorrow.toISOString().slice(0, 10));
-  const toDate = new Date(from);
-  toDate.setDate(toDate.getDate() + 6);
-  const to = parseArg('--to', toDate.toISOString().slice(0, 10));
+  const week = remainderOfWeekWindow();
+  const from = parseArg('--from', week.from);
+  const to = parseArg('--to', week.to);
 
   const fixtureStores = new Set(listFixtureStores());
   const session = loadSession();
+  const employeeLookup = await loadEmployeeLookup();
 
   const cycles = await fetchCycles(session);
   const matchedCycles = pickCycles(cycles, from, to);
   if (!matchedCycles.length) throw new Error('No Kompass cycles overlap window');
 
+  console.log(`[sync] Window ${from} .. ${to} (remainder of week, PT)`);
   console.log(`[sync] PROD cycles: ${matchedCycles.map((c) => `${c.id} (${c.start_date}→${c.end_date})`).join(', ')}`);
+
+  const fieldSupervisors = await fetchFieldDataSupervisors(session, from, to);
+  console.log(`[sync] Field-data supervisors loaded for ${fieldSupervisors.size} visits`);
 
   const visitRows = [];
   for (const cycle of matchedCycles) {
@@ -200,6 +250,11 @@ async function main() {
       visitRows.push({ ...v, _cycleId: cycle.id, _storeNumber: sn });
     }
   }
+
+  visitRows.sort((a, b) =>
+    String(a.scheduled_date).localeCompare(String(b.scheduled_date))
+    || Number(a._storeNumber) - Number(b._storeNumber),
+  );
 
   const earliestByStore = new Map();
   for (const v of visitRows) {
@@ -215,42 +270,53 @@ async function main() {
   );
   const hubMap = new Map(currentHub.map((r) => [String(Number(r.store_number)), Number(r.default_visit_id)]));
 
-  console.log(`[sync] ${earliestByStore.size} fixture stores with PROD visits in ${from}..${to}`);
+  console.log(`[sync] ${visitRows.length} store-days, ${earliestByStore.size} stores with visits`);
   let updated = 0;
   let sections = 0;
   let schedules = 0;
 
-  for (const [storeNumber, visit] of [...earliestByStore.entries()].sort(
-    (a, b) => Number(a[0]) - Number(b[0]),
-  )) {
+  for (const visit of visitRows) {
+    const storeNumber = visit._storeNumber;
     const visitId = Number(visit.id);
-    const prev = hubMap.get(storeNumber);
-    const changed = prev !== visitId;
-    console.log(
-      `  store ${storeNumber}  ${visit.scheduled_date}  visit ${visitId}`
-      + `${changed ? (prev ? `  (was ${prev})` : '') : '  unchanged'}`,
+    const leadName = visit.visit_lead?.person_name || visit.visit_lead_name || null;
+    const fieldSup = fieldSupervisors.get(visitId) || null;
+    const supervisorEmail = resolveHubOverseerEmail(
+      { supervisorRaw: fieldSup, visitLead: leadName },
+      employeeLookup,
     );
 
     if (!DRY_RUN) {
-      if (changed) {
+      await upsertScheduleFromVisit(visit, visit._cycleId, supervisorEmail, fieldSup);
+      schedules += 1;
+    }
+
+    const earliest = earliestByStore.get(storeNumber);
+    if (earliest && Number(earliest.id) === visitId) {
+      const prev = hubMap.get(storeNumber);
+      const changed = prev !== visitId;
+      console.log(
+        `  store ${storeNumber}  ${visit.scheduled_date}  visit ${visitId}`
+        + `  sup=${supervisorEmail || '—'}`
+        + `${changed ? (prev ? `  (was ${prev})` : '') : '  default unchanged'}`,
+      );
+
+      if (!DRY_RUN && changed) {
         await query(
           `INSERT INTO hub_stores (store_number, name, default_visit_id, is_test)
            VALUES ($1, $2, $3, FALSE)
            ON CONFLICT (store_number) DO UPDATE SET default_visit_id = EXCLUDED.default_visit_id`,
           [storeNumber, visit.store?.store?.name || `FM ${storeNumber}`, visitId],
         );
+        sections += await seedSections(visitId, storeNumber);
         updated += 1;
       }
-      sections += await seedSections(visitId, storeNumber);
-      await upsertScheduleFromVisit(visit, visit._cycleId);
-      schedules += 1;
     }
   }
 
   const missing = [...fixtureStores].filter((sn) => !earliestByStore.has(sn));
   let cleared = 0;
   if (missing.length) {
-    console.log(`[sync] No blitz visit in window — clearing hub default_visit_id:`);
+    console.log('[sync] No blitz visit in window — clearing hub default_visit_id:');
     for (const sn of missing.sort((a, b) => Number(a) - Number(b))) {
       const prev = hubMap.get(sn);
       if (prev == null) continue;
@@ -263,15 +329,6 @@ async function main() {
         cleared += 1;
       }
     }
-  }
-
-  const tomorrowDate = from;
-  console.log(`\n[sync] Tomorrow (${tomorrowDate}) PROD blitz stores:`);
-  for (const v of visitRows.filter((x) => x.scheduled_date === tomorrowDate)) {
-    const sn = v._storeNumber;
-    const hubVisit = hubMap.get(sn);
-    const newVisit = Number(v.id);
-    console.log(`  store ${sn}  visit ${newVisit}  lead=${v.visit_lead?.person_name || '—'}`);
   }
 
   console.log(

@@ -4,6 +4,13 @@ const { query } = require('./lib/db');
 const { resolveHubUser } = require('./hub-auth');
 const { resolveStoreForVisit } = require('./lib/hub-fixture-catalog');
 const { applyLiveVisitsToStores } = require('./hub-live-visit');
+const {
+  formatPersonLabel,
+  supervisorGroupKey,
+  supervisorSortIndex,
+  hubOverseerEmails,
+  remainderOfWeekWindow,
+} = require('./lib/hub-supervisor-resolve');
 
 function parseVisitId(visitId) {
   const visitIdNum = Number(visitId);
@@ -45,26 +52,6 @@ function storeRoleToRank(role) {
   return role === 'lead' ? 2 : 1;
 }
 
-function formatPersonLabel(value) {
-  const s = (value || '').trim();
-  if (!s) return null;
-  if (s.includes('@')) {
-    const local = s.split('@')[0];
-    return local
-      .split(/[._+-]/)
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-      .join(' ');
-  }
-  return s;
-}
-
-function supervisorGroupKey(supervisor) {
-  const s = (supervisor || '').trim().toLowerCase();
-  if (!s) return '__unassigned__';
-  return s;
-}
-
 function formatScheduleDate(value) {
   if (!value) return null;
   const d = value instanceof Date ? value : new Date(value);
@@ -72,25 +59,50 @@ function formatScheduleDate(value) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function scheduleDateIso(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function pickUpcomingSchedule(rows, visitKey, week) {
+  if (!rows.length) return null;
+  const visitId = visitKey != null ? Number(visitKey) : null;
+  if (Number.isFinite(visitId)) {
+    const match = rows.find((r) => Number(r.visit_id) === visitId);
+    if (match) return match;
+  }
+  const inWeek = rows.filter((r) => {
+    const d = scheduleDateIso(r.scheduled_date);
+    return d && d >= week.from && d <= week.to;
+  });
+  const pool = inWeek.length ? inWeek : rows;
+  const upcoming = pool.find((r) => scheduleDateIso(r.scheduled_date) >= week.from);
+  return upcoming || pool[pool.length - 1];
+}
+
 async function enrichStoresWithShiftMeta(stores) {
   if (!stores.length) return;
 
-  const visitIds = [...new Set(
-    stores.map((s) => Number(s.defaultVisitId)).filter((id) => Number.isFinite(id)),
-  )];
+  const week = remainderOfWeekWindow();
   const storeNumbers = stores.map((s) => s.storeNumber);
 
   const scheduleByVisit = new Map();
-  const scheduleByStore = new Map();
+  const schedulesByStore = new Map();
+
+  const visitIds = [...new Set(
+    stores.flatMap((s) => [s.liveVisitId, s.defaultVisitId])
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id)),
+  )];
 
   if (visitIds.length) {
     const { rows } = await query(
-      `SELECT DISTINCT ON (visit_id)
-         visit_id, store_number, visit_lead, supervisor, scheduled_date,
-         shift_start_time, shift_end_time, current_status
+      `SELECT visit_id, store_number, visit_lead, supervisor, scheduled_date,
+              shift_start_time, shift_end_time, current_status
        FROM schedules
        WHERE visit_id = ANY($1::int[])
-       ORDER BY visit_id, scheduled_date DESC`,
+       ORDER BY scheduled_date ASC, visit_id ASC`,
       [visitIds],
     );
     for (const row of rows) {
@@ -104,16 +116,19 @@ async function enrichStoresWithShiftMeta(stores) {
 
   if (numericStoreIds.length) {
     const { rows } = await query(
-      `SELECT DISTINCT ON (store_number)
-         store_number, visit_id, visit_lead, supervisor, scheduled_date,
-         shift_start_time, shift_end_time, current_status
+      `SELECT store_number, visit_id, visit_lead, supervisor, scheduled_date,
+              shift_start_time, shift_end_time, current_status
        FROM schedules
        WHERE store_number = ANY($1::int[])
-       ORDER BY store_number, scheduled_date DESC`,
-      [numericStoreIds],
+         AND scheduled_date >= $2::date
+         AND scheduled_date <= $3::date
+       ORDER BY store_number, scheduled_date ASC, visit_id ASC`,
+      [numericStoreIds, week.from, week.to],
     );
     for (const row of rows) {
-      scheduleByStore.set(normalizeStoreNumber(row.store_number), row);
+      const sn = normalizeStoreNumber(row.store_number);
+      if (!schedulesByStore.has(sn)) schedulesByStore.set(sn, []);
+      schedulesByStore.get(sn).push(row);
     }
   }
 
@@ -135,9 +150,9 @@ async function enrichStoresWithShiftMeta(stores) {
 
   for (const store of stores) {
     const visitKey = store.liveVisitId || store.defaultVisitId;
-    const sched = (visitKey
-      ? scheduleByVisit.get(Number(visitKey))
-      : null) || scheduleByStore.get(store.storeNumber) || null;
+    const storeSchedules = schedulesByStore.get(store.storeNumber) || [];
+    const sched = (visitKey ? scheduleByVisit.get(Number(visitKey)) : null)
+      || pickUpcomingSchedule(storeSchedules, visitKey, week);
     const hubLeadRow = leadByStore.get(store.storeNumber);
 
     const supervisorRaw = sched?.supervisor || null;
@@ -145,6 +160,7 @@ async function enrichStoresWithShiftMeta(stores) {
     const hubLead = hubLeadRow
       ? { name: hubLeadRow.name, email: hubLeadRow.email }
       : null;
+    const supervisorKey = supervisorGroupKey(supervisorRaw);
 
     store.shift = {
       visitLead,
@@ -154,12 +170,9 @@ async function enrichStoresWithShiftMeta(stores) {
         : (visitLead ? 'schedule' : null),
       supervisor: supervisorRaw,
       supervisorLabel: formatPersonLabel(supervisorRaw) || 'No supervisor assigned',
-      supervisorKey: supervisorGroupKey(supervisorRaw),
-      scheduledDate: sched?.scheduled_date
-        ? (sched.scheduled_date instanceof Date
-          ? sched.scheduled_date.toISOString().slice(0, 10)
-          : String(sched.scheduled_date).slice(0, 10))
-        : null,
+      supervisorKey,
+      supervisorSortOrder: supervisorSortIndex(supervisorKey),
+      scheduledDate: scheduleDateIso(sched?.scheduled_date),
       scheduledDateLabel: formatScheduleDate(sched?.scheduled_date),
       shiftStart: sched?.shift_start_time || null,
       shiftEnd: sched?.shift_end_time || null,
@@ -169,6 +182,56 @@ async function enrichStoresWithShiftMeta(stores) {
         : (visitKey != null ? String(visitKey) : null),
     };
   }
+}
+
+function sortStoresForHubPicker(stores) {
+  return stores.slice().sort((a, b) => {
+    const supA = a.shift?.supervisorSortOrder ?? 9999;
+    const supB = b.shift?.supervisorSortOrder ?? 9999;
+    if (supA !== supB) return supA - supB;
+    const dateA = a.shift?.scheduledDate || '9999-99-99';
+    const dateB = b.shift?.scheduledDate || '9999-99-99';
+    if (dateA !== dateB) return dateA.localeCompare(dateB);
+    if (a.isAssigned !== b.isAssigned) return a.isAssigned ? -1 : 1;
+    return (a.name || '').localeCompare(b.name || '')
+      || Number(a.storeNumber) - Number(b.storeNumber);
+  });
+}
+
+function buildStoreHubFilters(stores) {
+  const week = remainderOfWeekWindow();
+  const supervisorMap = new Map();
+  const dateSet = new Set();
+
+  for (const store of stores) {
+    const shift = store.shift || {};
+    const key = shift.supervisorKey || '__unassigned__';
+    if (!supervisorMap.has(key)) {
+      supervisorMap.set(key, {
+        key,
+        label: shift.supervisorLabel || 'No supervisor assigned',
+        sortOrder: shift.supervisorSortOrder ?? 9999,
+      });
+    }
+    if (shift.scheduledDate) dateSet.add(shift.scheduledDate);
+  }
+
+  const supervisors = [...supervisorMap.values()].sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    return a.label.localeCompare(b.label);
+  });
+
+  const dates = [...dateSet].sort().map((value) => ({
+    value,
+    label: formatScheduleDate(value),
+  }));
+
+  return {
+    weekRange: week,
+    supervisorOrder: hubOverseerEmails(),
+    supervisors,
+    dates,
+  };
 }
 
 function isEnvSupervisor(email) {
@@ -318,13 +381,16 @@ async function listAccessibleStores(user) {
   await enrichStoresWithShiftMeta(stores);
 
   const viewAll = admin || canViewHubPresence(user);
+  const filters = buildStoreHubFilters(stores);
+  const sortedStores = viewAll ? sortStoresForHubPicker(stores) : stores;
 
   return {
     isAdmin: admin,
     isSupervisor: isSupervisorUser,
     canViewPresence: canViewHubPresence(user),
     organizeBySupervisor: viewAll,
-    stores,
+    storeHubFilters: viewAll ? filters : null,
+    stores: sortedStores,
     hubUserId: hubUser.id,
   };
 }
