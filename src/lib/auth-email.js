@@ -87,6 +87,7 @@ ${MOBILE_LINK_INSTRUCTIONS_HTML}
 
 async function sendHubTeamInviteEmail({
   to,
+  cc,
   link,
   inviteeName,
   inviterName,
@@ -131,6 +132,7 @@ ${MOBILE_LINK_INSTRUCTIONS_HTML}
     </div>
   `;
   const payload = { from: FROM, to, subject, text, html };
+  if (cc) payload.cc = Array.isArray(cc) ? cc : [cc];
   addReplyTo(payload, { explicit: inviterEmail });
   return resend.emails.send(payload);
 }
