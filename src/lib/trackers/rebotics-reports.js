@@ -2,10 +2,10 @@
 
 const reboticsBridge = require('../../rebotics-bridge');
 
-const REQUEST_TIMEOUT_MS = 15000;
-const ACTIONS_PAGE_LIMIT = 200;
-const MAX_ACTION_PAGES = 40;
-const MAX_TASK_PAGES = 20;
+const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
+const DEFAULT_ACTIONS_PAGE_LIMIT = 200;
+const DEFAULT_MAX_ACTION_PAGES = 40;
+const DEFAULT_MAX_TASK_PAGES = 20;
 
 function toCustomId(storeNumber) {
   const n = String(parseInt(String(storeNumber), 10));
@@ -31,7 +31,7 @@ function taskStatus(task) {
   return String(task?.status?.id || task?.status || 'unknown').toLowerCase();
 }
 
-async function fetchJson(path, { timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS } = {}) {
   const token = reboticsBridge.getTokenForServer();
   const base = reboticsBridge.getApiBase();
   if (!token) {
@@ -69,10 +69,12 @@ async function fetchJson(path, { timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
   }
 }
 
-async function resolveStoreInternalId(customId, date) {
+async function resolveStoreInternalId(customId, date, options = {}) {
+  const maxTaskPages = options.maxTaskPages || DEFAULT_MAX_TASK_PAGES;
+  const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
   let offset = 0;
-  for (let page = 0; page < MAX_TASK_PAGES; page += 1) {
-    const data = await fetchJson(`/api/v1/tasks/?from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}`);
+  for (let page = 0; page < maxTaskPages; page += 1) {
+    const data = await fetchJson(`/api/v1/tasks/?from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}`, { timeoutMs });
     const rows = Array.isArray(data) ? data : (data?.results || []);
     if (!rows.length) break;
     for (const row of rows) {
@@ -87,12 +89,15 @@ async function resolveStoreInternalId(customId, date) {
   return null;
 }
 
-async function listTasksForStoreAndDate(storeId, date) {
+async function listTasksForStoreAndDate(storeId, date, options = {}) {
+  const maxTaskPages = options.maxTaskPages || DEFAULT_MAX_TASK_PAGES;
+  const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
   let offset = 0;
   const out = [];
-  for (let page = 0; page < MAX_TASK_PAGES; page += 1) {
+  for (let page = 0; page < maxTaskPages; page += 1) {
     const data = await fetchJson(
-      `/api/v1/tasks/?store=${storeId}&from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}&ordering=task_def__title`
+      `/api/v1/tasks/?store=${storeId}&from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}&ordering=task_def__title`,
+      { timeoutMs }
     );
     const rows = Array.isArray(data) ? data : (data?.results || []);
     out.push(...rows);
@@ -102,11 +107,14 @@ async function listTasksForStoreAndDate(storeId, date) {
   return out;
 }
 
-async function listPrePhotoActionsForStoreOnDate(storeId, date) {
+async function listPrePhotoActionsForStoreOnDate(storeId, date, options = {}) {
+  const maxActionPages = options.maxActionPages || DEFAULT_MAX_ACTION_PAGES;
+  const actionsPageLimit = options.actionsPageLimit || DEFAULT_ACTIONS_PAGE_LIMIT;
+  const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
   let offset = 0;
   const out = [];
-  for (let page = 0; page < MAX_ACTION_PAGES; page += 1) {
-    const data = await fetchJson(`/api/v4/processing/actions/?store=${storeId}&limit=${ACTIONS_PAGE_LIMIT}&offset=${offset}`);
+  for (let page = 0; page < maxActionPages; page += 1) {
+    const data = await fetchJson(`/api/v4/processing/actions/?store=${storeId}&limit=${actionsPageLimit}&offset=${offset}`, { timeoutMs });
     const rows = Array.isArray(data) ? data : (data?.results || []);
     if (!rows.length) break;
     for (const row of rows) {
@@ -120,7 +128,7 @@ async function listPrePhotoActionsForStoreOnDate(storeId, date) {
     }
     const hasMore = data && typeof data === 'object' && data.next != null;
     if (!hasMore) break;
-    offset += ACTIONS_PAGE_LIMIT;
+    offset += actionsPageLimit;
   }
   return out;
 }
@@ -137,7 +145,7 @@ function actionToImage(action) {
   };
 }
 
-async function fetchRows({ stores, dates }) {
+async function fetchRows({ stores, dates, settings = {} }) {
   const rows = [];
   const storeCustomToInternal = new Map();
 
@@ -147,14 +155,24 @@ async function fetchRows({ stores, dates }) {
       if (!customId) continue;
       let internalId = storeCustomToInternal.get(customId);
       if (!internalId) {
-        internalId = await resolveStoreInternalId(customId, date);
+        internalId = await resolveStoreInternalId(customId, date, {
+          maxTaskPages: settings.reboticsMaxTaskPages,
+          reboticsRequestTimeoutMs: settings.reboticsRequestTimeoutMs,
+        });
         if (!internalId) continue;
         storeCustomToInternal.set(customId, internalId);
       }
 
       const [tasks, actions] = await Promise.all([
-        listTasksForStoreAndDate(internalId, date),
-        listPrePhotoActionsForStoreOnDate(internalId, date),
+        listTasksForStoreAndDate(internalId, date, {
+          maxTaskPages: settings.reboticsMaxTaskPages,
+          reboticsRequestTimeoutMs: settings.reboticsRequestTimeoutMs,
+        }),
+        listPrePhotoActionsForStoreOnDate(internalId, date, {
+          maxActionPages: settings.reboticsMaxActionPages,
+          actionsPageLimit: settings.reboticsActionsPageLimit,
+          reboticsRequestTimeoutMs: settings.reboticsRequestTimeoutMs,
+        }),
       ]);
 
       const actionsByDbkey = new Map();

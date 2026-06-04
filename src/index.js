@@ -353,6 +353,9 @@ async function start() {
   app.get(['/trackers', '/trackers/'], (_req, res) => {
     res.sendFile(path.join(trackersDir, 'index.html'));
   });
+  app.get(['/trackers/admin', '/trackers/admin/'], (_req, res) => {
+    res.sendFile(path.join(trackersDir, 'admin.html'));
+  });
 
   // Initialize SAS bridge (session receiver, upload queue, worker)
   await sasBridge.init(app, pool);

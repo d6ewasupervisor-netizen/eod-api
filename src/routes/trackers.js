@@ -11,8 +11,23 @@ const { resolveRange } = require('../lib/trackers/date-range');
 const sasReports = require('../lib/trackers/sas-reports');
 const reboticsReports = require('../lib/trackers/rebotics-reports');
 const { compareRows } = require('../lib/trackers/compare');
+const {
+  DEFAULTS: TRACKER_DEFAULTS,
+  trackerAdminEmails,
+  loadTrackerSettings,
+  saveTrackerSettings,
+} = require('../lib/trackers/settings');
 
 const inFlightRuns = new Map();
+const TRACKER_ADMIN_EMAILS = trackerAdminEmails();
+
+function requireTrackerAdmin(req, res, next) {
+  const email = String(req.user?.email || '').trim().toLowerCase();
+  if (!email || !TRACKER_ADMIN_EMAILS.includes(email)) {
+    return res.status(403).json({ ok: false, error: 'Tracker admin access denied' });
+  }
+  return next();
+}
 
 function buildWeeks() {
   const weeks = [];
@@ -161,6 +176,7 @@ async function processRun(pool, run) {
     const range = resolveRange(params);
     const stores = normalizeStores(params.stores);
     const projects = normalizeProjects(params.projects);
+    const settings = await loadTrackerSettings(pool);
     if (!stores.length) throw new Error('At least one store is required');
 
     await updateRun(pool, run.id, {
@@ -177,6 +193,7 @@ async function processRun(pool, run) {
       reboticsReports.fetchRows({
         stores,
         dates: range.dates,
+        settings,
       }),
     ]);
 
@@ -266,6 +283,7 @@ function createTrackersRouter({ pool }) {
       defaults: {
         projects: sasReports.DEFAULT_PROJECT_IDS,
       },
+      trackerDefaults: TRACKER_DEFAULTS,
       sas: {
         active: sasBridge.isSessionAlive(),
       },
@@ -332,7 +350,10 @@ function createTrackersRouter({ pool }) {
     const run = await loadRun(pool, req.params.id);
     if (!run) return res.status(404).json({ ok: false, error: 'Run not found' });
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const pageSize = Math.min(500, Math.max(1, parseInt(req.query.pageSize, 10) || 100));
+    const settings = await loadTrackerSettings(pool);
+    const pageSizeDefault = settings.runItemsPageSizeDefault || 100;
+    const pageSizeMax = settings.runItemsPageSizeMax || 500;
+    const pageSize = Math.min(pageSizeMax, Math.max(1, parseInt(req.query.pageSize, 10) || pageSizeDefault));
     const offset = (page - 1) * pageSize;
     const confidence = String(req.query.confidence || '').trim();
     const status = String(req.query.status || '').trim();
@@ -481,6 +502,27 @@ function createTrackersRouter({ pool }) {
     } catch (err) {
       return res.status(502).json({ ok: false, error: err.message });
     }
+  });
+
+  router.get('/admin/settings', requireAuth, requireTrackerAdmin, async (req, res) => {
+    const settings = await loadTrackerSettings(pool);
+    return res.json({
+      ok: true,
+      auth: { email: req.user?.email || null },
+      settings,
+      defaults: TRACKER_DEFAULTS,
+      adminEmails: TRACKER_ADMIN_EMAILS,
+    });
+  });
+
+  router.put('/admin/settings', requireAuth, requireTrackerAdmin, async (req, res) => {
+    const settingsInput = req.body?.settings || {};
+    const settings = await saveTrackerSettings(pool, settingsInput, req.user?.email || null);
+    return res.json({
+      ok: true,
+      settings,
+      updatedAt: new Date().toISOString(),
+    });
   });
 
   return router;
