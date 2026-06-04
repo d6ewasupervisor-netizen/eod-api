@@ -6,10 +6,20 @@
   };
 
   function tokenHeader() {
-    const token =
-      localStorage.getItem('eod_session_token') ||
-      localStorage.getItem('session_token') ||
-      '';
+    let token = '';
+    try {
+      if (window.dumpBinAuth && typeof window.dumpBinAuth.getSession === 'function') {
+        token = window.dumpBinAuth.getSession() || '';
+      }
+      if (!token) {
+        token =
+          localStorage.getItem('dumpBinSession') ||
+          localStorage.getItem('eodSession') ||
+          localStorage.getItem('eod_session_token') ||
+          localStorage.getItem('session_token') ||
+          '';
+      }
+    } catch (_err) {}
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 

@@ -44,11 +44,6 @@ const weeksRouter = require('./routes/weeks');
 const createDecideRouter = require('./routes/decide');
 const createDumpBinRouter = require('./routes/dump-bin');
 const { createTrackersRouter } = require('./routes/trackers');
-const {
-  loadTrackerSettings,
-  isTrackerUserAllowed,
-  trackerAdminEmails,
-} = require('./lib/trackers/settings');
 const hubRoutes = require('./routes/hub-routes');
 const hubStoreRoutes = require('./routes/hub-store-routes');
 const { initHubBackup, startBackupIntervalJob } = require('./hub-backup');
@@ -253,7 +248,6 @@ async function start() {
   startBackupIntervalJob();
 
   const app = express();
-  const trackerAdminSet = new Set(trackerAdminEmails());
 
   // Railway sits behind a proxy; trust the X-Forwarded-* headers so req.ip
   // and express-rate-limit keys reflect the real client IP. Required by the
@@ -309,6 +303,10 @@ async function start() {
     '/api/verify-token',
     // Dump bin file GET: session Bearer OR short-lived ?t= JWT (typ dump_dl).
     '/api/download',
+    '/trackers',
+    '/trackers/',
+    '/trackers/admin',
+    '/trackers/admin/',
   ];
   const PUBLIC_PREFIXES = [
     '/api/shift-request/',
@@ -321,6 +319,7 @@ async function start() {
     '/api/access-requests/',
     // Supervisor decide.html → read + POST decision (JWT in query/body).
     '/api/decide',
+    '/trackers/assets/',
   ];
   const PUBLIC_REGEXES = [
     /^\/api\/signoff-photos\/[^\/]+\/image\/?$/,
@@ -356,28 +355,10 @@ async function start() {
   const trackersDir = path.join(__dirname, 'public', 'trackers');
   const trackersAssetsDir = path.join(trackersDir, 'assets');
   app.use('/trackers/assets', express.static(trackersAssetsDir, { fallthrough: false }));
-  const requireTrackerPageAccess = async (req, res, next) => {
-    try {
-      const settings = await loadTrackerSettings(pool);
-      if (!isTrackerUserAllowed(req.user, settings)) {
-        return res.status(403).send('Tracker access is restricted. Contact an admin.');
-      }
-      return next();
-    } catch (err) {
-      return res.status(500).send(`Could not evaluate tracker access: ${err.message}`);
-    }
-  };
-  const requireTrackerAdminPageAccess = (req, res, next) => {
-    const email = String(req.user?.email || '').trim().toLowerCase();
-    if (!trackerAdminSet.has(email)) {
-      return res.status(403).send('Tracker admin access denied.');
-    }
-    return next();
-  };
-  app.get(['/trackers', '/trackers/'], requireTrackerPageAccess, (_req, res) => {
+  app.get(['/trackers', '/trackers/'], (_req, res) => {
     res.sendFile(path.join(trackersDir, 'index.html'));
   });
-  app.get(['/trackers/admin', '/trackers/admin/'], requireTrackerAdminPageAccess, (_req, res) => {
+  app.get(['/trackers/admin', '/trackers/admin/'], (_req, res) => {
     res.sendFile(path.join(trackersDir, 'admin.html'));
   });
 
