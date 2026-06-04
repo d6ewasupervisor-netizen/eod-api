@@ -16,6 +16,7 @@ const {
   trackerAdminEmails,
   loadTrackerSettings,
   saveTrackerSettings,
+  isTrackerUserAllowed,
 } = require('../lib/trackers/settings');
 
 const inFlightRuns = new Map();
@@ -27,6 +28,19 @@ function requireTrackerAdmin(req, res, next) {
     return res.status(403).json({ ok: false, error: 'Tracker admin access denied' });
   }
   return next();
+}
+
+async function requireTrackerAccess(req, res, next) {
+  try {
+    const settings = await loadTrackerSettings(req.trackerPool);
+    if (!isTrackerUserAllowed(req.user, settings)) {
+      return res.status(403).json({ ok: false, error: 'Tracker access is restricted. Ask an admin for access.' });
+    }
+    req.trackerSettings = settings;
+    return next();
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: `Could not evaluate tracker access: ${err.message}` });
+  }
 }
 
 function buildWeeks() {
@@ -271,8 +285,14 @@ function jsonToCsv(rows) {
 
 function createTrackersRouter({ pool }) {
   const router = express.Router();
+  router.use((req, _res, next) => {
+    req.trackerPool = pool;
+    next();
+  });
+  router.use(requireAuth);
+  router.use(requireTrackerAccess);
 
-  router.get('/bootstrap', requireAuth, async (req, res) => {
+  router.get('/bootstrap', async (req, res) => {
     const weeks = buildWeeks();
     const projects = await sasReports.discoverProjects();
     return res.json({
@@ -291,12 +311,12 @@ function createTrackersRouter({ pool }) {
     });
   });
 
-  router.get('/projects', requireAuth, async (_req, res) => {
+  router.get('/projects', async (_req, res) => {
     const projects = await sasReports.discoverProjects();
     return res.json({ ok: true, projects });
   });
 
-  router.post('/runs', requireAuth, async (req, res) => {
+  router.post('/runs', async (req, res) => {
     const params = req.body || {};
     const stores = normalizeStores(params.stores);
     if (!stores.length) {
@@ -324,7 +344,7 @@ function createTrackersRouter({ pool }) {
     return res.status(202).json({ ok: true, runId: run.id, runKey: run.run_key });
   });
 
-  router.get('/runs/:id', requireAuth, async (req, res) => {
+  router.get('/runs/:id', async (req, res) => {
     const run = await loadRun(pool, req.params.id);
     if (!run) return res.status(404).json({ ok: false, error: 'Run not found' });
     return res.json({
@@ -346,7 +366,7 @@ function createTrackersRouter({ pool }) {
     });
   });
 
-  router.get('/runs/:id/items', requireAuth, async (req, res) => {
+  router.get('/runs/:id/items', async (req, res) => {
     const run = await loadRun(pool, req.params.id);
     if (!run) return res.status(404).json({ ok: false, error: 'Run not found' });
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -391,7 +411,7 @@ function createTrackersRouter({ pool }) {
     });
   });
 
-  router.get('/runs/:id/images', requireAuth, async (req, res) => {
+  router.get('/runs/:id/images', async (req, res) => {
     const run = await loadRun(pool, req.params.id);
     if (!run) return res.status(404).json({ ok: false, error: 'Run not found' });
     const itemId = req.query.itemId ? parseInt(req.query.itemId, 10) : null;
@@ -417,7 +437,7 @@ function createTrackersRouter({ pool }) {
     return res.json({ ok: true, images });
   });
 
-  router.get('/runs/:id/manifest.json', requireAuth, async (req, res) => {
+  router.get('/runs/:id/manifest.json', async (req, res) => {
     const run = await loadRun(pool, req.params.id);
     if (!run) return res.status(404).json({ ok: false, error: 'Run not found' });
     const { rows } = await pool.query(
@@ -449,7 +469,7 @@ function createTrackersRouter({ pool }) {
     });
   });
 
-  router.get('/runs/:id/manifest.csv', requireAuth, async (req, res) => {
+  router.get('/runs/:id/manifest.csv', async (req, res) => {
     const run = await loadRun(pool, req.params.id);
     if (!run) return res.status(404).json({ ok: false, error: 'Run not found' });
     const { rows } = await pool.query(
@@ -479,7 +499,7 @@ function createTrackersRouter({ pool }) {
     return res.send(csv);
   });
 
-  router.get('/images/:imageId', requireAuth, async (req, res) => {
+  router.get('/images/:imageId', async (req, res) => {
     const imageId = parseInt(req.params.imageId, 10);
     if (!Number.isFinite(imageId)) return res.status(400).json({ ok: false, error: 'Invalid image id' });
     const { rows } = await pool.query('SELECT * FROM tracker_run_images WHERE id = $1', [imageId]);
@@ -504,7 +524,7 @@ function createTrackersRouter({ pool }) {
     }
   });
 
-  router.get('/admin/settings', requireAuth, requireTrackerAdmin, async (req, res) => {
+  router.get('/admin/settings', requireTrackerAdmin, async (req, res) => {
     const settings = await loadTrackerSettings(pool);
     return res.json({
       ok: true,
@@ -515,7 +535,7 @@ function createTrackersRouter({ pool }) {
     });
   });
 
-  router.put('/admin/settings', requireAuth, requireTrackerAdmin, async (req, res) => {
+  router.put('/admin/settings', requireTrackerAdmin, async (req, res) => {
     const settingsInput = req.body?.settings || {};
     const settings = await saveTrackerSettings(pool, settingsInput, req.user?.email || null);
     return res.json({

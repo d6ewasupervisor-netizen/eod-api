@@ -25,6 +25,9 @@
   }
 
   function bindSettings(settings) {
+    document.getElementById('trackerAllowedEmails').value = (settings.trackerAllowedEmails || []).join(', ');
+    document.getElementById('trackerAllowSupervisors').value = String(Boolean(settings.trackerAllowSupervisors));
+    document.getElementById('trackerAllowAdmins').value = String(Boolean(settings.trackerAllowAdmins));
     document.getElementById('reboticsRequestTimeoutMs').value = settings.reboticsRequestTimeoutMs;
     document.getElementById('reboticsActionsPageLimit').value = settings.reboticsActionsPageLimit;
     document.getElementById('reboticsMaxActionPages').value = settings.reboticsMaxActionPages;
@@ -35,6 +38,12 @@
 
   function collectSettings() {
     return {
+      trackerAllowedEmails: document.getElementById('trackerAllowedEmails').value
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      trackerAllowSupervisors: document.getElementById('trackerAllowSupervisors').value === 'true',
+      trackerAllowAdmins: document.getElementById('trackerAllowAdmins').value === 'true',
       reboticsRequestTimeoutMs: parseInt(document.getElementById('reboticsRequestTimeoutMs').value, 10),
       reboticsActionsPageLimit: parseInt(document.getElementById('reboticsActionsPageLimit').value, 10),
       reboticsMaxActionPages: parseInt(document.getElementById('reboticsMaxActionPages').value, 10),

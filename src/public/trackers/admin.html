@@ -21,6 +21,24 @@
     <section class="card">
       <h2>Runtime Settings</h2>
       <form id="settingsForm" class="form-grid">
+        <label>
+          Tracker Allowed Emails (comma-separated)
+          <input id="trackerAllowedEmails" placeholder="person1@example.com,person2@example.com" />
+        </label>
+        <label>
+          Allow Supervisors
+          <select id="trackerAllowSupervisors">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </label>
+        <label>
+          Allow Admins
+          <select id="trackerAllowAdmins">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </label>
         <label>Rebotics Request Timeout (ms)<input id="reboticsRequestTimeoutMs" type="number" min="2000" max="60000" required /></label>
         <label>Rebotics Actions Page Limit<input id="reboticsActionsPageLimit" type="number" min="10" max="500" required /></label>
         <label>Rebotics Max Action Pages<input id="reboticsMaxActionPages" type="number" min="1" max="200" required /></label>

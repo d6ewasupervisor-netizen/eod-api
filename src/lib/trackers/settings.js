@@ -1,6 +1,8 @@
 'use strict';
 
 const DEFAULT_ADMIN_EMAILS = ['d6ewa.supervisor@gmail.com'];
+const SETTINGS_CACHE_MS = 30 * 1000;
+let settingsCache = { value: null, expiresAt: 0 };
 
 function parseIntEnv(name, fallback) {
   const raw = process.env[name];
@@ -14,6 +16,14 @@ function parseCsvEnv(name, fallback) {
   return raw.split(',').map((v) => v.trim()).filter(Boolean);
 }
 
+function parseBoolEnv(name, fallback) {
+  const raw = String(process.env[name] || '').trim().toLowerCase();
+  if (!raw) return fallback;
+  if (['1', 'true', 'yes', 'on'].includes(raw)) return true;
+  if (['0', 'false', 'no', 'off'].includes(raw)) return false;
+  return fallback;
+}
+
 const DEFAULTS = {
   reboticsRequestTimeoutMs: parseIntEnv('TRACKER_REBOTICS_REQUEST_TIMEOUT_MS', 15000),
   reboticsActionsPageLimit: parseIntEnv('TRACKER_REBOTICS_ACTIONS_PAGE_LIMIT', 200),
@@ -21,6 +31,9 @@ const DEFAULTS = {
   reboticsMaxTaskPages: parseIntEnv('TRACKER_REBOTICS_MAX_TASK_PAGES', 20),
   runItemsPageSizeDefault: parseIntEnv('TRACKER_RUN_ITEMS_PAGE_SIZE_DEFAULT', 100),
   runItemsPageSizeMax: parseIntEnv('TRACKER_RUN_ITEMS_PAGE_SIZE_MAX', 500),
+  trackerAllowSupervisors: parseBoolEnv('TRACKER_ALLOW_SUPERVISORS', true),
+  trackerAllowAdmins: parseBoolEnv('TRACKER_ALLOW_ADMINS', true),
+  trackerAllowedEmails: parseCsvEnv('TRACKER_ALLOWED_EMAILS', []).map((e) => e.toLowerCase()),
 };
 
 function trackerAdminEmails() {
@@ -35,16 +48,36 @@ function sanitize(input = {}) {
   out.reboticsMaxTaskPages = Math.min(200, Math.max(1, parseInt(input.reboticsMaxTaskPages, 10) || DEFAULTS.reboticsMaxTaskPages));
   out.runItemsPageSizeDefault = Math.min(500, Math.max(10, parseInt(input.runItemsPageSizeDefault, 10) || DEFAULTS.runItemsPageSizeDefault));
   out.runItemsPageSizeMax = Math.min(1000, Math.max(50, parseInt(input.runItemsPageSizeMax, 10) || DEFAULTS.runItemsPageSizeMax));
+  out.trackerAllowSupervisors = Boolean(
+    input.trackerAllowSupervisors != null ? input.trackerAllowSupervisors : DEFAULTS.trackerAllowSupervisors
+  );
+  out.trackerAllowAdmins = Boolean(
+    input.trackerAllowAdmins != null ? input.trackerAllowAdmins : DEFAULTS.trackerAllowAdmins
+  );
+  const list = Array.isArray(input.trackerAllowedEmails)
+    ? input.trackerAllowedEmails
+    : String(input.trackerAllowedEmails || '').split(',');
+  out.trackerAllowedEmails = [...new Set(list.map((e) => String(e || '').trim().toLowerCase()).filter(Boolean))];
   return out;
 }
 
 async function loadTrackerSettings(pool) {
+  const now = Date.now();
+  if (settingsCache.value && now < settingsCache.expiresAt) {
+    return settingsCache.value;
+  }
   const { rows } = await pool.query(
     `SELECT setting_json FROM tracker_settings WHERE setting_key = 'global' LIMIT 1`
   );
-  if (!rows.length) return { ...DEFAULTS };
+  if (!rows.length) {
+    const value = { ...DEFAULTS };
+    settingsCache = { value, expiresAt: now + SETTINGS_CACHE_MS };
+    return value;
+  }
   const dbSettings = rows[0].setting_json || {};
-  return sanitize({ ...DEFAULTS, ...dbSettings });
+  const value = sanitize({ ...DEFAULTS, ...dbSettings });
+  settingsCache = { value, expiresAt: now + SETTINGS_CACHE_MS };
+  return value;
 }
 
 async function saveTrackerSettings(pool, input, updatedByEmail) {
@@ -58,7 +91,19 @@ async function saveTrackerSettings(pool, input, updatedByEmail) {
            updated_at = NOW()`,
     [JSON.stringify(normalized), updatedByEmail || null],
   );
+  settingsCache = { value: normalized, expiresAt: Date.now() + SETTINGS_CACHE_MS };
   return normalized;
+}
+
+function isTrackerUserAllowed(user, settings) {
+  const email = String(user?.email || '').trim().toLowerCase();
+  const roles = Array.isArray(user?.roles) ? user.roles : [];
+  if (!email) return false;
+  if (trackerAdminEmails().includes(email)) return true;
+  if ((settings?.trackerAllowedEmails || []).includes(email)) return true;
+  if (settings?.trackerAllowAdmins && roles.includes('admin')) return true;
+  if (settings?.trackerAllowSupervisors && roles.includes('supervisor')) return true;
+  return false;
 }
 
 module.exports = {
@@ -67,4 +112,5 @@ module.exports = {
   trackerAdminEmails,
   loadTrackerSettings,
   saveTrackerSettings,
+  isTrackerUserAllowed,
 };
