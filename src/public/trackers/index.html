@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trackers</title>
+  <link rel="stylesheet" href="/trackers/assets/trackers.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="header">
+      <h1>Trackers</h1>
+      <p>Read-only PROD vs Rebotics comparison by store + dbkey/POG.</p>
+    </header>
+
+    <section class="card">
+      <h2>Auth + Source Status</h2>
+      <div id="statusGrid" class="status-grid"></div>
+    </section>
+
+    <section class="card">
+      <h2>Run Input</h2>
+      <form id="runForm" class="form-grid">
+        <label>Stores (comma-separated)<input id="stores" placeholder="19,23,53" required /></label>
+        <label>Project IDs (optional)<input id="projects" placeholder="1,1668,1715,3568" /></label>
+        <label>Fiscal Year
+          <select id="fiscalYear"></select>
+        </label>
+        <label>Period
+          <select id="period"></select>
+        </label>
+        <label>Week
+          <select id="week">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </select>
+        </label>
+        <label>Date From (optional)<input id="dateFrom" type="date" /></label>
+        <label>Date To (optional)<input id="dateTo" type="date" /></label>
+        <button type="submit">Start Comparison Run</button>
+      </form>
+      <p class="hint">Use either fiscal period/week or explicit date range.</p>
+    </section>
+
+    <section class="card">
+      <h2>Run Status</h2>
+      <div id="runStatus" class="run-status">No run started.</div>
+      <div id="runActions" class="run-actions hidden">
+        <a id="manifestJson" target="_blank" rel="noreferrer">Manifest JSON</a>
+        <a id="manifestCsv" target="_blank" rel="noreferrer">Manifest CSV</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Results</h2>
+      <div class="filters">
+        <label>Search dbkey/category<input id="search" /></label>
+        <label>Confidence
+          <select id="confidence">
+            <option value="">All</option>
+            <option value="high">high</option>
+            <option value="needs_review">needs_review</option>
+          </select>
+        </label>
+        <button id="refreshResults" type="button">Refresh</button>
+      </div>
+      <div id="summary"></div>
+      <table>
+        <thead>
+          <tr>
+            <th>Store</th>
+            <th>Date</th>
+            <th>Period</th>
+            <th>DBKey</th>
+            <th>Category</th>
+            <th>PROD</th>
+            <th>SI</th>
+            <th>Photos</th>
+            <th>Confidence</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </section>
+
+    <dialog id="imagesDialog">
+      <h3>Source Images</h3>
+      <div id="imagesGrid" class="images-grid"></div>
+      <button id="closeImages" type="button">Close</button>
+    </dialog>
+  </main>
+
+  <script src="/trackers/assets/trackers.js"></script>
+</body>
+</html>

@@ -22,6 +22,7 @@ const REAUTH_EMAIL_TO = process.env.REBOTICS_REAUTH_NOTIFY_EMAIL || 'tyson.gauth
 const TASK_PAUSE_MS = 250;
 
 let _resend = null;
+let _pool = null;
 
 let reboticsToken = null;
 let reboticsUsername = null;
@@ -632,6 +633,7 @@ function registerReboticsRoutes(app, pool, resend) {
 
 module.exports = {
   init: async (app, pool, { resend }) => {
+    _pool = pool;
     await initReboticsDb(pool);
     await loadAuthFromDb(pool);
     registerReboticsRoutes(app, pool, resend);
@@ -639,4 +641,11 @@ module.exports = {
   },
   authStatusPayload,
   loadAuthFromDb,
+  getApiBase: () => REBOTICS_API,
+  getTokenForServer: () => reboticsToken,
+  getUserIdForServer: () => reboticsUserId,
+  reboticsJsonForServer: async (method, path, body) => {
+    if (!_pool) throw new Error('Rebotics bridge not initialized');
+    return reboticsJson(_pool, method, path, body);
+  },
 };

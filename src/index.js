@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const cron = require('node-cron');
+const path = require('node:path');
 const { Resend } = require('resend');
 const { requireAuth, requireRole, AUTH_MODE } = require('./auth-middleware');
 const { pool, runMigrations } = require('./lib/db');
@@ -42,6 +43,7 @@ const whoamiRouter = require('./routes/whoami');
 const weeksRouter = require('./routes/weeks');
 const createDecideRouter = require('./routes/decide');
 const createDumpBinRouter = require('./routes/dump-bin');
+const { createTrackersRouter } = require('./routes/trackers');
 const hubRoutes = require('./routes/hub-routes');
 const hubStoreRoutes = require('./routes/hub-store-routes');
 const { initHubBackup, startBackupIntervalJob } = require('./hub-backup');
@@ -338,11 +340,19 @@ async function start() {
   app.use('/api/access-request', accessRequestRouter);
   app.use('/api/whoami', whoamiRouter);
   app.use('/api/weeks', weeksRouter);
+  app.use('/api/trackers', createTrackersRouter({ pool }));
   app.use('/api/hub', hubStoreRoutes);
   app.use('/api/hub', hubRoutes);
   app.use('/api/decide', createDecideRouter({ resend }));
   const dumpBinRouter = createDumpBinRouter({ resend, logger });
   app.use('/api', dumpBinRouter);
+
+  const trackersDir = path.join(__dirname, 'public', 'trackers');
+  const trackersAssetsDir = path.join(trackersDir, 'assets');
+  app.use('/trackers/assets', express.static(trackersAssetsDir, { fallthrough: false }));
+  app.get(['/trackers', '/trackers/'], (_req, res) => {
+    res.sendFile(path.join(trackersDir, 'index.html'));
+  });
 
   // Initialize SAS bridge (session receiver, upload queue, worker)
   await sasBridge.init(app, pool);
