@@ -25,6 +25,7 @@ const {
   resolveLiveVisitForStore,
   maybePinLiveVisitFromUser,
 } = require('../hub-live-visit');
+const { getSnapshot } = require('../hub-state');
 
 const router = express.Router();
 
@@ -160,6 +161,94 @@ router.get('/stores', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[hub-stores] list failed:', err.message);
     return res.status(500).json({ error: 'Failed to load stores' });
+  }
+});
+
+router.get('/command-center', requireAuth, async (req, res) => {
+  try {
+    if (!canViewHubPresence(req.user)) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+
+    const data = await listAccessibleStores(req.user);
+    const sessions = listSessions();
+    const sessionsByStore = new Map();
+    for (const session of sessions) {
+      if (!session?.storeNumber) continue;
+      const key = String(session.storeNumber);
+      if (!sessionsByStore.has(key)) sessionsByStore.set(key, []);
+      sessionsByStore.get(key).push(session);
+    }
+
+    const storeSummaries = await Promise.all((data.stores || []).map(async (store) => {
+      const activeSessions = sessionsByStore.get(String(store.storeNumber)) || [];
+      if (!store.liveVisitId) {
+        return {
+          storeNumber: store.storeNumber,
+          name: store.name,
+          liveVisitId: null,
+          progressPct: 0,
+          stats: null,
+          blockers: 0,
+          pendingSignoff: 0,
+          closeoutReady: false,
+          activePeople: activeSessions.length,
+          activeSessions: activeSessions.map((s) => ({
+            email: s.email,
+            name: s.name,
+            detail: s.detail,
+            view: s.view,
+            updatedAt: s.updatedAt,
+          })),
+        };
+      }
+
+      const snapshot = await getSnapshot(store.liveVisitId, { user: req.user });
+      const total = snapshot.stats?.total || 0;
+      const terminal = (snapshot.stats?.signedOff || 0) + (snapshot.stats?.notInStore || 0);
+      const progressPct = total ? Math.round((terminal / total) * 100) : 0;
+
+      return {
+        storeNumber: store.storeNumber,
+        name: store.name,
+        liveVisitId: store.liveVisitId,
+        progressPct,
+        stats: snapshot.stats || null,
+        blockers: (snapshot.exceptionQueue?.total || 0) + (snapshot.stats?.needsAttention || 0),
+        pendingSignoff: snapshot.stats?.donePendingSignoff || 0,
+        closeoutReady: !!snapshot.closeoutChecklist?.ready,
+        activePeople: activeSessions.length,
+        activeSessions: activeSessions.map((s) => ({
+          email: s.email,
+          name: s.name,
+          detail: s.detail,
+          view: s.view,
+          updatedAt: s.updatedAt,
+        })),
+        nextActions: snapshot.nextActions || [],
+      };
+    }));
+
+    storeSummaries.sort((a, b) => {
+      if (b.blockers !== a.blockers) return b.blockers - a.blockers;
+      if (a.closeoutReady !== b.closeoutReady) return a.closeoutReady ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return res.json({
+      ok: true,
+      generatedAt: new Date().toISOString(),
+      stores: storeSummaries,
+      totals: {
+        storeCount: storeSummaries.length,
+        activeStores: storeSummaries.filter((store) => store.liveVisitId).length,
+        atRiskStores: storeSummaries.filter((store) => store.blockers > 0).length,
+        closeoutReadyStores: storeSummaries.filter((store) => store.closeoutReady).length,
+      },
+    });
+  } catch (err) {
+    console.error('[hub-command-center] load failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load command center' });
   }
 });
 

@@ -221,6 +221,59 @@ router.get('/:visitId/snapshot', requireAuth, async (req, res) => {
   }
 });
 
+router.get('/:visitId/next-actions', requireAuth, async (req, res) => {
+  try {
+    const snapshot = await getSnapshot(req.params.visitId, { user: req.user });
+    return res.json({
+      visitId: snapshot.visitId,
+      generatedAt: snapshot.generatedAt,
+      nextActions: snapshot.nextActions || [],
+    });
+  } catch (err) {
+    if (err.message === 'Invalid visitId') {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('[hub] next-actions failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load next actions' });
+  }
+});
+
+router.get('/:visitId/lane-map', requireAuth, async (req, res) => {
+  try {
+    const snapshot = await getSnapshot(req.params.visitId, { user: req.user });
+    return res.json({
+      visitId: snapshot.visitId,
+      generatedAt: snapshot.generatedAt,
+      laneMap: snapshot.laneMap || { lanes: [], totals: {} },
+      teamAwareness: snapshot.teamAwareness || { occupancy: [], totals: {} },
+    });
+  } catch (err) {
+    if (err.message === 'Invalid visitId') {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('[hub] lane-map failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load lane map' });
+  }
+});
+
+router.get('/:visitId/closeout', requireAuth, async (req, res) => {
+  try {
+    const snapshot = await getSnapshot(req.params.visitId, { user: req.user });
+    return res.json({
+      visitId: snapshot.visitId,
+      generatedAt: snapshot.generatedAt,
+      closeoutChecklist: snapshot.closeoutChecklist || { ready: false, checklist: [] },
+      exceptionQueue: snapshot.exceptionQueue || { total: 0, bySeverity: { high: 0, medium: 0, low: 0 }, items: [] },
+    });
+  } catch (err) {
+    if (err.message === 'Invalid visitId') {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('[hub] closeout summary failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load closeout summary' });
+  }
+});
+
 router.get('/:visitId/chat/recipients', requireAuth, attachHubContext, async (req, res) => {
   try {
     const result = await listRecipients(req.params.visitId, req.hubUser.id, req.hubRank);
