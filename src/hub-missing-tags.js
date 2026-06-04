@@ -200,7 +200,7 @@ async function submitSectionTagDrafts(visitId, dbkey, actor) {
       tag_ids: drafts.map((d) => d.id),
     });
 
-    return { count: drafts.length };
+    return { count: drafts.length, tagIds: drafts.map((d) => d.id) };
   });
 
   await broadcastVisit(visitIdNum);

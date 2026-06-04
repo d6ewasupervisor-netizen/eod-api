@@ -395,11 +395,36 @@ async function sendTagBatchForAisle(visitId, actor, aisleKey) {
   return deliverTagBatch(visitIdNum, actor, aisleRows, designations, { aisleLabel: group.aisleLabel });
 }
 
+async function sendTagBatchForTagIds(visitId, actor, tagIds) {
+  if (!_resend) {
+    return { ok: false, status: 500, error: 'Tag batch email not initialized' };
+  }
+  const ids = Array.isArray(tagIds)
+    ? tagIds.map((n) => Number(n)).filter((n) => Number.isFinite(n))
+    : [];
+  if (!ids.length) {
+    return { ok: false, status: 400, error: 'No tags to print' };
+  }
+
+  const visitIdNum = parseVisitId(visitId);
+  const [rows, designations] = await Promise.all([
+    loadPendingBatchTags(visitIdNum),
+    getSectionDesignationsMap(visitIdNum),
+  ]);
+  const wanted = new Set(ids);
+  const selectedRows = rows.filter((row) => wanted.has(Number(row.id)));
+  if (!selectedRows.length) {
+    return { ok: false, status: 400, error: 'No pending tags matched that draft list' };
+  }
+  return deliverTagBatch(visitIdNum, actor, selectedRows, designations);
+}
+
 module.exports = {
   initHubTagBatch,
   getTagBatchPreview,
   sendTagBatch,
   sendTagBatchForAisle,
+  sendTagBatchForTagIds,
   resolveTagBatchRecipient,
   tagBatchEmailSubject,
   tagBatchEmailSubjectLive,

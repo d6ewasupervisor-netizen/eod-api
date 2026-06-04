@@ -19,7 +19,7 @@ const STREAM_HEARTBEAT_MS = 15000;
 // streaming the response immediately instead of holding the first flush.
 const STREAM_PREAMBLE = ':' + ' '.repeat(2048) + '\n\nretry: 3000\n\n';
 const { sendBackup, markVisitDirtyAndBackupNow } = require('../hub-backup');
-const { getTagBatchPreview, sendTagBatch, sendTagBatchForAisle } = require('../hub-tag-batch');
+const { getTagBatchPreview, sendTagBatch, sendTagBatchForAisle, sendTagBatchForTagIds } = require('../hub-tag-batch');
 const {
   getAisleAssignments,
   userAssignedAisleKeys,
@@ -651,6 +651,41 @@ router.post('/:visitId/sections/:dbkey/tag-drafts/submit', requireAuth, attachHu
     if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
     console.error('[hub] tag-drafts submit failed:', err.message);
     return res.status(500).json({ error: 'Failed to submit tag drafts' });
+  }
+});
+
+router.post('/:visitId/sections/:dbkey/tag-drafts/submit-and-send', requireAuth, attachHubContext, async (req, res) => {
+  try {
+    const submitResult = await submitSectionTagDrafts(
+      req.params.visitId,
+      req.params.dbkey,
+      req.hubUser,
+    );
+    if (!submitResult.ok) {
+      return res.status(submitResult.status || 400).json({ error: submitResult.error || 'Failed to submit tag drafts' });
+    }
+
+    const sendResult = await sendTagBatchForTagIds(
+      req.params.visitId,
+      req.hubUser,
+      submitResult.tagIds || [],
+    );
+    if (!sendResult.ok) {
+      return res.status(sendResult.status || 500).json({ error: sendResult.error || 'Tag print send failed' });
+    }
+
+    return res.json({
+      ok: true,
+      submitted: submitResult.count || 0,
+      printed: sendResult.count || 0,
+      resendId: sendResult.resendId,
+      recipients: sendResult.recipients,
+    });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    if (err.message === 'Invalid visitId') return res.status(400).json({ error: err.message });
+    console.error('[hub] tag-drafts submit-and-send failed:', err.message);
+    return res.status(500).json({ error: 'Failed to submit and send tag drafts' });
   }
 });
 
