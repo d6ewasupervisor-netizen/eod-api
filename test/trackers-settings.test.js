@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 process.env.TRACKER_ADMIN_EMAILS = 'admin@example.com';
 
-const { isTrackerUserAllowed, sanitize, trackerAdminEmails } = require('../src/lib/trackers/settings');
+const { DEFAULTS, isTrackerUserAllowed, sanitize, trackerAdminEmails } = require('../src/lib/trackers/settings');
 
 test('isTrackerUserAllowed admits tracker admins regardless of settings', () => {
   assert.equal(
@@ -54,4 +54,8 @@ test('sanitize clamps runtime settings and drops invalid emails', () => {
   assert.equal(settings.runItemsPageSizeDefault, 50);
   assert.equal(settings.maxRunDates, 60);
   assert.deepEqual(settings.trackerAllowedEmails, ['ok@example.com']);
+});
+
+test('default Rebotics request timeout allows slower SI pages', () => {
+  assert.equal(DEFAULTS.reboticsRequestTimeoutMs, 30000);
 });

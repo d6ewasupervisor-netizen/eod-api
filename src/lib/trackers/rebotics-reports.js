@@ -2,7 +2,7 @@
 
 const reboticsBridge = require('../../rebotics-bridge');
 
-const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 const DEFAULT_ACTIONS_PAGE_LIMIT = 200;
 const DEFAULT_MAX_ACTION_PAGES = 40;
 const DEFAULT_MAX_TASK_PAGES = 20;
@@ -17,6 +17,17 @@ function isRetriableError(err) {
   const status = err?.status;
   if (status === 429) return true;
   return status >= 500 && status < 600;
+}
+
+function isAuthError(err) {
+  const status = err?.status;
+  if (status === 401 || status === 403) return true;
+  if (err?.code === 'REBOTICS_NO_TOKEN') return true;
+  return /token|auth|sign in|required/i.test(String(err?.message || ''));
+}
+
+function warn(options, message) {
+  if (typeof options?.onWarning === 'function') options.onWarning(message);
 }
 
 function toCustomId(storeNumber) {
@@ -179,10 +190,14 @@ function actionToImage(action) {
   };
 }
 
-async function fetchRows({ stores, dates, settings = {}, onProgress }) {
+async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }) {
   const rows = [];
   const storeCustomToInternal = new Map();
   const totalLookups = Math.max(1, dates.length * stores.length);
+  const reboticsRequestTimeoutMs = Math.max(
+    DEFAULT_REQUEST_TIMEOUT_MS,
+    parseInt(settings.reboticsRequestTimeoutMs, 10) || DEFAULT_REQUEST_TIMEOUT_MS
+  );
   let completedLookups = 0;
 
   for (const date of dates) {
@@ -191,11 +206,19 @@ async function fetchRows({ stores, dates, settings = {}, onProgress }) {
       if (!customId) continue;
       let internalId = storeCustomToInternal.get(customId);
       if (!internalId) {
-        internalId = await resolveStoreInternalId(customId, date, {
-          maxTaskPages: settings.reboticsMaxTaskPages,
-          reboticsRequestTimeoutMs: settings.reboticsRequestTimeoutMs,
-          reboticsMaxAttempts: settings.reboticsMaxAttempts,
-        });
+        try {
+          internalId = await resolveStoreInternalId(customId, date, {
+            maxTaskPages: settings.reboticsMaxTaskPages,
+            reboticsRequestTimeoutMs,
+            reboticsMaxAttempts: settings.reboticsMaxAttempts,
+          });
+        } catch (err) {
+          if (isAuthError(err)) throw err;
+          warn({ onWarning }, `Rebotics store lookup skipped for ${customId} on ${date}: ${err.message}`);
+          completedLookups += 1;
+          if (onProgress) onProgress({ completedLookups, totalLookups, rows: rows.length });
+          continue;
+        }
         if (!internalId) {
           completedLookups += 1;
           if (onProgress) onProgress({ completedLookups, totalLookups, rows: rows.length });
@@ -204,21 +227,36 @@ async function fetchRows({ stores, dates, settings = {}, onProgress }) {
         storeCustomToInternal.set(customId, internalId);
       }
 
-      const [tasks, actions] = await Promise.all([
+      const [tasksResult, actionsResult] = await Promise.allSettled([
         listTasksForStoreAndDate(internalId, date, {
           maxTaskPages: settings.reboticsMaxTaskPages,
-          reboticsRequestTimeoutMs: settings.reboticsRequestTimeoutMs,
+          reboticsRequestTimeoutMs,
           reboticsMaxAttempts: settings.reboticsMaxAttempts,
         }),
         listPrePhotoActionsForStoreOnDate(internalId, date, {
           maxActionPages: settings.reboticsMaxActionPages,
           actionsPageLimit: settings.reboticsActionsPageLimit,
-          reboticsRequestTimeoutMs: settings.reboticsRequestTimeoutMs,
+          reboticsRequestTimeoutMs,
           reboticsMaxAttempts: settings.reboticsMaxAttempts,
         }),
       ]);
       completedLookups += 1;
       if (onProgress) onProgress({ completedLookups, totalLookups, rows: rows.length });
+
+      if (tasksResult.status === 'rejected') {
+        if (isAuthError(tasksResult.reason)) throw tasksResult.reason;
+        warn({ onWarning }, `Rebotics tasks skipped for store ${storeNumber} on ${date}: ${tasksResult.reason?.message || tasksResult.reason}`);
+        continue;
+      }
+      const tasks = tasksResult.value || [];
+
+      let actions = [];
+      if (actionsResult.status === 'rejected') {
+        if (isAuthError(actionsResult.reason)) throw actionsResult.reason;
+        warn({ onWarning }, `Rebotics photos skipped for store ${storeNumber} on ${date}: ${actionsResult.reason?.message || actionsResult.reason}`);
+      } else {
+        actions = actionsResult.value || [];
+      }
 
       const actionsByDbkey = new Map();
       for (const action of actions) {

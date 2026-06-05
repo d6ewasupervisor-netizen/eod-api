@@ -319,6 +319,7 @@ async function processRun(pool, run) {
         stores: params.stores,
         dates: range.dates,
         settings,
+        onWarning: (message) => warnings.push(message),
         onProgress: (info) => updateRun(pool, run.id, {
           progress_json: JSON.stringify({
             stage: 'pulling_rebotics',

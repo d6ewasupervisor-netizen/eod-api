@@ -25,7 +25,7 @@ function parseBoolEnv(name, fallback) {
 }
 
 const DEFAULTS = {
-  reboticsRequestTimeoutMs: parseIntEnv('TRACKER_REBOTICS_REQUEST_TIMEOUT_MS', 15000),
+  reboticsRequestTimeoutMs: parseIntEnv('TRACKER_REBOTICS_REQUEST_TIMEOUT_MS', 30000),
   reboticsActionsPageLimit: parseIntEnv('TRACKER_REBOTICS_ACTIONS_PAGE_LIMIT', 200),
   reboticsMaxActionPages: parseIntEnv('TRACKER_REBOTICS_MAX_ACTION_PAGES', 40),
   reboticsMaxTaskPages: parseIntEnv('TRACKER_REBOTICS_MAX_TASK_PAGES', 20),
