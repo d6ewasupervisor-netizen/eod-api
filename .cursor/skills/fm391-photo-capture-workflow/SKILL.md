@@ -18,7 +18,9 @@ description: Build and operate mobile bay-photo capture apps from FM COM/ISE/Cut
    - Route it publicly in `src/index.js` with `/app-slug`, `/app-slug/assets/`, and `/api/<app-slug>/`.
    - Use absolute asset paths like `/fm391-p05w3/assets/app.js`; relative `./assets/...` breaks when a phone opens the no-slash route.
    - Keep app copy minimal: list what exists and what is needed; avoid explanatory requirements/limits unless user asks.
-   - For mobile gallery support, use `<input type="file" accept="image/*">` without `capture="environment"`.
+   - Accept Apple formats in all photo inputs: `image/*,.heic,.heif,image/heic,image/heif`.
+   - Convert HEIC/HEIF client-side to JPEG when native browser decode fails, then upload/send JPEG.
+   - For mobile gallery support, use a gallery/file input without `capture="environment"`.
    - Use labels like `Add photo` and `Replace`, not camera-only language.
 
 3. Send photos through `eod-api` and Resend.
@@ -41,12 +43,24 @@ description: Build and operate mobile bay-photo capture apps from FM COM/ISE/Cut
 
 ## UI Defaults
 
+Minimum requirements for any bay-photo app built for this purpose:
+
+- Every bay row must provide both actions:
+  - `Take`: camera-first input using `capture="environment"`.
+  - `Load`: gallery/file-picker input without `capture`.
+- Both `Take` and `Load` must save to the selected bay and then automatically highlight/scroll to the next needed bay.
+- After `Take` saves successfully, attempt to reopen the camera for the next needed bay after confirming the prior bay was saved. Keep the next bay highlighted if the browser blocks automatic camera reopening.
+- Every set must provide bulk loading for multiple photos.
+- Bulk loading must open a review step before saving. Show each selected image with a bay dropdown, default assignments in bay order, and require the user to save assigned photos.
+- Prevent duplicate bay assignments in the bulk review step.
+- Never silently assign bulk photos without giving the user a way to verify or correct bay numbers.
+- Keep all assignment paths compatible with mobile browser gallery selection and camera capture.
+
 - Use high-contrast dark mode for field photo apps unless the user asks otherwise.
 - Main progress text should be simple: `Captured X | Needed Y | Sent Z`.
 - Set cards should show category name, source, set type, footage, POG, department, and captured/needed counts.
 - Bay rows should show only `Needed`, `Captured`, or `Sent`.
 - Keep status messages short: `Saving bay N...`, `Bay N captured.`, `Sending i/n...`, `Sent N.`, `No unsent photos.`
-- Support at least two assignment paths: one bay at a time with automatic next-bay focus, and set-level bulk selection with a review panel where each image has a bay dropdown before saving.
 - Optimize for mobile sizes: `viewport-fit=cover`, safe-area padding, no horizontal overflow, full-width touch targets under ~420px, wrapped long category names, and thumbnail/select layouts that shrink cleanly.
 
 ## CORS and Deployment Gotchas

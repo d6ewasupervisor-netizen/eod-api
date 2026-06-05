@@ -7,6 +7,10 @@
   const PHOTO_MAX_BYTES = 950 * 1024;
   const BATCH_MAX_BYTES = 17 * 1024 * 1024;
   const MAX_EDGE = 1600;
+  const IMAGE_ACCEPT = 'image/*,.heic,.heif,image/heic,image/heif';
+  const HEIC_RE = /\.(hei[cf])$/i;
+  const HEIC_MIME_RE = /^image\/hei[cf]$/i;
+  const HEIC_CONVERTER_URL = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
   const API_BASE = location.hostname.includes('github.io')
     ? 'https://eod-api.the-dump-bin.com'
     : '';
@@ -37,6 +41,7 @@
   let photoState = new Map();
   let nextTaskId = null;
   let pendingBulk = null;
+  let heicConverterPromise = null;
 
   function openDb() {
     if (dbPromise) return dbPromise;
@@ -134,6 +139,34 @@
     ].join('_') + '.jpg';
   }
 
+  function isHeicFile(file) {
+    return HEIC_MIME_RE.test(file.type || '') || HEIC_RE.test(file.name || '');
+  }
+
+  function loadHeicConverter() {
+    if (window.heic2any) return Promise.resolve(window.heic2any);
+    if (heicConverterPromise) return heicConverterPromise;
+    heicConverterPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = HEIC_CONVERTER_URL;
+      script.async = true;
+      script.onload = () => window.heic2any ? resolve(window.heic2any) : reject(new Error('HEIC converter unavailable.'));
+      script.onerror = () => reject(new Error('Could not load HEIC converter.'));
+      document.head.appendChild(script);
+    });
+    return heicConverterPromise;
+  }
+
+  async function convertHeicToJpeg(file) {
+    const heic2any = await loadHeicConverter();
+    const converted = await heic2any({
+      blob: file,
+      toType: 'image/jpeg',
+      quality: 0.88,
+    });
+    return Array.isArray(converted) ? converted[0] : converted;
+  }
+
   function readFileAsImage(file) {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file);
@@ -150,20 +183,43 @@
     });
   }
 
+  async function decodeImage(file) {
+    if (window.createImageBitmap) {
+      try {
+        return await createImageBitmap(file);
+      } catch {
+        /* fall back to Image/object URL below */
+      }
+    }
+    return readFileAsImage(file);
+  }
+
   function canvasDataUrl(canvas, quality) {
     return canvas.toDataURL('image/jpeg', quality);
   }
 
   async function compressPhoto(file) {
-    const img = await readFileAsImage(file);
-    const scale = Math.min(1, MAX_EDGE / Math.max(img.naturalWidth, img.naturalHeight));
+    let decodeFile = file;
+    let img;
+    try {
+      img = await decodeImage(decodeFile);
+    } catch (err) {
+      if (!isHeicFile(file)) throw err;
+      const jpegBlob = await convertHeicToJpeg(file);
+      decodeFile = new File([jpegBlob], `${file.name || 'photo'}.jpg`, { type: 'image/jpeg' });
+      img = await decodeImage(decodeFile);
+    }
+    const sourceWidth = img.naturalWidth || img.width;
+    const sourceHeight = img.naturalHeight || img.height;
+    const scale = Math.min(1, MAX_EDGE / Math.max(sourceWidth, sourceHeight));
     const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
-    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale));
     const ctx = canvas.getContext('2d', { alpha: false });
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    if (typeof img.close === 'function') img.close();
 
     let quality = 0.74;
     let dataUrl = canvasDataUrl(canvas, quality);
@@ -232,11 +288,11 @@
             <div class="bay-actions">
               <label class="capture-label">
                 Take
-                <input class="file-input bay-file-input" type="file" accept="image/*" capture="environment" data-task-id="${task.id}">
+                <input class="file-input bay-file-input" type="file" accept="${IMAGE_ACCEPT}" capture="environment" data-mode="take" data-task-id="${task.id}">
               </label>
               <label class="capture-label">
                 Load
-                <input class="file-input bay-file-input" type="file" accept="image/*" data-task-id="${task.id}">
+                <input class="file-input bay-file-input" type="file" accept="${IMAGE_ACCEPT}" data-mode="load" data-task-id="${task.id}">
               </label>
             </div>
           </div>`;
@@ -257,7 +313,7 @@
               <div class="set-actions">
                 <label class="bulk-label">
                   Add set photos
-                  <input class="file-input set-file-input" type="file" accept="image/*" multiple data-set-id="${set.id}">
+                  <input class="file-input set-file-input" type="file" accept="${IMAGE_ACCEPT}" multiple data-set-id="${set.id}">
                 </label>
               </div>
             </div>
@@ -341,6 +397,12 @@
     if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
+  function openNextCamera(taskId) {
+    const input = document.querySelector(`.bay-file-input[data-task-id="${taskId}"][data-mode="take"]`);
+    if (!input) return;
+    setTimeout(() => input.click(), 650);
+  }
+
   function clearPendingBulk() {
     if (pendingBulk?.items) {
       pendingBulk.items.forEach((item) => URL.revokeObjectURL(item.url));
@@ -360,9 +422,14 @@
       await savePhoto(buildPhotoRecord(task, compressed));
       const nextTask = findNextNeededTask(task.id);
       nextTaskId = nextTask?.id || null;
-      setStatus(nextTask ? `Next: Bay ${nextTask.bayNumber}.` : 'Complete.', 'good');
+      const shouldOpenNextCamera = input.dataset.mode === 'take' && !!nextTask;
+      setStatus(
+        shouldOpenNextCamera ? `Saved. Opening bay ${nextTask.bayNumber}.` : nextTask ? `Next: Bay ${nextTask.bayNumber}.` : 'Complete.',
+        'good'
+      );
       await refresh();
       focusNextTask();
+      if (shouldOpenNextCamera) openNextCamera(nextTask.id);
     } catch (err) {
       setStatus(err.message || 'Save failed.', 'error');
     }
