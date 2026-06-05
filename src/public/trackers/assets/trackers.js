@@ -97,11 +97,14 @@
     period.innerHTML = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
       .map((n) => `<option value="${n}">${String(n).padStart(2, '0')}</option>`)
       .join('');
-    const latest = weeks[weeks.length - 1];
-    if (latest) {
-      fiscalYear.value = String(latest.fiscalYear);
-      period.value = String(latest.period);
-      document.getElementById('week').value = String(latest.week);
+    const today = new Date().toISOString().slice(0, 10);
+    const current = weeks.find((w) => String(w.start) <= today && today <= String(w.end));
+    const recent = [...weeks].reverse().find((w) => String(w.start) <= today);
+    const fallback = current || recent || weeks[weeks.length - 1];
+    if (fallback) {
+      fiscalYear.value = String(fallback.fiscalYear);
+      period.value = String(fallback.period);
+      document.getElementById('week').value = String(fallback.week);
     }
   }
 
@@ -208,7 +211,7 @@
     const detail = !projects
       ? 'Choose at least one project.'
       : stores || selectedDistricts().length
-      ? `${stores} stores, ${dates || '?'} days, ${projects} projects.`
+      ? `${stores} stores, ${dates || '?'} days, ${projects} projects${selectedFiscalWeek() ? ` (${selectedFiscalWeek().short}: ${selectedFiscalWeek().start} to ${selectedFiscalWeek().end})` : ''}.`
       : 'Choose at least one store or district.';
     const warning = workUnits > max
       ? ` Over the ${max} check limit. Split the run.`
@@ -356,6 +359,7 @@
         `Status: ${run.status}\n` +
         `Stage: ${run.progress.stage || 'unknown'} (${run.progress.progress || 0}%) ${run.progress.message ? `- ${run.progress.message}` : ''}\n` +
         `Scope: ${run.progress.stores || run.params.stores?.length || 0} stores, ${run.progress.dates || '?'} days, ${run.progress.projects || run.params.projects?.length || 0} projects\n` +
+        `Dates: ${run.progress.dateFrom || run.params.dateFrom || '-'} to ${run.progress.dateTo || run.params.dateTo || '-'}\n` +
         `Rows: PROD ${run.progress.prodRows ?? run.summary.prodRows ?? '-'} / SI ${run.progress.siRows ?? run.summary.siRows ?? '-'}\n` +
         `Warnings: ${(run.warnings || []).length}\n` +
         `${run.error ? `Error: ${run.error}` : ''}`

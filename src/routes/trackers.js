@@ -274,6 +274,8 @@ async function processRun(pool, run) {
         progress: 0,
         stores: params.stores.length,
         dates: range.dates.length,
+        dateFrom: range.dateFrom,
+        dateTo: range.dateTo,
         projects: params.projects.length,
         workUnits: guard.workUnits,
       }),
@@ -286,6 +288,8 @@ async function processRun(pool, run) {
         message: 'Pulling SAS PROD and Rebotics data',
         stores: params.stores.length,
         dates: range.dates.length,
+        dateFrom: range.dateFrom,
+        dateTo: range.dateTo,
         projects: params.projects.length,
         workUnits: guard.workUnits,
       }),
@@ -305,6 +309,8 @@ async function processRun(pool, run) {
             prodRows: info.rows,
             stores: params.stores.length,
             dates: range.dates.length,
+            dateFrom: range.dateFrom,
+            dateTo: range.dateTo,
             projects: params.projects.length,
           }),
         }).catch(() => {}),
@@ -320,6 +326,8 @@ async function processRun(pool, run) {
             siRows: info.rows,
             stores: params.stores.length,
             dates: range.dates.length,
+            dateFrom: range.dateFrom,
+            dateTo: range.dateTo,
           }),
         }).catch(() => {}),
       }),
@@ -331,7 +339,7 @@ async function processRun(pool, run) {
     else warnings.push(`SAS pull failed: ${prodResult.reason?.message || String(prodResult.reason)}`);
     if (siResult.status === 'fulfilled') siRows = siResult.value;
     else warnings.push(`Rebotics pull failed: ${siResult.reason?.message || String(siResult.reason)}`);
-    if (!prodRows.length && !siRows.length) {
+    if (prodResult.status === 'rejected' && siResult.status === 'rejected') {
       throw new Error('Both SAS and Rebotics pulls failed; no rows to compare.');
     }
 
@@ -342,6 +350,8 @@ async function processRun(pool, run) {
         message: 'Comparing source rows and image counts',
         prodRows: prodRows.length,
         siRows: siRows.length,
+        dateFrom: range.dateFrom,
+        dateTo: range.dateTo,
       }),
     });
 
@@ -360,9 +370,11 @@ async function processRun(pool, run) {
       progress_json: JSON.stringify({
         stage: 'done',
         progress: 100,
-        message: 'Comparison complete',
+        message: compared.summary.total ? 'Comparison complete' : 'No matching rows found',
         prodRows: prodRows.length,
         siRows: siRows.length,
+        dateFrom: range.dateFrom,
+        dateTo: range.dateTo,
         total: compared.summary.total,
       }),
     });
@@ -485,6 +497,8 @@ function createTrackersRouter({ pool }) {
           progress: 0,
           stores: params.stores.length,
           dates: range.dates.length,
+          dateFrom: range.dateFrom,
+          dateTo: range.dateTo,
           projects: params.projects.length,
           workUnits: guard.workUnits,
           warnings: guard.warnings,
