@@ -91,10 +91,14 @@ function getHeaders() {
   };
 }
 
-async function sasGet(urlPath, params = {}) {
+async function sasGet(urlPath, params = {}, options = {}) {
   const headers = getHeaders();
   if (!headers) throw new Error('SAS session not active');
-  return axios.get(`${BASE_URL}${urlPath}`, { headers, params });
+  return axios.get(`${BASE_URL}${urlPath}`, {
+    headers,
+    params,
+    timeout: options.timeout || parseInt(process.env.SAS_REQUEST_TIMEOUT_MS || '30000', 10),
+  });
 }
 
 async function sasPatch(urlPath, data) {

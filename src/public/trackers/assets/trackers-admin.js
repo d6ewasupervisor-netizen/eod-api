@@ -42,11 +42,37 @@
     document.getElementById('reboticsActionsPageLimit').value = settings.reboticsActionsPageLimit;
     document.getElementById('reboticsMaxActionPages').value = settings.reboticsMaxActionPages;
     document.getElementById('reboticsMaxTaskPages').value = settings.reboticsMaxTaskPages;
+    document.getElementById('reboticsMaxAttempts').value = settings.reboticsMaxAttempts;
+    document.getElementById('sasRequestTimeoutMs').value = settings.sasRequestTimeoutMs;
+    document.getElementById('sasMaxAttempts').value = settings.sasMaxAttempts;
     document.getElementById('runItemsPageSizeDefault').value = settings.runItemsPageSizeDefault;
     document.getElementById('runItemsPageSizeMax').value = settings.runItemsPageSizeMax;
+    document.getElementById('maxRunStores').value = settings.maxRunStores;
+    document.getElementById('maxRunDates').value = settings.maxRunDates;
+    document.getElementById('maxRunWorkUnits').value = settings.maxRunWorkUnits;
+    const audit = document.getElementById('auditStatus');
+    audit.textContent = settings.updatedAt
+      ? `Last updated ${new Date(settings.updatedAt).toLocaleString()} by ${settings.updatedBy || 'unknown'}.`
+      : 'Using defaults; no saved tracker settings row yet.';
+  }
+
+  function readNumber(id) {
+    const input = document.getElementById(id);
+    const value = parseInt(input.value, 10);
+    const min = parseInt(input.min || '-999999', 10);
+    const max = parseInt(input.max || '999999', 10);
+    if (!Number.isFinite(value) || value < min || value > max) {
+      throw new Error(`${id} must be between ${min} and ${max}`);
+    }
+    return value;
   }
 
   function collectSettings() {
+    const defaultPageSize = readNumber('runItemsPageSizeDefault');
+    const maxPageSize = readNumber('runItemsPageSizeMax');
+    if (defaultPageSize > maxPageSize) {
+      throw new Error('Run Items Default Page Size must be less than or equal to Run Items Max Page Size');
+    }
     return {
       trackerAllowedEmails: document.getElementById('trackerAllowedEmails').value
         .split(',')
@@ -54,12 +80,18 @@
         .filter(Boolean),
       trackerAllowSupervisors: document.getElementById('trackerAllowSupervisors').value === 'true',
       trackerAllowAdmins: document.getElementById('trackerAllowAdmins').value === 'true',
-      reboticsRequestTimeoutMs: parseInt(document.getElementById('reboticsRequestTimeoutMs').value, 10),
-      reboticsActionsPageLimit: parseInt(document.getElementById('reboticsActionsPageLimit').value, 10),
-      reboticsMaxActionPages: parseInt(document.getElementById('reboticsMaxActionPages').value, 10),
-      reboticsMaxTaskPages: parseInt(document.getElementById('reboticsMaxTaskPages').value, 10),
-      runItemsPageSizeDefault: parseInt(document.getElementById('runItemsPageSizeDefault').value, 10),
-      runItemsPageSizeMax: parseInt(document.getElementById('runItemsPageSizeMax').value, 10),
+      reboticsRequestTimeoutMs: readNumber('reboticsRequestTimeoutMs'),
+      reboticsActionsPageLimit: readNumber('reboticsActionsPageLimit'),
+      reboticsMaxActionPages: readNumber('reboticsMaxActionPages'),
+      reboticsMaxTaskPages: readNumber('reboticsMaxTaskPages'),
+      reboticsMaxAttempts: readNumber('reboticsMaxAttempts'),
+      sasRequestTimeoutMs: readNumber('sasRequestTimeoutMs'),
+      sasMaxAttempts: readNumber('sasMaxAttempts'),
+      runItemsPageSizeDefault: defaultPageSize,
+      runItemsPageSizeMax: maxPageSize,
+      maxRunStores: readNumber('maxRunStores'),
+      maxRunDates: readNumber('maxRunDates'),
+      maxRunWorkUnits: readNumber('maxRunWorkUnits'),
     };
   }
 
@@ -79,7 +111,7 @@
             body: JSON.stringify({ settings: collectSettings() }),
           });
           bindSettings(saved.settings);
-          saveStatus.textContent = `Saved at ${new Date(saved.updatedAt).toLocaleString()}.`;
+          saveStatus.textContent = `Saved at ${new Date(saved.settings.updatedAt || saved.updatedAt).toLocaleString()}.`;
         } catch (err) {
           saveStatus.textContent = `Save failed: ${err.message}`;
         }

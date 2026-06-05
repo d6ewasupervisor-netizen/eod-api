@@ -6,6 +6,18 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
 const DEFAULT_ACTIONS_PAGE_LIMIT = 200;
 const DEFAULT_MAX_ACTION_PAGES = 40;
 const DEFAULT_MAX_TASK_PAGES = 20;
+const DEFAULT_MAX_ATTEMPTS = 3;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetriableError(err) {
+  if (err?.name === 'AbortError') return true;
+  const status = err?.status;
+  if (status === 429) return true;
+  return status >= 500 && status < 600;
+}
 
 function toCustomId(storeNumber) {
   const n = String(parseInt(String(storeNumber), 10));
@@ -31,7 +43,7 @@ function taskStatus(task) {
   return String(task?.status?.id || task?.status || 'unknown').toLowerCase();
 }
 
-async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS } = {}) {
+async function fetchJsonOnce(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS } = {}) {
   const token = reboticsBridge.getTokenForServer();
   const base = reboticsBridge.getApiBase();
   if (!token) {
@@ -61,7 +73,9 @@ async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS } = {}) 
     }
     if (!res.ok) {
       const detail = body && typeof body === 'object' ? (body.detail || body.message) : null;
-      throw new Error(detail || `Rebotics HTTP ${res.status} for ${path}`);
+      const err = new Error(detail || `Rebotics HTTP ${res.status} for ${path}`);
+      err.status = res.status;
+      throw err;
     }
     return body;
   } finally {
@@ -69,12 +83,30 @@ async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS } = {}) 
   }
 }
 
+async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, attempts = DEFAULT_MAX_ATTEMPTS } = {}) {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fetchJsonOnce(path, { timeoutMs });
+    } catch (err) {
+      lastErr = err;
+      if (attempt >= attempts || !isRetriableError(err)) break;
+      await sleep(500 * attempt);
+    }
+  }
+  if (lastErr?.name === 'AbortError') {
+    throw new Error(`Rebotics request timed out after ${timeoutMs}ms: ${path}`);
+  }
+  throw lastErr;
+}
+
 async function resolveStoreInternalId(customId, date, options = {}) {
   const maxTaskPages = options.maxTaskPages || DEFAULT_MAX_TASK_PAGES;
   const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
+  const attempts = options.reboticsMaxAttempts || DEFAULT_MAX_ATTEMPTS;
   let offset = 0;
   for (let page = 0; page < maxTaskPages; page += 1) {
-    const data = await fetchJson(`/api/v1/tasks/?from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}`, { timeoutMs });
+    const data = await fetchJson(`/api/v1/tasks/?from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}`, { timeoutMs, attempts });
     const rows = Array.isArray(data) ? data : (data?.results || []);
     if (!rows.length) break;
     for (const row of rows) {
@@ -92,12 +124,13 @@ async function resolveStoreInternalId(customId, date, options = {}) {
 async function listTasksForStoreAndDate(storeId, date, options = {}) {
   const maxTaskPages = options.maxTaskPages || DEFAULT_MAX_TASK_PAGES;
   const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
+  const attempts = options.reboticsMaxAttempts || DEFAULT_MAX_ATTEMPTS;
   let offset = 0;
   const out = [];
   for (let page = 0; page < maxTaskPages; page += 1) {
     const data = await fetchJson(
       `/api/v1/tasks/?store=${storeId}&from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}&ordering=task_def__title`,
-      { timeoutMs }
+      { timeoutMs, attempts }
     );
     const rows = Array.isArray(data) ? data : (data?.results || []);
     out.push(...rows);
@@ -111,10 +144,11 @@ async function listPrePhotoActionsForStoreOnDate(storeId, date, options = {}) {
   const maxActionPages = options.maxActionPages || DEFAULT_MAX_ACTION_PAGES;
   const actionsPageLimit = options.actionsPageLimit || DEFAULT_ACTIONS_PAGE_LIMIT;
   const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
+  const attempts = options.reboticsMaxAttempts || DEFAULT_MAX_ATTEMPTS;
   let offset = 0;
   const out = [];
   for (let page = 0; page < maxActionPages; page += 1) {
-    const data = await fetchJson(`/api/v4/processing/actions/?store=${storeId}&limit=${actionsPageLimit}&offset=${offset}`, { timeoutMs });
+    const data = await fetchJson(`/api/v4/processing/actions/?store=${storeId}&limit=${actionsPageLimit}&offset=${offset}`, { timeoutMs, attempts });
     const rows = Array.isArray(data) ? data : (data?.results || []);
     if (!rows.length) break;
     for (const row of rows) {
@@ -145,9 +179,11 @@ function actionToImage(action) {
   };
 }
 
-async function fetchRows({ stores, dates, settings = {} }) {
+async function fetchRows({ stores, dates, settings = {}, onProgress }) {
   const rows = [];
   const storeCustomToInternal = new Map();
+  const totalLookups = Math.max(1, dates.length * stores.length);
+  let completedLookups = 0;
 
   for (const date of dates) {
     for (const storeNumber of stores) {
@@ -158,8 +194,13 @@ async function fetchRows({ stores, dates, settings = {} }) {
         internalId = await resolveStoreInternalId(customId, date, {
           maxTaskPages: settings.reboticsMaxTaskPages,
           reboticsRequestTimeoutMs: settings.reboticsRequestTimeoutMs,
+          reboticsMaxAttempts: settings.reboticsMaxAttempts,
         });
-        if (!internalId) continue;
+        if (!internalId) {
+          completedLookups += 1;
+          if (onProgress) onProgress({ completedLookups, totalLookups, rows: rows.length });
+          continue;
+        }
         storeCustomToInternal.set(customId, internalId);
       }
 
@@ -167,13 +208,17 @@ async function fetchRows({ stores, dates, settings = {} }) {
         listTasksForStoreAndDate(internalId, date, {
           maxTaskPages: settings.reboticsMaxTaskPages,
           reboticsRequestTimeoutMs: settings.reboticsRequestTimeoutMs,
+          reboticsMaxAttempts: settings.reboticsMaxAttempts,
         }),
         listPrePhotoActionsForStoreOnDate(internalId, date, {
           maxActionPages: settings.reboticsMaxActionPages,
           actionsPageLimit: settings.reboticsActionsPageLimit,
           reboticsRequestTimeoutMs: settings.reboticsRequestTimeoutMs,
+          reboticsMaxAttempts: settings.reboticsMaxAttempts,
         }),
       ]);
+      completedLookups += 1;
+      if (onProgress) onProgress({ completedLookups, totalLookups, rows: rows.length });
 
       const actionsByDbkey = new Map();
       for (const action of actions) {

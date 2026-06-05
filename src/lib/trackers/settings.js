@@ -29,8 +29,14 @@ const DEFAULTS = {
   reboticsActionsPageLimit: parseIntEnv('TRACKER_REBOTICS_ACTIONS_PAGE_LIMIT', 200),
   reboticsMaxActionPages: parseIntEnv('TRACKER_REBOTICS_MAX_ACTION_PAGES', 40),
   reboticsMaxTaskPages: parseIntEnv('TRACKER_REBOTICS_MAX_TASK_PAGES', 20),
+  reboticsMaxAttempts: parseIntEnv('TRACKER_REBOTICS_MAX_ATTEMPTS', 3),
+  sasRequestTimeoutMs: parseIntEnv('TRACKER_SAS_REQUEST_TIMEOUT_MS', 30000),
+  sasMaxAttempts: parseIntEnv('TRACKER_SAS_MAX_ATTEMPTS', 3),
   runItemsPageSizeDefault: parseIntEnv('TRACKER_RUN_ITEMS_PAGE_SIZE_DEFAULT', 100),
   runItemsPageSizeMax: parseIntEnv('TRACKER_RUN_ITEMS_PAGE_SIZE_MAX', 500),
+  maxRunStores: parseIntEnv('TRACKER_MAX_RUN_STORES', 120),
+  maxRunDates: parseIntEnv('TRACKER_MAX_RUN_DATES', 14),
+  maxRunWorkUnits: parseIntEnv('TRACKER_MAX_RUN_WORK_UNITS', 3000),
   trackerAllowSupervisors: parseBoolEnv('TRACKER_ALLOW_SUPERVISORS', true),
   trackerAllowAdmins: parseBoolEnv('TRACKER_ALLOW_ADMINS', true),
   trackerAllowedEmails: parseCsvEnv('TRACKER_ALLOWED_EMAILS', []).map((e) => e.toLowerCase()),
@@ -46,8 +52,17 @@ function sanitize(input = {}) {
   out.reboticsActionsPageLimit = Math.min(500, Math.max(10, parseInt(input.reboticsActionsPageLimit, 10) || DEFAULTS.reboticsActionsPageLimit));
   out.reboticsMaxActionPages = Math.min(200, Math.max(1, parseInt(input.reboticsMaxActionPages, 10) || DEFAULTS.reboticsMaxActionPages));
   out.reboticsMaxTaskPages = Math.min(200, Math.max(1, parseInt(input.reboticsMaxTaskPages, 10) || DEFAULTS.reboticsMaxTaskPages));
+  out.reboticsMaxAttempts = Math.min(5, Math.max(1, parseInt(input.reboticsMaxAttempts, 10) || DEFAULTS.reboticsMaxAttempts));
+  out.sasRequestTimeoutMs = Math.min(120000, Math.max(5000, parseInt(input.sasRequestTimeoutMs, 10) || DEFAULTS.sasRequestTimeoutMs));
+  out.sasMaxAttempts = Math.min(5, Math.max(1, parseInt(input.sasMaxAttempts, 10) || DEFAULTS.sasMaxAttempts));
   out.runItemsPageSizeDefault = Math.min(500, Math.max(10, parseInt(input.runItemsPageSizeDefault, 10) || DEFAULTS.runItemsPageSizeDefault));
   out.runItemsPageSizeMax = Math.min(1000, Math.max(50, parseInt(input.runItemsPageSizeMax, 10) || DEFAULTS.runItemsPageSizeMax));
+  if (out.runItemsPageSizeDefault > out.runItemsPageSizeMax) {
+    out.runItemsPageSizeDefault = out.runItemsPageSizeMax;
+  }
+  out.maxRunStores = Math.min(500, Math.max(1, parseInt(input.maxRunStores, 10) || DEFAULTS.maxRunStores));
+  out.maxRunDates = Math.min(60, Math.max(1, parseInt(input.maxRunDates, 10) || DEFAULTS.maxRunDates));
+  out.maxRunWorkUnits = Math.min(25000, Math.max(1, parseInt(input.maxRunWorkUnits, 10) || DEFAULTS.maxRunWorkUnits));
   out.trackerAllowSupervisors = Boolean(
     input.trackerAllowSupervisors != null ? input.trackerAllowSupervisors : DEFAULTS.trackerAllowSupervisors
   );
@@ -57,7 +72,9 @@ function sanitize(input = {}) {
   const list = Array.isArray(input.trackerAllowedEmails)
     ? input.trackerAllowedEmails
     : String(input.trackerAllowedEmails || '').split(',');
-  out.trackerAllowedEmails = [...new Set(list.map((e) => String(e || '').trim().toLowerCase()).filter(Boolean))];
+  out.trackerAllowedEmails = [...new Set(list
+    .map((e) => String(e || '').trim().toLowerCase())
+    .filter((e) => e && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))];
   return out;
 }
 
@@ -67,7 +84,7 @@ async function loadTrackerSettings(pool) {
     return settingsCache.value;
   }
   const { rows } = await pool.query(
-    `SELECT setting_json FROM tracker_settings WHERE setting_key = 'global' LIMIT 1`
+    `SELECT setting_json, updated_by_email, updated_at FROM tracker_settings WHERE setting_key = 'global' LIMIT 1`
   );
   if (!rows.length) {
     const value = { ...DEFAULTS };
@@ -75,7 +92,11 @@ async function loadTrackerSettings(pool) {
     return value;
   }
   const dbSettings = rows[0].setting_json || {};
-  const value = sanitize({ ...DEFAULTS, ...dbSettings });
+  const value = {
+    ...sanitize({ ...DEFAULTS, ...dbSettings }),
+    updatedBy: rows[0].updated_by_email || null,
+    updatedAt: rows[0].updated_at ? new Date(rows[0].updated_at).toISOString() : null,
+  };
   settingsCache = { value, expiresAt: now + SETTINGS_CACHE_MS };
   return value;
 }
@@ -91,8 +112,13 @@ async function saveTrackerSettings(pool, input, updatedByEmail) {
            updated_at = NOW()`,
     [JSON.stringify(normalized), updatedByEmail || null],
   );
-  settingsCache = { value: normalized, expiresAt: Date.now() + SETTINGS_CACHE_MS };
-  return normalized;
+  const value = {
+    ...normalized,
+    updatedBy: updatedByEmail || null,
+    updatedAt: new Date().toISOString(),
+  };
+  settingsCache = { value, expiresAt: Date.now() + SETTINGS_CACHE_MS };
+  return value;
 }
 
 function isTrackerUserAllowed(user, settings) {

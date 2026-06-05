@@ -12,6 +12,12 @@ const sasReports = require('../lib/trackers/sas-reports');
 const reboticsReports = require('../lib/trackers/rebotics-reports');
 const { compareRows } = require('../lib/trackers/compare');
 const {
+  DEFAULT_PROJECT_IDS,
+  districtOptions,
+  normalizeDistricts,
+  storesForDistricts,
+} = require('../lib/trackers/metadata');
+const {
   DEFAULTS: TRACKER_DEFAULTS,
   trackerAdminEmails,
   loadTrackerSettings,
@@ -82,6 +88,7 @@ function normalizeStores(stores) {
   return (Array.isArray(stores) ? stores : String(stores || '').split(','))
     .map((s) => parseInt(String(s).trim(), 10))
     .filter((n) => Number.isFinite(n))
+    .sort((a, b) => a - b)
     .map((n) => String(n));
 }
 
@@ -89,6 +96,66 @@ function normalizeProjects(projects) {
   return (Array.isArray(projects) ? projects : String(projects || '').split(','))
     .map((p) => parseInt(String(p).trim(), 10))
     .filter((n) => Number.isFinite(n));
+}
+
+function normalizeRunParams(params = {}) {
+  const explicitStores = normalizeStores(params.stores);
+  const districts = normalizeDistricts(params.districts);
+  const districtStores = storesForDistricts(districts);
+  const stores = [...new Set([...explicitStores, ...districtStores])]
+    .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+  const projects = normalizeProjects(params.projects);
+  return {
+    ...params,
+    stores,
+    districts,
+    projects: projects.length ? projects : DEFAULT_PROJECT_IDS,
+  };
+}
+
+function validateRunShape({ params, range, settings }) {
+  const projects = params.projects?.length ? params.projects : DEFAULT_PROJECT_IDS;
+  const stores = params.stores || [];
+  const dates = range.dates || [];
+  const workUnits = stores.length * dates.length * projects.length;
+  const warnings = [];
+
+  if (!stores.length) {
+    return { ok: false, status: 400, error: 'Choose at least one store or district.' };
+  }
+  if (stores.length > settings.maxRunStores) {
+    return {
+      ok: false,
+      status: 413,
+      error: `This run includes ${stores.length} stores. Limit it to ${settings.maxRunStores} stores or split by district.`,
+    };
+  }
+  if (dates.length > settings.maxRunDates) {
+    return {
+      ok: false,
+      status: 413,
+      error: `This run spans ${dates.length} days. Limit it to ${settings.maxRunDates} days or run smaller date windows.`,
+    };
+  }
+  if (workUnits > settings.maxRunWorkUnits) {
+    return {
+      ok: false,
+      status: 413,
+      error: `This run would check ${workUnits} store/date/project combinations. Limit it to ${settings.maxRunWorkUnits} or split the request.`,
+    };
+  }
+  if (workUnits > Math.floor(settings.maxRunWorkUnits * 0.75)) {
+    warnings.push(`Large run: ${workUnits} store/date/project combinations. It may take several minutes.`);
+  }
+  return { ok: true, workUnits, warnings };
+}
+
+function classifySourceError(err) {
+  const message = String(err?.message || err || '');
+  if (/sign in|required|session|token|auth/i.test(message)) return 'auth';
+  if (/timeout|timed out|abort/i.test(message)) return 'source_timeout';
+  if (/limit|too large|split/i.test(message)) return 'request_too_large';
+  return 'source_error';
 }
 
 async function updateRun(pool, runId, fields) {
@@ -180,34 +247,69 @@ async function insertRunResults(pool, runId, compared) {
 async function processRun(pool, run) {
   const warnings = [];
   try {
+    const params = normalizeRunParams(run.params_json || {});
+    const settings = await loadTrackerSettings(pool);
+    const range = resolveRange(params);
+    const guard = validateRunShape({ params, range, settings });
+    if (!guard.ok) throw new Error(guard.error);
+    warnings.push(...guard.warnings);
+
     await updateRun(pool, run.id, {
       status: 'running',
       started_at: new Date().toISOString(),
-      progress_json: JSON.stringify({ stage: 'starting', progress: 0 }),
+      progress_json: JSON.stringify({
+        stage: 'starting',
+        progress: 0,
+        stores: params.stores.length,
+        dates: range.dates.length,
+        projects: params.projects.length,
+        workUnits: guard.workUnits,
+      }),
     });
 
-    const params = run.params_json || {};
-    const range = resolveRange(params);
-    const stores = normalizeStores(params.stores);
-    const projects = normalizeProjects(params.projects);
-    const settings = await loadTrackerSettings(pool);
-    if (!stores.length) throw new Error('At least one store is required');
-
     await updateRun(pool, run.id, {
-      progress_json: JSON.stringify({ stage: 'pulling_prod', progress: 20 }),
+      progress_json: JSON.stringify({
+        stage: 'pulling_sources',
+        progress: 15,
+        message: 'Pulling SAS PROD and Rebotics data',
+        stores: params.stores.length,
+        dates: range.dates.length,
+        projects: params.projects.length,
+        workUnits: guard.workUnits,
+      }),
     });
 
     const [prodResult, siResult] = await Promise.allSettled([
       sasReports.fetchRows({
-        stores,
-        projects,
+        stores: params.stores,
+        projects: params.projects,
         dateFrom: range.dateFrom,
         dateTo: range.dateTo,
+        settings,
+        onProgress: (info) => updateRun(pool, run.id, {
+          progress_json: JSON.stringify({
+            stage: 'pulling_prod',
+            progress: Math.min(55, 15 + Math.round((info.completedLookups / info.totalLookups) * 35)),
+            prodRows: info.rows,
+            stores: params.stores.length,
+            dates: range.dates.length,
+            projects: params.projects.length,
+          }),
+        }).catch(() => {}),
       }),
       reboticsReports.fetchRows({
-        stores,
+        stores: params.stores,
         dates: range.dates,
         settings,
+        onProgress: (info) => updateRun(pool, run.id, {
+          progress_json: JSON.stringify({
+            stage: 'pulling_rebotics',
+            progress: Math.min(65, 15 + Math.round((info.completedLookups / info.totalLookups) * 45)),
+            siRows: info.rows,
+            stores: params.stores.length,
+            dates: range.dates.length,
+          }),
+        }).catch(() => {}),
       }),
     ]);
 
@@ -225,6 +327,7 @@ async function processRun(pool, run) {
       progress_json: JSON.stringify({
         stage: 'comparing',
         progress: 70,
+        message: 'Comparing source rows and image counts',
         prodRows: prodRows.length,
         siRows: siRows.length,
       }),
@@ -242,7 +345,14 @@ async function processRun(pool, run) {
         prodRows: prodRows.length,
         siRows: siRows.length,
       }),
-      progress_json: JSON.stringify({ stage: 'done', progress: 100 }),
+      progress_json: JSON.stringify({
+        stage: 'done',
+        progress: 100,
+        message: 'Comparison complete',
+        prodRows: prodRows.length,
+        siRows: siRows.length,
+        total: compared.summary.total,
+      }),
     });
   } catch (err) {
     await updateRun(pool, run.id, {
@@ -250,7 +360,12 @@ async function processRun(pool, run) {
       completed_at: new Date().toISOString(),
       warnings_json: JSON.stringify(warnings),
       error_text: err.message,
-      progress_json: JSON.stringify({ stage: 'failed', progress: 100, error: err.message }),
+      progress_json: JSON.stringify({
+        stage: 'failed',
+        progress: 100,
+        error: err.message,
+        errorType: classifySourceError(err),
+      }),
     });
   } finally {
     inFlightRuns.delete(run.id);
@@ -295,15 +410,17 @@ function createTrackersRouter({ pool }) {
   router.get('/bootstrap', async (req, res) => {
     const weeks = buildWeeks();
     const projects = await sasReports.discoverProjects();
+    const settings = req.trackerSettings || await loadTrackerSettings(req.trackerPool);
     return res.json({
       ok: true,
       auth: { email: req.user?.email || null, roles: req.user?.roles || [] },
       weeks,
       projects,
+      districts: districtOptions(),
       defaults: {
-        projects: sasReports.DEFAULT_PROJECT_IDS,
+        projects: DEFAULT_PROJECT_IDS,
       },
-      trackerDefaults: TRACKER_DEFAULTS,
+      trackerDefaults: settings || TRACKER_DEFAULTS,
       sas: {
         active: sasBridge.isSessionAlive(),
       },
@@ -317,10 +434,17 @@ function createTrackersRouter({ pool }) {
   });
 
   router.post('/runs', async (req, res) => {
-    const params = req.body || {};
-    const stores = normalizeStores(params.stores);
-    if (!stores.length) {
-      return res.status(400).json({ ok: false, error: 'stores is required' });
+    const params = normalizeRunParams(req.body || {});
+    let range;
+    try {
+      range = resolveRange(params);
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message, errorType: 'validation' });
+    }
+    const settings = req.trackerSettings || await loadTrackerSettings(pool);
+    const guard = validateRunShape({ params, range, settings });
+    if (!guard.ok) {
+      return res.status(guard.status).json({ ok: false, error: guard.error, errorType: 'request_too_large' });
     }
     const runKey = crypto.randomUUID();
     const { rows } = await pool.query(
@@ -332,16 +456,28 @@ function createTrackersRouter({ pool }) {
         req.user?.email || 'unknown',
         JSON.stringify({
           ...params,
-          stores,
-          projects: normalizeProjects(params.projects),
+          stores: params.stores,
+          districts: params.districts,
+          projects: params.projects,
+          dateFrom: range.dateFrom,
+          dateTo: range.dateTo,
+          guardWarnings: guard.warnings,
         }),
-        JSON.stringify({ stage: 'queued', progress: 0 }),
+        JSON.stringify({
+          stage: 'queued',
+          progress: 0,
+          stores: params.stores.length,
+          dates: range.dates.length,
+          projects: params.projects.length,
+          workUnits: guard.workUnits,
+          warnings: guard.warnings,
+        }),
       ],
     );
     const run = rows[0];
     const p = processRun(pool, run);
     inFlightRuns.set(run.id, p);
-    return res.status(202).json({ ok: true, runId: run.id, runKey: run.run_key });
+    return res.status(202).json({ ok: true, runId: run.id, runKey: run.run_key, warnings: guard.warnings });
   });
 
   router.get('/runs/:id', async (req, res) => {
@@ -377,7 +513,21 @@ function createTrackersRouter({ pool }) {
     const offset = (page - 1) * pageSize;
     const confidence = String(req.query.confidence || '').trim();
     const status = String(req.query.status || '').trim();
+    const store = String(req.query.store || '').trim();
     const search = String(req.query.search || '').trim();
+    const sortParam = String(req.query.sort || 'store').trim();
+    const orderParam = String(req.query.order || 'asc').trim().toLowerCase();
+    const sortColumns = {
+      store: 'store_number',
+      date: 'work_date',
+      dbkey: 'dbkey',
+      category: 'category_set_label',
+      confidence: 'confidence',
+      prodPhotos: 'prod_photo_count',
+      siPhotos: 'si_photo_count',
+    };
+    const sortColumn = sortColumns[sortParam] || sortColumns.store;
+    const sortOrder = orderParam === 'desc' ? 'DESC' : 'ASC';
 
     const where = ['run_id = $1'];
     const params = [run.id];
@@ -389,9 +539,13 @@ function createTrackersRouter({ pool }) {
       params.push(status);
       where.push(`(prod_status = $${params.length} OR si_status = $${params.length})`);
     }
+    if (store) {
+      params.push(String(parseInt(store, 10)));
+      where.push(`store_number = $${params.length}`);
+    }
     if (search) {
       params.push(`%${search}%`);
-      where.push(`(dbkey ILIKE $${params.length} OR category_set_label ILIKE $${params.length})`);
+      where.push(`(dbkey ILIKE $${params.length} OR category_set_label ILIKE $${params.length} OR project_name ILIKE $${params.length})`);
     }
 
     const whereSql = where.join(' AND ');
@@ -399,7 +553,10 @@ function createTrackersRouter({ pool }) {
     params.push(pageSize);
     params.push(offset);
     const itemsResult = await pool.query(
-      `SELECT * FROM tracker_run_items WHERE ${whereSql} ORDER BY store_number, work_date, dbkey LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      `SELECT * FROM tracker_run_items
+       WHERE ${whereSql}
+       ORDER BY ${sortColumn} ${sortOrder} NULLS LAST, store_number, work_date, dbkey
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     );
     return res.json({
@@ -409,6 +566,22 @@ function createTrackersRouter({ pool }) {
       total: countResult.rows[0].total,
       items: itemsResult.rows,
     });
+  });
+
+  router.post('/auth/rebotics/refresh', async (_req, res) => {
+    try {
+      const result = await reboticsBridge.triggerManualReauth('manual:/api/trackers/auth/rebotics/refresh');
+      if (result?.ok === false) {
+        return res.status(502).json({ ok: false, error: result.error, errorType: 'auth' });
+      }
+      return res.json({
+        ok: true,
+        message: 'Rebotics re-auth email dispatched. The token should refresh after the local poller runs.',
+        rebotics: reboticsBridge.authStatusPayload(),
+      });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err.message, errorType: 'auth' });
+    }
   });
 
   router.get('/runs/:id/images', async (req, res) => {

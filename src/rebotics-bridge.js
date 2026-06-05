@@ -167,6 +167,10 @@ async function triggerReboticsReauth(pathThatFailed, { force = false } = {}) {
   }
 }
 
+async function triggerManualReauth(reason = 'manual') {
+  return triggerReboticsReauth(reason, { force: true });
+}
+
 async function reboticsFetch(pool, method, path, body, { _retried = false } = {}) {
   if (!reboticsToken) {
     const err = new Error('REBOTICS_NO_TOKEN');
@@ -430,7 +434,7 @@ function registerReboticsRoutes(app, pool, resend) {
   // automatic 401-driven retry path.
   app.post('/rebotics-trigger-auth', requireAuth, async (req, res) => {
     try {
-      const result = await triggerReboticsReauth('manual:/rebotics-trigger-auth', { force: true });
+      const result = await triggerManualReauth('manual:/rebotics-trigger-auth');
       if (result?.ok === false) {
         return res.status(502).json({ success: false, error: result.error });
       }
@@ -641,6 +645,7 @@ module.exports = {
   },
   authStatusPayload,
   loadAuthFromDb,
+  triggerManualReauth: (reason = 'manual') => triggerManualReauth(reason),
   getApiBase: () => REBOTICS_API,
   getTokenForServer: () => reboticsToken,
   getUserIdForServer: () => reboticsUserId,

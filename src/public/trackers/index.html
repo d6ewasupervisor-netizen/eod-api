@@ -17,13 +17,22 @@
     <section class="card">
       <h2>Auth + Source Status</h2>
       <div id="statusGrid" class="status-grid"></div>
+      <p id="sourceRefreshStatus" class="hint"></p>
     </section>
 
     <section class="card">
       <h2>Run Input</h2>
       <form id="runForm" class="form-grid">
-        <label>Stores (comma-separated)<input id="stores" placeholder="19,23,53" required /></label>
-        <label>Project IDs (optional)<input id="projects" placeholder="1,1668,1715,3568" /></label>
+        <label>Stores (optional)<input id="stores" placeholder="19,23,53" /></label>
+        <label>Districts (optional)
+          <select id="districts" multiple size="5"></select>
+          <span class="field-help">Use Ctrl/Cmd-click to select multiple districts. Stores and districts are combined.</span>
+        </label>
+        <fieldset class="project-field">
+          <legend>Projects</legend>
+          <div id="projectChoices" class="choice-grid"></div>
+          <span class="field-help">Defaults include Kompass ISE, Cut In, Blitz, DIV, and Central Pet.</span>
+        </fieldset>
         <label>Fiscal Year
           <select id="fiscalYear"></select>
         </label>
@@ -42,12 +51,14 @@
         <label>Date To (optional)<input id="dateTo" type="date" /></label>
         <button type="submit">Start Comparison Run</button>
       </form>
-      <p class="hint">Use either fiscal period/week or explicit date range.</p>
+      <p id="runEstimate" class="hint">Use either fiscal period/week or explicit date range. Leave dates blank for a fiscal week.</p>
     </section>
 
     <section class="card">
       <h2>Run Status</h2>
+      <div class="progress-shell"><div id="runProgressBar" class="progress-bar" style="width: 0%"></div></div>
       <div id="runStatus" class="run-status">No run started.</div>
+      <div id="runError" class="alert hidden"></div>
       <div id="runActions" class="run-actions hidden">
         <a id="manifestJson" target="_blank" rel="noreferrer">Manifest JSON</a>
         <a id="manifestCsv" target="_blank" rel="noreferrer">Manifest CSV</a>
@@ -58,6 +69,7 @@
       <h2>Results</h2>
       <div class="filters">
         <label>Search dbkey/category<input id="search" /></label>
+        <label>Store<input id="filterStore" inputmode="numeric" /></label>
         <label>Confidence
           <select id="confidence">
             <option value="">All</option>
@@ -65,9 +77,40 @@
             <option value="needs_review">needs_review</option>
           </select>
         </label>
+        <label>Status
+          <select id="status">
+            <option value="">All</option>
+            <option value="prod_only">PROD only</option>
+            <option value="si_only">SI only</option>
+            <option value="complete_in_prod_not_si">Complete in PROD not SI</option>
+            <option value="complete_in_si_not_prod">Complete in SI not PROD</option>
+          </select>
+        </label>
+        <label>Sort
+          <select id="sort">
+            <option value="store">Store</option>
+            <option value="date">Date</option>
+            <option value="dbkey">DBKey</option>
+            <option value="category">Category</option>
+            <option value="confidence">Confidence</option>
+            <option value="prodPhotos">PROD photos</option>
+            <option value="siPhotos">SI photos</option>
+          </select>
+        </label>
+        <label>Order
+          <select id="order">
+            <option value="asc">Asc</option>
+            <option value="desc">Desc</option>
+          </select>
+        </label>
         <button id="refreshResults" type="button">Refresh</button>
       </div>
-      <div id="summary"></div>
+      <div id="summary" class="summary-grid"></div>
+      <div class="pager">
+        <button id="prevPage" type="button">Previous</button>
+        <span id="pageStatus">Page 1</span>
+        <button id="nextPage" type="button">Next</button>
+      </div>
       <table>
         <thead>
           <tr>

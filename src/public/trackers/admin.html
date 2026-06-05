@@ -17,6 +17,7 @@
     <section class="card">
       <h2>Current Access</h2>
       <div id="adminStatus">Checking...</div>
+      <div id="auditStatus" class="hint"></div>
     </section>
 
     <section class="card">
@@ -44,8 +45,14 @@
         <label>Rebotics Actions Page Limit<input id="reboticsActionsPageLimit" type="number" min="10" max="500" required /></label>
         <label>Rebotics Max Action Pages<input id="reboticsMaxActionPages" type="number" min="1" max="200" required /></label>
         <label>Rebotics Max Task Pages<input id="reboticsMaxTaskPages" type="number" min="1" max="200" required /></label>
+        <label>Rebotics Max Attempts<input id="reboticsMaxAttempts" type="number" min="1" max="5" required /></label>
+        <label>SAS Request Timeout (ms)<input id="sasRequestTimeoutMs" type="number" min="5000" max="120000" required /></label>
+        <label>SAS Max Attempts<input id="sasMaxAttempts" type="number" min="1" max="5" required /></label>
         <label>Run Items Default Page Size<input id="runItemsPageSizeDefault" type="number" min="10" max="500" required /></label>
         <label>Run Items Max Page Size<input id="runItemsPageSizeMax" type="number" min="50" max="1000" required /></label>
+        <label>Max Stores Per Run<input id="maxRunStores" type="number" min="1" max="500" required /></label>
+        <label>Max Days Per Run<input id="maxRunDates" type="number" min="1" max="60" required /></label>
+        <label>Max Store/Day/Project Checks<input id="maxRunWorkUnits" type="number" min="1" max="25000" required /></label>
         <button type="submit">Save Settings</button>
       </form>
       <p id="saveStatus" class="hint"></p>

@@ -1,11 +1,54 @@
 'use strict';
 
 const sasBridge = require('../../sas-bridge');
+const { DEFAULT_PROJECT_IDS, projectLabel, knownProjectOptions } = require('./metadata');
 
 const CUSTOMER_ID = 2;
 const OFFSET_MIN = 420;
-const DEFAULT_PROJECT_IDS = [1, 1668, 1715, 3568];
+const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
+const DEFAULT_MAX_ATTEMPTS = 3;
 const projectStoreCache = new Map();
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function unwrapAxiosData(response) {
+  return response && Object.prototype.hasOwnProperty.call(response, 'data') ? response.data : response;
+}
+
+function isRetriableError(err) {
+  if (err?.name === 'AbortError') return true;
+  const status = err?.response?.status || err?.status;
+  if (status === 429) return true;
+  if (status >= 500 && status < 600) return true;
+  return ['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED'].includes(err?.code);
+}
+
+async function withRetry(fn, { attempts = DEFAULT_MAX_ATTEMPTS, label = 'SAS request' } = {}) {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt >= attempts || !isRetriableError(err)) break;
+      await sleep(400 * attempt);
+    }
+  }
+  if (lastErr) lastErr.message = `${label} failed: ${lastErr.message}`;
+  throw lastErr;
+}
+
+async function fetchWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function parseCsvLine(line) {
   const out = [];
@@ -67,13 +110,21 @@ function normalizeProjectName(project) {
   return raw || `Project ${project?.id || 'unknown'}`;
 }
 
-async function fetchProjectStores(projectId, { refresh = false } = {}) {
+async function fetchProjectStores(projectId, { refresh = false, settings = {} } = {}) {
   const cached = projectStoreCache.get(projectId);
   const now = Date.now();
   if (!refresh && cached && now - cached.fetchedAt < 15 * 60 * 1000) {
     return cached.rows;
   }
-  const body = await sasBridge.sasGet(`/api/v1/projects/project-stores/?project=${projectId}`);
+  const response = await withRetry(
+    () => sasBridge.sasGet(
+      `/api/v1/projects/project-stores/?project=${projectId}`,
+      {},
+      { timeout: settings.sasRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS }
+    ),
+    { attempts: settings.sasMaxAttempts || DEFAULT_MAX_ATTEMPTS, label: `SAS project stores ${projectId}` }
+  );
+  const body = unwrapAxiosData(response);
   const rows = Array.isArray(body) ? body : (body?.results || []);
   projectStoreCache.set(projectId, { fetchedAt: now, rows });
   return rows;
@@ -81,20 +132,41 @@ async function fetchProjectStores(projectId, { refresh = false } = {}) {
 
 async function discoverProjects({ refresh = false } = {}) {
   if (!sasBridge.isSessionAlive()) {
-    return DEFAULT_PROJECT_IDS.map((id) => ({ id, name: `Project ${id}`, source: 'default' }));
+    return knownProjectOptions();
   }
   try {
-    const body = await sasBridge.sasGet(`/api/v1/projects/?customer_id=${CUSTOMER_ID}&page=1&page_size=200`);
+    const response = await withRetry(
+      () => sasBridge.sasGet(`/api/v1/projects/?customer_id=${CUSTOMER_ID}&page=1&page_size=200`),
+      { label: 'SAS projects' }
+    );
+    const body = unwrapAxiosData(response);
     const rows = Array.isArray(body) ? body : (body?.results || []);
     if (!rows.length) {
-      return DEFAULT_PROJECT_IDS.map((id) => ({ id, name: `Project ${id}`, source: 'default' }));
+      return knownProjectOptions();
     }
-    return rows
+    const discovered = rows
       .map((p) => ({ id: Number(p.id), name: normalizeProjectName(p), source: 'sas' }))
       .filter((p) => Number.isFinite(p.id))
       .sort((a, b) => a.id - b.id);
+    const byId = new Map(discovered.map((p) => [p.id, p]));
+    for (const preset of knownProjectOptions()) {
+      const existing = byId.get(preset.id);
+      byId.set(preset.id, {
+        ...preset,
+        ...(existing || {}),
+        name: projectLabel(preset.id, existing?.name),
+        label: preset.label,
+        source: existing ? 'sas+preset' : 'preset',
+      });
+    }
+    return [...byId.values()].sort((a, b) => {
+      const aPreset = DEFAULT_PROJECT_IDS.includes(a.id) ? 0 : 1;
+      const bPreset = DEFAULT_PROJECT_IDS.includes(b.id) ? 0 : 1;
+      if (aPreset !== bPreset) return aPreset - bPreset;
+      return a.id - b.id;
+    });
   } catch (_err) {
-    return DEFAULT_PROJECT_IDS.map((id) => ({ id, name: `Project ${id}`, source: 'default' }));
+    return knownProjectOptions();
   }
 }
 
@@ -106,7 +178,7 @@ function toSasReportedRange(dateFrom, dateTo) {
   return { from, to };
 }
 
-async function pullCategoryReportCsv({ tokenless = true, projectId, projectStoreId, dateFrom, dateTo }) {
+async function pullCategoryReportCsv({ projectId, projectStoreId, dateFrom, dateTo, settings = {} }) {
   const range = toSasReportedRange(dateFrom, dateTo);
   const params = new URLSearchParams({
     customer_id: String(CUSTOMER_ID),
@@ -118,14 +190,26 @@ async function pullCategoryReportCsv({ tokenless = true, projectId, projectStore
     shift_status: 'completed',
     store_id: String(projectStoreId),
   });
-  const body = await sasBridge.sasGet(`/api/v1/reports/category-reset-report/?${params.toString()}`);
+  const response = await withRetry(
+    () => sasBridge.sasGet(
+      `/api/v1/reports/category-reset-report/?${params.toString()}`,
+      {},
+      { timeout: settings.sasRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS }
+    ),
+    { attempts: settings.sasMaxAttempts || DEFAULT_MAX_ATTEMPTS, label: `SAS category report ${projectId}/${projectStoreId}` }
+  );
+  const body = unwrapAxiosData(response);
   if (!body?.file_url) return '';
-  const res = await fetch(body.file_url);
+  const timeoutMs = settings.sasRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
+  const res = await withRetry(
+    () => fetchWithTimeout(body.file_url, timeoutMs),
+    { attempts: settings.sasMaxAttempts || DEFAULT_MAX_ATTEMPTS, label: 'SAS CSV download' }
+  );
   if (!res.ok) throw new Error(`Failed to download SAS CSV (HTTP ${res.status})`);
   return res.text();
 }
 
-async function fetchRows({ stores, projects, dateFrom, dateTo }) {
+async function fetchRows({ stores, projects, dateFrom, dateTo, settings = {}, onProgress }) {
   if (!sasBridge.isSessionAlive()) {
     throw new Error('SAS session is not active. Use /api/trigger-auth first.');
   }
@@ -134,19 +218,28 @@ async function fetchRows({ stores, projects, dateFrom, dateTo }) {
     .filter((n) => Number.isFinite(n));
   const normalizedStores = (stores || []).map((s) => String(parseInt(String(s), 10))).filter(Boolean);
   const allRows = [];
+  const totalLookups = Math.max(1, normalizedProjects.length * normalizedStores.length);
+  let completedLookups = 0;
 
   for (const projectId of normalizedProjects) {
-    const projectStores = await fetchProjectStores(projectId);
+    const projectStores = await fetchProjectStores(projectId, { settings });
     const byStoreNumber = new Map(projectStores.map((ps) => [String(ps?.store?.number), ps]));
     for (const storeNumber of normalizedStores) {
       const projectStore = byStoreNumber.get(String(parseInt(storeNumber, 10)));
-      if (!projectStore) continue;
+      if (!projectStore) {
+        completedLookups += 1;
+        if (onProgress) onProgress({ completedLookups, totalLookups, rows: allRows.length });
+        continue;
+      }
       const csvText = await pullCategoryReportCsv({
         projectId,
         projectStoreId: projectStore.id,
         dateFrom,
         dateTo,
+        settings,
       });
+      completedLookups += 1;
+      if (onProgress) onProgress({ completedLookups, totalLookups, rows: allRows.length });
       if (!csvText) continue;
       const rows = parseCsv(await csvText);
       for (const row of rows) {
@@ -159,7 +252,7 @@ async function fetchRows({ stores, projects, dateFrom, dateTo }) {
           storeNumber: String(row['Store #'] || row.Store || storeNumber),
           workDate,
           projectId,
-          projectName: String(row.Project || row['Project Name'] || `Project ${projectId}`),
+          projectName: projectLabel(projectId, String(row.Project || row['Project Name'] || '')),
           dbkey,
           pog: dbkey,
           categorySetLabel: String(row.Category || row['Category Name'] || row['Department Name'] || ''),

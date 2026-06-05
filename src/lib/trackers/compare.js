@@ -57,11 +57,12 @@ function compareRows(prodRowsIn, siRowsIn) {
     const dbkey = normDbkey(sample.dbkey);
     const prodPhotoCount = bucket.prod.reduce((acc, r) => acc + (r.photoCount || 0), 0);
     const siPhotoCount = bucket.si.reduce((acc, r) => acc + (r.photoCount || 0), 0);
-    const confidence = storeNumber && dbkey ? 'high' : 'needs_review';
     const notes = [];
     if (!dbkey) notes.push('Missing dbkey');
+    if (!bucket.prod.length || !bucket.si.length) notes.push(bucket.prod.length ? 'Missing SI match' : 'Missing PROD match');
     if (bucket.prod.length > 1 || bucket.si.length > 1) notes.push('Multiple rows merged for same key');
     if (Math.abs(prodPhotoCount - siPhotoCount) > 0) notes.push('Photo count mismatch');
+    const confidence = notes.length || !storeNumber || !dbkey ? 'needs_review' : 'high';
 
     const item = {
       storeNumber,
