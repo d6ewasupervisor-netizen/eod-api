@@ -116,7 +116,7 @@
     const selected = new Set((defaults || []).map((id) => String(id)));
     const el = document.getElementById('projectChoices');
     el.innerHTML = (projects || []).map((p) => {
-      const label = p.label || `${p.name || 'Project'} (${p.id})`;
+      const label = p.displayName || p.name || p.label || 'Project';
       const checked = selected.has(String(p.id)) ? 'checked' : '';
       return `
         <label class="choice">
@@ -128,25 +128,20 @@
   }
 
   function renderStatus(bootstrap) {
-    const statusGrid = document.getElementById('statusGrid');
-    const projectPreview = bootstrap.projects.slice(0, 5).map((p) => p.label || `${p.name} (${p.id})`).join(', ');
-    statusGrid.innerHTML = `
-      <div class="status-chip"><strong>User</strong><div>${bootstrap.auth.email || 'unknown'}</div></div>
-      <div class="status-chip">
-        <strong>SAS</strong>
-        <div>${bootstrap.sas.active ? 'active' : 'not active'}</div>
-        <button type="button" data-refresh-token="sas">Refresh SAS token</button>
-      </div>
-      <div class="status-chip">
-        <strong>Rebotics</strong>
-        <div>${bootstrap.rebotics.ok ? 'token loaded' : 'token missing'}${bootstrap.rebotics.stale ? ' (stale)' : ''}</div>
-        <button type="button" data-refresh-token="rebotics">Refresh Rebotics token</button>
-      </div>
-      <div class="status-chip"><strong>Projects</strong><div>${bootstrap.projects.length} available (${escapeHtml(projectPreview)}${bootstrap.projects.length > 5 ? ', ...' : ''})</div></div>
+    const status = document.getElementById('connectionStatus');
+    const sasOnline = Boolean(bootstrap.sas?.active);
+    const siOnline = Boolean(bootstrap.rebotics?.ok && !bootstrap.rebotics?.stale);
+    status.innerHTML = `
+      <span class="connection-pill ${sasOnline ? 'is-online' : 'is-offline'}">
+        <span class="bulb"></span>PROD ${sasOnline ? 'online' : 'offline'}
+      </span>
+      <span class="connection-pill ${siOnline ? 'is-online' : 'is-offline'}">
+        <span class="bulb"></span>SI ${siOnline ? 'online' : 'offline'}
+      </span>
+      ${sasOnline && siOnline ? '' : '<button id="reconnectSources" type="button" class="link-button">Reconnect</button>'}
     `;
-    document.querySelectorAll('[data-refresh-token]').forEach((btn) => {
-      btn.addEventListener('click', () => refreshToken(btn.getAttribute('data-refresh-token')));
-    });
+    const reconnect = document.getElementById('reconnectSources');
+    if (reconnect) reconnect.addEventListener('click', refreshSources);
   }
 
   async function loadBootstrap() {
@@ -213,14 +208,14 @@
     const detail = !projects
       ? 'Choose at least one project.'
       : stores || selectedDistricts().length
-      ? `${stores} stores x ${dates || '?'} days x ${projects} projects = ${workUnits || '?'} checks.`
+      ? `${stores} stores, ${dates || '?'} days, ${projects} projects.`
       : 'Choose at least one store or district.';
     const warning = workUnits > max
-      ? ` This is over the ${max} check limit; split the run before submitting.`
+      ? ` Over the ${max} check limit. Split the run.`
       : workUnits > max * 0.75
-        ? ' Large run warning: this may take several minutes.'
+        ? ' Large run; this may take a few minutes.'
         : '';
-    document.getElementById('runEstimate').textContent = `${detail}${warning} Use either fiscal period/week or explicit date range.`;
+    document.getElementById('runEstimate').textContent = `${detail}${warning}`;
   }
 
   function bodyForRun() {
@@ -311,16 +306,43 @@
     const data = await api(`/api/trackers/runs/${state.runId}/images?itemId=${itemId}`);
     const grid = document.getElementById('imagesGrid');
     grid.innerHTML = '';
+    if (!data.images.length) {
+      grid.innerHTML = '<div class="hint">No source images found for this row.</div>';
+      document.getElementById('imagesDialog').showModal();
+      return;
+    }
     for (const image of data.images) {
       const card = document.createElement('div');
       card.innerHTML = `
-        <div><strong>${image.source_system}</strong> ${image.source_ref || ''}</div>
-        <div>Bay ${image.bay_index || '-'}</div>
-        <img src="${image.stream_url}" alt="tracker source image" />
+        <div><strong>${escapeHtml(image.source_system)}</strong> ${escapeHtml(image.source_ref || '')}</div>
+        <div>Bay ${escapeHtml(image.bay_index || '-')}</div>
+        <div class="image-placeholder">Loading...</div>
       `;
       grid.appendChild(card);
+      loadImageIntoCard(card, image.stream_url);
     }
     document.getElementById('imagesDialog').showModal();
+  }
+
+  async function loadImageIntoCard(card, url) {
+    const placeholder = card.querySelector('.image-placeholder');
+    try {
+      const res = await fetch(url, {
+        credentials: 'include',
+        headers: tokenHeader(),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const img = document.createElement('img');
+      img.src = objectUrl;
+      img.alt = 'tracker source image';
+      img.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
+      placeholder.replaceWith(img);
+    } catch (err) {
+      placeholder.textContent = `Could not load image: ${err.message}`;
+      placeholder.classList.add('image-error');
+    }
   }
 
   async function pollRun() {
@@ -375,20 +397,17 @@
     }
   }
 
-  async function refreshToken(source) {
-    const status = document.getElementById('sourceRefreshStatus');
-    status.textContent = `Refreshing ${source} token...`;
+  async function refreshSources() {
+    const status = document.getElementById('connectionStatus');
+    status.classList.add('is-refreshing');
     try {
-      if (source === 'sas') {
-        await api('/api/trigger-auth?force=1', { method: 'POST' });
-      } else {
-        await api('/api/trackers/auth/rebotics/refresh', { method: 'POST' });
-      }
-      status.textContent = `${source} refresh requested. Reloading source status...`;
+      await Promise.allSettled([
+        api('/api/trigger-auth?force=1', { method: 'POST' }),
+        api('/api/trackers/auth/rebotics/refresh', { method: 'POST' }),
+      ]);
       await loadBootstrap();
-      status.textContent = `${source} refresh requested successfully.`;
-    } catch (err) {
-      status.textContent = `${source} refresh failed: ${err.message}`;
+    } finally {
+      status.classList.remove('is-refreshing');
     }
   }
 

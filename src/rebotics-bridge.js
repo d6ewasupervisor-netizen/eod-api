@@ -28,6 +28,7 @@ let reboticsToken = null;
 let reboticsUsername = null;
 let reboticsUserId = DEFAULT_USER_ID;
 let reboticsTokenRefreshedAt = null;
+let reboticsTokenValidatedAt = null;
 let reboticsTokenStale = false;
 let lastReauthTriggerAt = 0;
 
@@ -44,10 +45,18 @@ function randomUuid() {
 
 async function markStaleInDb(pool, isStale) {
   try {
-    await pool.query(
-      `UPDATE rebotics_auth SET is_stale = $1 WHERE id = (SELECT id FROM rebotics_auth ORDER BY refreshed_at DESC LIMIT 1)`,
-      [isStale]
-    );
+    if (isStale) {
+      await pool.query(
+        `UPDATE rebotics_auth SET is_stale = true WHERE id = (SELECT id FROM rebotics_auth ORDER BY refreshed_at DESC LIMIT 1)`
+      );
+    } else {
+      await pool.query(
+        `UPDATE rebotics_auth
+         SET is_stale = false,
+             last_validated_at = NOW()
+         WHERE id = (SELECT id FROM rebotics_auth ORDER BY refreshed_at DESC LIMIT 1)`
+      );
+    }
   } catch (e) {
     logger.error('markStaleInDb:', e.message);
   }
@@ -55,13 +64,14 @@ async function markStaleInDb(pool, isStale) {
 
 async function loadAuthFromDb(pool) {
   const { rows } = await pool.query(
-    `SELECT username, token, user_id, refreshed_at, is_stale FROM rebotics_auth ORDER BY refreshed_at DESC LIMIT 1`
+    `SELECT username, token, user_id, refreshed_at, last_validated_at, is_stale FROM rebotics_auth ORDER BY refreshed_at DESC LIMIT 1`
   );
   if (!rows.length) {
     reboticsToken = null;
     reboticsUsername = null;
     reboticsUserId = DEFAULT_USER_ID;
     reboticsTokenRefreshedAt = null;
+    reboticsTokenValidatedAt = null;
     reboticsTokenStale = true;
     logger.info('No Rebotics token in database');
     return;
@@ -71,6 +81,7 @@ async function loadAuthFromDb(pool) {
   reboticsUsername = r.username;
   reboticsUserId = r.user_id != null ? r.user_id : DEFAULT_USER_ID;
   reboticsTokenRefreshedAt = r.refreshed_at ? new Date(r.refreshed_at).toISOString() : null;
+  reboticsTokenValidatedAt = r.last_validated_at ? new Date(r.last_validated_at).toISOString() : null;
   reboticsTokenStale = !!r.is_stale;
   logger.info(`Rebotics token loaded for ${reboticsUsername}, stale=${reboticsTokenStale}`);
 }
@@ -78,14 +89,15 @@ async function loadAuthFromDb(pool) {
 async function persistAuth(pool, { username, token, userId, isStale }) {
   await pool.query('DELETE FROM rebotics_auth');
   await pool.query(
-    `INSERT INTO rebotics_auth (username, token, user_id, refreshed_at, is_stale)
-     VALUES ($1, $2, $3, NOW(), $4)`,
+    `INSERT INTO rebotics_auth (username, token, user_id, refreshed_at, last_validated_at, is_stale)
+     VALUES ($1, $2, $3, NOW(), NOW(), $4)`,
     [username, token, userId != null ? userId : DEFAULT_USER_ID, !!isStale]
   );
   reboticsToken = token;
   reboticsUsername = username;
   reboticsUserId = userId != null ? userId : DEFAULT_USER_ID;
   reboticsTokenRefreshedAt = new Date().toISOString();
+  reboticsTokenValidatedAt = reboticsTokenRefreshedAt;
   reboticsTokenStale = !!isStale;
 }
 
@@ -102,6 +114,42 @@ async function refreshUserIdFromApi() {
     }
   } catch (e) {
     logger.error('refreshUserIdFromApi:', e.message);
+  }
+}
+
+async function validateCurrentToken(pool, { force = false } = {}) {
+  if (!reboticsToken) {
+    return { ok: false, stale: true, error: 'REBOTICS_NO_TOKEN' };
+  }
+  const status = authStatusPayload();
+  if (!force && !status.stale) {
+    return { ok: true, skipped: true, stale: false, status };
+  }
+  try {
+    const res = await bareFetch('GET', '/api/v1/users/me/', null);
+    if (res.status === 401 || res.status === 403) {
+      reboticsTokenStale = true;
+      await markStaleInDb(pool, true);
+      return { ok: false, stale: true, error: `Rebotics token rejected with HTTP ${res.status}` };
+    }
+    if (!res.ok) {
+      return { ok: false, stale: status.stale, error: `Rebotics validation failed with HTTP ${res.status}` };
+    }
+    const me = await res.json().catch(() => null);
+    const id = me?.id ?? me?.pk;
+    if (typeof id === 'number') reboticsUserId = id;
+    reboticsTokenStale = false;
+    reboticsTokenValidatedAt = new Date().toISOString();
+    await markStaleInDb(pool, false);
+    if (typeof id === 'number') {
+      await pool.query(
+        `UPDATE rebotics_auth SET user_id = $1 WHERE id = (SELECT id FROM rebotics_auth ORDER BY refreshed_at DESC LIMIT 1)`,
+        [id]
+      );
+    }
+    return { ok: true, stale: false, status: authStatusPayload() };
+  } catch (e) {
+    return { ok: false, stale: status.stale, error: e.message };
   }
 }
 
@@ -169,6 +217,29 @@ async function triggerReboticsReauth(pathThatFailed, { force = false } = {}) {
 
 async function triggerManualReauth(reason = 'manual') {
   return triggerReboticsReauth(reason, { force: true });
+}
+
+async function ensureFreshAuth(pool, reason = 'manual') {
+  const validation = await validateCurrentToken(pool, { force: true });
+  if (validation.ok) {
+    return {
+      ok: true,
+      validated: true,
+      message: 'Existing Rebotics token validated successfully.',
+      status: authStatusPayload(),
+    };
+  }
+  const trigger = await triggerManualReauth(reason);
+  return {
+    ok: trigger?.ok !== false,
+    validated: false,
+    triggered: trigger,
+    error: trigger?.ok === false ? trigger.error : validation.error,
+    message: trigger?.ok === false
+      ? trigger.error
+      : 'Rebotics token was not usable; re-auth email dispatched.',
+    status: authStatusPayload(),
+  };
 }
 
 async function reboticsFetch(pool, method, path, body, { _retried = false } = {}) {
@@ -364,18 +435,25 @@ function checkBridgeSecret(req, res) {
 function authStatusPayload() {
   const now = Date.now();
   const refreshed = reboticsTokenRefreshedAt ? Date.parse(reboticsTokenRefreshedAt) : null;
+  const validated = reboticsTokenValidatedAt ? Date.parse(reboticsTokenValidatedAt) : null;
+  const freshnessAnchor = Math.max(refreshed || 0, validated || 0) || null;
   const minutesSince = refreshed != null && !Number.isNaN(refreshed)
     ? Math.floor((now - refreshed) / 60_000)
     : null;
+  const minutesSinceValidation = validated != null && !Number.isNaN(validated)
+    ? Math.floor((now - validated) / 60_000)
+    : null;
 
   let stale = !reboticsToken || reboticsTokenStale;
-  if (minutesSince != null && minutesSince > STALE_MINUTES) stale = true;
+  if (freshnessAnchor != null && Math.floor((now - freshnessAnchor) / 60_000) > STALE_MINUTES) stale = true;
 
   return {
     ok: !!reboticsToken,
     username: reboticsUsername,
     refreshed_at: reboticsTokenRefreshedAt,
+    validated_at: reboticsTokenValidatedAt,
     minutes_since_refresh: minutesSince,
+    minutes_since_validation: minutesSinceValidation,
     stale,
   };
 }
@@ -388,9 +466,11 @@ async function initReboticsDb(pool) {
       token TEXT NOT NULL,
       user_id INTEGER,
       refreshed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_validated_at TIMESTAMPTZ,
       is_stale BOOLEAN NOT NULL DEFAULT false
     )
   `);
+  await pool.query(`ALTER TABLE rebotics_auth ADD COLUMN IF NOT EXISTS last_validated_at TIMESTAMPTZ`);
 }
 
 function registerReboticsRoutes(app, pool, resend) {
@@ -421,7 +501,11 @@ function registerReboticsRoutes(app, pool, resend) {
     }
   });
 
-  app.get('/rebotics-auth-status', requireAuth, (req, res) => {
+  app.get('/rebotics-auth-status', requireAuth, async (req, res) => {
+    const status = authStatusPayload();
+    if (status.stale && reboticsToken) {
+      await validateCurrentToken(pool, { force: true });
+    }
     res.json(authStatusPayload());
   });
 
@@ -434,13 +518,14 @@ function registerReboticsRoutes(app, pool, resend) {
   // automatic 401-driven retry path.
   app.post('/rebotics-trigger-auth', requireAuth, async (req, res) => {
     try {
-      const result = await triggerManualReauth('manual:/rebotics-trigger-auth');
+      const result = await ensureFreshAuth(pool, 'manual:/rebotics-trigger-auth');
       if (result?.ok === false) {
         return res.status(502).json({ success: false, error: result.error });
       }
       return res.json({
         success: true,
-        message: 'Rebotics re-auth email dispatched. Token will refresh once the local Gmail poller runs morning-auth-rebotics.js (typically within ~60 seconds).',
+        message: result.message,
+        rebotics: result.status || authStatusPayload(),
       });
     } catch (e) {
       logger.error('rebotics-trigger-auth failed:', e.message);
@@ -454,18 +539,23 @@ function registerReboticsRoutes(app, pool, resend) {
   // tools (e.g. carry-forward.js) that hit the Railway origin directly and
   // need the Rebotics token without going through the user-auth flow. Do NOT
   // expose to the frontend.
-  app.get('/rebotics-token-internal', (req, res) => {
+  app.get('/rebotics-token-internal', async (req, res) => {
     if (!checkBridgeSecret(req, res)) return;
     if (!reboticsToken) {
       return res.status(404).json({ ok: false, error: 'NO_TOKEN' });
     }
-    const status = authStatusPayload();
+    let status = authStatusPayload();
+    if (status.stale) {
+      await validateCurrentToken(pool, { force: true });
+      status = authStatusPayload();
+    }
     return res.json({
       ok: true,
       token: reboticsToken,
       username: reboticsUsername,
       user_id: reboticsUserId,
       refreshed_at: reboticsTokenRefreshedAt,
+      validated_at: reboticsTokenValidatedAt,
       stale: status.stale,
     });
   });
@@ -645,6 +735,14 @@ module.exports = {
   },
   authStatusPayload,
   loadAuthFromDb,
+  validateCurrentToken: (options = {}) => {
+    if (!_pool) throw new Error('Rebotics bridge not initialized');
+    return validateCurrentToken(_pool, options);
+  },
+  ensureFreshAuth: (reason = 'manual') => {
+    if (!_pool) throw new Error('Rebotics bridge not initialized');
+    return ensureFreshAuth(_pool, reason);
+  },
   triggerManualReauth: (reason = 'manual') => triggerManualReauth(reason),
   getApiBase: () => REBOTICS_API,
   getTokenForServer: () => reboticsToken,

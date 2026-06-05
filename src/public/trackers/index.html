@@ -10,28 +10,25 @@
 <body>
   <main class="container">
     <header class="header">
-      <h1>Trackers</h1>
-      <p>Read-only PROD vs Rebotics comparison by store + dbkey/POG.</p>
+      <div>
+        <h1>Tracker</h1>
+      </div>
+      <div id="connectionStatus" class="connection-status" aria-live="polite">
+        <span class="connection-pill"><span class="bulb bulb-wait"></span>PROD</span>
+        <span class="connection-pill"><span class="bulb bulb-wait"></span>SI</span>
+      </div>
     </header>
 
     <section class="card">
-      <h2>Auth + Source Status</h2>
-      <div id="statusGrid" class="status-grid"></div>
-      <p id="sourceRefreshStatus" class="hint"></p>
-    </section>
-
-    <section class="card">
-      <h2>Run Input</h2>
+      <h2>New Run</h2>
       <form id="runForm" class="form-grid">
-        <label>Stores (optional)<input id="stores" placeholder="19,23,53" /></label>
-        <label>Districts (optional)
+        <label>Stores<input id="stores" placeholder="19,23,53" /></label>
+        <label>Districts
           <select id="districts" multiple size="5"></select>
-          <span class="field-help">Use Ctrl/Cmd-click to select multiple districts. Stores and districts are combined.</span>
         </label>
         <fieldset class="project-field">
           <legend>Projects</legend>
           <div id="projectChoices" class="choice-grid"></div>
-          <span class="field-help">Defaults include Kompass ISE, Cut In, Blitz, DIV, and Central Pet.</span>
         </fieldset>
         <label>Fiscal Year
           <select id="fiscalYear"></select>
@@ -47,15 +44,15 @@
             <option value="4">4</option>
           </select>
         </label>
-        <label>Date From (optional)<input id="dateFrom" type="date" /></label>
-        <label>Date To (optional)<input id="dateTo" type="date" /></label>
-        <button type="submit">Start Comparison Run</button>
+        <label>Date From<input id="dateFrom" type="date" /></label>
+        <label>Date To<input id="dateTo" type="date" /></label>
+        <button type="submit">Start Run</button>
       </form>
-      <p id="runEstimate" class="hint">Use either fiscal period/week or explicit date range. Leave dates blank for a fiscal week.</p>
+      <p id="runEstimate" class="hint">Choose stores or districts, then start a run.</p>
     </section>
 
     <section class="card">
-      <h2>Run Status</h2>
+      <h2>Run</h2>
       <div class="progress-shell"><div id="runProgressBar" class="progress-bar" style="width: 0%"></div></div>
       <div id="runStatus" class="run-status">No run started.</div>
       <div id="runError" class="alert hidden"></div>

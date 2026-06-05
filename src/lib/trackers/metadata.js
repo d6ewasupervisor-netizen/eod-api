@@ -55,7 +55,8 @@ function knownProjectOptions() {
   return DEFAULT_PROJECT_IDS.map((id) => ({
     id,
     name: PROJECT_LABELS[id],
-    label: `${PROJECT_LABELS[id]} (${id})`,
+    displayName: PROJECT_LABELS[id],
+    label: PROJECT_LABELS[id],
     source: 'preset',
   }));
 }

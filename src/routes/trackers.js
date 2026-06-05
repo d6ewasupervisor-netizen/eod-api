@@ -181,6 +181,18 @@ async function loadRun(pool, idOrKey) {
   return rows[0] || null;
 }
 
+async function fetchReboticsAction(actionId) {
+  try {
+    return await reboticsReports.fetchJson(`/api/v4/processing/actions/${actionId}/`);
+  } catch (err) {
+    if (err?.status === 401 || err?.status === 403 || /401|403|token|auth/i.test(String(err?.message || ''))) {
+      await reboticsBridge.validateCurrentToken({ force: true });
+      return reboticsReports.fetchJson(`/api/v4/processing/actions/${actionId}/`);
+    }
+    throw err;
+  }
+}
+
 async function insertRunResults(pool, runId, compared) {
   await pool.query('DELETE FROM tracker_run_images WHERE run_id = $1', [runId]);
   await pool.query('DELETE FROM tracker_run_items WHERE run_id = $1', [runId]);
@@ -411,6 +423,11 @@ function createTrackersRouter({ pool }) {
     const weeks = buildWeeks();
     const projects = await sasReports.discoverProjects();
     const settings = req.trackerSettings || await loadTrackerSettings(req.trackerPool);
+    let reboticsStatus = reboticsBridge.authStatusPayload();
+    if (reboticsStatus.stale && reboticsStatus.ok) {
+      await reboticsBridge.validateCurrentToken({ force: true });
+      reboticsStatus = reboticsBridge.authStatusPayload();
+    }
     return res.json({
       ok: true,
       auth: { email: req.user?.email || null, roles: req.user?.roles || [] },
@@ -424,7 +441,7 @@ function createTrackersRouter({ pool }) {
       sas: {
         active: sasBridge.isSessionAlive(),
       },
-      rebotics: reboticsBridge.authStatusPayload(),
+      rebotics: reboticsStatus,
     });
   });
 
@@ -570,14 +587,14 @@ function createTrackersRouter({ pool }) {
 
   router.post('/auth/rebotics/refresh', async (_req, res) => {
     try {
-      const result = await reboticsBridge.triggerManualReauth('manual:/api/trackers/auth/rebotics/refresh');
+      const result = await reboticsBridge.ensureFreshAuth('manual:/api/trackers/auth/rebotics/refresh');
       if (result?.ok === false) {
         return res.status(502).json({ ok: false, error: result.error, errorType: 'auth' });
       }
       return res.json({
         ok: true,
-        message: 'Rebotics re-auth email dispatched. The token should refresh after the local poller runs.',
-        rebotics: reboticsBridge.authStatusPayload(),
+        message: result.message,
+        rebotics: result.status || reboticsBridge.authStatusPayload(),
       });
     } catch (err) {
       return res.status(500).json({ ok: false, error: err.message, errorType: 'auth' });
@@ -682,7 +699,7 @@ function createTrackersRouter({ pool }) {
       let sourceUrl = image.source_url;
       if (image.source_system === 'si') {
         if (!image.action_id) throw new Error('Missing action_id for SI image');
-        const action = await reboticsReports.fetchJson(`/api/v4/processing/actions/${image.action_id}/`);
+        const action = await fetchReboticsAction(image.action_id);
         sourceUrl = action?.merged_image;
       }
       if (!sourceUrl) throw new Error('Image source URL unavailable');
