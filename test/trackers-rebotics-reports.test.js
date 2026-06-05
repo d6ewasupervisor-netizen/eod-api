@@ -28,9 +28,15 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
       storeLookups += 1;
       assert.equal(params.get('custom_id'), '701-00019');
       return jsonResponse({
+        results: [],
+        next: null,
+      });
+    }
+
+    if (path === '/api/v1/tasks/' && !store && date === '2026-06-01') {
+      return jsonResponse({
         results: [{
-          custom_id: '701-00019',
-          id: 3837,
+          store: { custom_id: '701-00019', id: 3837 },
         }],
         next: null,
       });
@@ -50,7 +56,7 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
           title: 'P05W2 - 2026 8732361',
           status: { id: 'COMPLETED' },
           category: { name: 'FIRST AID PRODUCTS' },
-          planograms: [{ custom_id: '8732361', name: 'FIRST AID PRODUCTS' }],
+          planograms: [{ custom_id: '8732361', store_planogram_id: 444, name: 'FIRST AID PRODUCTS' }],
         }],
         next: null,
       });
@@ -67,7 +73,8 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
           rejected: false,
           merged_image: 'https://example.test/merged.jpg',
           section_info: { name: '1' },
-          store_planogram: { planogram: { custom_id: '8732361' } },
+          store_planogram_id: 444,
+          store_planogram: { id: 444, planogram: {} },
         }, {
           id: 499,
           captured_at: '2026-05-31T15:00:00Z',

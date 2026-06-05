@@ -89,6 +89,36 @@ function parseCsv(text) {
   });
 }
 
+function normalizeHeaderKey(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function rowValue(row, names) {
+  for (const name of names) {
+    if (row[name] != null && String(row[name]).trim()) return row[name];
+  }
+  const normalized = new Map(Object.entries(row || {}).map(([k, v]) => [normalizeHeaderKey(k), v]));
+  for (const name of names) {
+    const value = normalized.get(normalizeHeaderKey(name));
+    if (value != null && String(value).trim()) return value;
+  }
+  return '';
+}
+
+function extractWorkDate(row, fallbackDate = '') {
+  const value = rowValue(row, [
+    'Date',
+    'Reported Date',
+    'Scheduled Date',
+    'Shift Reported Date',
+    'Shift Scheduled Date',
+    'Visit Date',
+  ]);
+  const match = String(value || '').match(/\d{4}-\d{2}-\d{2}/);
+  if (match) return match[0];
+  return fallbackDate || '';
+}
+
 function parseAfterUrls(raw) {
   const urls = [];
   const re = /https?:\/\/[^'\s,\]]+/g;
@@ -272,25 +302,25 @@ async function fetchRows({ stores, projects, dateFrom, dateTo, settings = {}, on
     }
     const rows = parseCsv(await csvText);
     for (const row of rows) {
-      const workDate = String(row['Date'] || row['Reported Date'] || row['Scheduled Date'] || '').slice(0, 10);
-      const planogramId = row['Planogram ID'] || '';
+      const workDate = extractWorkDate(row, dateFrom === dateTo ? dateFrom : '');
+      const planogramId = rowValue(row, ['Planogram ID']);
       const dbkey = extractDbkey(planogramId);
-      const afterUrls = parseAfterUrls(row['After Pictures Link']);
+      const afterUrls = parseAfterUrls(rowValue(row, ['After Pictures Link']));
       allRows.push({
         source: 'prod',
-        storeNumber: String(row['Store #'] || row.Store || storeNumber),
+        storeNumber: String(rowValue(row, ['Store #', 'Store']) || storeNumber),
         workDate,
         projectId,
-        projectName: projectLabel(projectId, String(row.Project || row['Project Name'] || '')),
+        projectName: projectLabel(projectId, String(rowValue(row, ['Project', 'Project Name']) || '')),
         dbkey,
         pog: dbkey,
-        categorySetLabel: String(row.Category || row['Category Name'] || row['Department Name'] || ''),
+        categorySetLabel: String(rowValue(row, ['Category', 'Category Name', 'Department Name']) || ''),
         planogramId,
-        status: String(row['Shift Status'] || row['Status'] || 'unknown').toLowerCase(),
+        status: String(rowValue(row, ['Shift Status', 'Status']) || 'unknown').toLowerCase(),
         photoCount: afterUrls.length,
         images: afterUrls.map((url, idx) => ({
           sourceSystem: 'prod',
-          sourceRef: row['Visit ID'] ? `visit:${row['Visit ID']}` : null,
+          sourceRef: rowValue(row, ['Visit ID']) ? `visit:${rowValue(row, ['Visit ID'])}` : null,
           sourceUrl: url,
           bayIndex: idx + 1,
           capturedAt: null,

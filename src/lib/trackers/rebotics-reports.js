@@ -113,11 +113,35 @@ async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, attempt
 }
 
 async function resolveStoreInternalId(customId, options = {}) {
+  const dates = Array.isArray(options.dates) ? [...options.dates].filter(Boolean).sort().reverse() : [];
+  const maxTaskPages = options.maxTaskPages || DEFAULT_MAX_TASK_PAGES;
   const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
   const attempts = options.reboticsMaxAttempts || DEFAULT_MAX_ATTEMPTS;
-  const data = await fetchJson(`/api/v1/stores/?custom_id=${encodeURIComponent(customId)}`, { timeoutMs, attempts });
-  const rows = Array.isArray(data) ? data : (data?.results || []);
-  return rows[0]?.id || null;
+  try {
+    const data = await fetchJson(`/api/v1/stores/?custom_id=${encodeURIComponent(customId)}`, { timeoutMs, attempts });
+    const rows = Array.isArray(data) ? data : (data?.results || []);
+    if (rows[0]?.id != null) return rows[0].id;
+  } catch (_err) {
+    // This endpoint often returns the SPA shell; task rows are the reliable fallback.
+  }
+
+  for (const date of dates) {
+    let offset = 0;
+    for (let page = 0; page < maxTaskPages; page += 1) {
+      const data = await fetchJson(`/api/v1/tasks/?from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}`, { timeoutMs, attempts });
+      const rows = Array.isArray(data) ? data : (data?.results || []);
+      if (!rows.length) break;
+      for (const row of rows) {
+        if (row?.store?.custom_id === customId && row?.store?.id != null) {
+          return row.store.id;
+        }
+      }
+      const hasMore = data && typeof data === 'object' && data.next != null;
+      if (!hasMore) break;
+      offset += 200;
+    }
+  }
+  return null;
 }
 
 async function listTasksForStoreAndDate(storeId, date, options = {}) {
@@ -176,10 +200,13 @@ function bucketActionsByDateAndDbkey(actions) {
   for (const action of actions || []) {
     const day = String(action?.captured_at || '').slice(0, 10);
     const dbkey = String(action?.store_planogram?.planogram?.custom_id || '').trim();
-    if (!day || !dbkey) continue;
-    const key = `${day}|${dbkey}`;
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key).push(actionToImage(action));
+    const storePlanogramId = action?.store_planogram_id || action?.store_planogram?.id || null;
+    if (!day) continue;
+    for (const keyPart of [dbkey, storePlanogramId].filter(Boolean)) {
+      const key = `${day}|${keyPart}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(actionToImage(action));
+    }
   }
   return buckets;
 }
@@ -193,6 +220,7 @@ function actionToImage(action) {
     bayIndex: parseInt(action?.section_info?.name, 10) || null,
     capturedAt: action?.captured_at || null,
     dbkey: String(action?.store_planogram?.planogram?.custom_id || ''),
+    storePlanogramId: action?.store_planogram_id || action?.store_planogram?.id || null,
   };
 }
 
@@ -223,6 +251,8 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
       let internalId = storeCustomToInternal.get(customId);
       if (!internalId) {
         internalId = await resolveStoreInternalId(customId, {
+          dates,
+          maxTaskPages: settings.reboticsMaxTaskPages,
           reboticsRequestTimeoutMs,
           reboticsMaxAttempts: settings.reboticsMaxAttempts,
         });
@@ -295,10 +325,21 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
       const out = [];
       for (const task of tasks || []) {
         const dbkey = dbkeyFromTask(task);
-        const imageKey = `${date}|${dbkey || ''}`;
-        const images = dbkey && context.actionsByDateDbkey.has(imageKey)
-          ? context.actionsByDateDbkey.get(imageKey)
-          : [];
+        const storePlanogramId = task?.planograms?.[0]?.store_planogram_id || null;
+        const imageKeys = [
+          dbkey ? `${date}|${dbkey}` : null,
+          storePlanogramId ? `${date}|${storePlanogramId}` : null,
+        ].filter(Boolean);
+        const seenImageIds = new Set();
+        const images = [];
+        for (const key of imageKeys) {
+          for (const image of context.actionsByDateDbkey.get(key) || []) {
+            const imageId = image.actionId || image.sourceRef || `${image.dbkey}|${image.storePlanogramId}|${image.bayIndex}`;
+            if (seenImageIds.has(imageId)) continue;
+            seenImageIds.add(imageId);
+            images.push(image);
+          }
+        }
         out.push({
           source: 'si',
           storeNumber: String(parseInt(String(storeNumber), 10)),
