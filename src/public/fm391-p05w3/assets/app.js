@@ -15,12 +15,10 @@
     setList: document.querySelector('#set-list'),
     status: document.querySelector('#status'),
     progressText: document.querySelector('#progress-text'),
-    progressPercent: document.querySelector('#progress-percent'),
     progressFill: document.querySelector('#progress-fill'),
     sendButton: document.querySelector('#send-button'),
     resendButton: document.querySelector('#resend-button'),
     clearButton: document.querySelector('#clear-button'),
-    totalPhotos: document.querySelector('#total-photos'),
   };
 
   const tasks = manifest.sets.flatMap((set) =>
@@ -171,13 +169,13 @@
   }
 
   function renderSets() {
-    els.totalPhotos.textContent = `${tasks.length} bay photos required`;
     els.setList.innerHTML = manifest.sets.map((set) => {
       const setTasks = tasks.filter((task) => task.setId === set.id);
       const captured = setTasks.filter((task) => photoState.has(task.id)).length;
+      const needed = set.bays - captured;
       const bayRows = setTasks.map((task) => {
         const photo = photoState.get(task.id);
-        const sentText = photo?.sentAt ? 'Sent' : photo ? 'Captured, not sent yet' : 'Needs photo';
+        const sentText = photo?.sentAt ? 'Sent' : photo ? 'Captured' : 'Needed';
         return `
           <div class="bay-row ${photo ? 'captured' : ''}" data-task-id="${task.id}">
             <div>
@@ -204,7 +202,7 @@
                 <span class="badge">${set.department}</span>
               </div>
             </div>
-            <div class="set-count">${captured}/${set.bays}</div>
+            <div class="set-count">${captured} captured<br>${needed} needed</div>
           </div>
           <div class="bay-grid">${bayRows}</div>
         </section>`;
@@ -214,9 +212,9 @@
   function updateProgress() {
     const captured = tasks.filter((task) => photoState.has(task.id)).length;
     const sent = tasks.filter((task) => photoState.get(task.id)?.sentAt).length;
+    const needed = tasks.length - captured;
     const pct = Math.round((captured / tasks.length) * 100);
-    els.progressText.textContent = `${captured} captured / ${sent} sent / ${tasks.length} total`;
-    els.progressPercent.textContent = `${pct}%`;
+    els.progressText.textContent = `Captured ${captured} | Needed ${needed} | Sent ${sent}`;
     els.progressFill.style.width = `${pct}%`;
     els.sendButton.disabled = !captured || sent === captured;
     els.resendButton.disabled = !captured;
@@ -241,7 +239,7 @@
     input.value = '';
     if (!file) return;
 
-    setStatus(`Compressing ${task.set.categoryName}, bay ${task.bayNumber}...`, 'info');
+    setStatus(`Saving bay ${task.bayNumber}...`, 'info');
     try {
       const compressed = await compressPhoto(file);
       await savePhoto({
@@ -271,10 +269,10 @@
           department: task.set.department,
         },
       });
-      setStatus(`Saved bay ${task.bayNumber} for ${task.set.categoryName}.`, 'good');
+      setStatus(`Bay ${task.bayNumber} captured.`, 'good');
       await refresh();
     } catch (err) {
-      setStatus(err.message || 'Photo could not be saved.', 'error');
+      setStatus(err.message || 'Save failed.', 'error');
     }
   }
 
@@ -312,7 +310,7 @@
     const batches = buildBatches(records);
     for (let i = 0; i < batches.length; i += 1) {
       const batch = batches[i];
-      setStatus(`Sending batch ${i + 1} of ${batches.length} (${batch.length} photos)...`, 'info');
+      setStatus(`Sending ${i + 1}/${batches.length}...`, 'info');
       const res = await fetch(`${API_BASE}/api/fm391-p05w3/photos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -344,7 +342,7 @@
       .filter((record) => includeSent || !record.sentAt)
       .sort((a, b) => a.id.localeCompare(b.id));
     if (!records.length) {
-      setStatus(includeSent ? 'No captured photos to send.' : 'Everything captured has already been sent.', 'warn');
+      setStatus(includeSent ? 'No photos captured.' : 'No unsent photos.', 'warn');
       return;
     }
 
@@ -352,7 +350,7 @@
     els.resendButton.disabled = true;
     try {
       await uploadRecords(records);
-      setStatus(`Sent ${records.length} photo${records.length === 1 ? '' : 's'} successfully.`, 'good');
+      setStatus(`Sent ${records.length}.`, 'good');
     } catch (err) {
       setStatus(err.message || 'Upload failed.', 'error');
     } finally {
@@ -371,7 +369,7 @@
     els.clearButton.addEventListener('click', async () => {
       if (!confirm('Clear all captured photos stored on this device?')) return;
       await clearPhotos();
-      setStatus('Local photos cleared from this device.', 'warn');
+      setStatus('Cleared.', 'warn');
       await refresh();
     });
   }
@@ -379,8 +377,8 @@
   async function init() {
     wireEvents();
     await refresh();
-    setStatus('Ready. Take one straight-on photo for each 4 ft bay.', 'info');
+    setStatus('', 'info');
   }
 
-  init().catch((err) => setStatus(err.message || 'App failed to start.', 'error'));
+  init().catch((err) => setStatus(err.message || 'App failed.', 'error'));
 }());
