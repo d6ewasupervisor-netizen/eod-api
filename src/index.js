@@ -43,6 +43,7 @@ const whoamiRouter = require('./routes/whoami');
 const weeksRouter = require('./routes/weeks');
 const createDecideRouter = require('./routes/decide');
 const createDumpBinRouter = require('./routes/dump-bin');
+const { createFm391P05W3PhotosRouter } = require('./routes/fm391-p05w3-photos');
 const { createTrackersRouter } = require('./routes/trackers');
 const hubRoutes = require('./routes/hub-routes');
 const hubStoreRoutes = require('./routes/hub-store-routes');
@@ -263,7 +264,7 @@ async function start() {
   // Cloudflare Access fronts both the-dump-bin.com (frontend) and
   // eod-api.the-dump-bin.com (this API). Cookies are scoped to the parent
   // zone, so we just need to echo the origin and allow credentials.
-  const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://the-dump-bin.com,https://checklanes.the-dump-bin.com')
+  const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://the-dump-bin.com,https://checklanes.the-dump-bin.com,https://d6ewasupervisor-netizen.github.io')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
@@ -307,6 +308,8 @@ async function start() {
     '/trackers/',
     '/trackers/admin',
     '/trackers/admin/',
+    '/fm391-p05w3',
+    '/fm391-p05w3/',
   ];
   const PUBLIC_PREFIXES = [
     '/api/shift-request/',
@@ -320,6 +323,8 @@ async function start() {
     // Supervisor decide.html → read + POST decision (JWT in query/body).
     '/api/decide',
     '/trackers/assets/',
+    '/fm391-p05w3/assets/',
+    '/api/fm391-p05w3/',
   ];
   const PUBLIC_REGEXES = [
     /^\/api\/signoff-photos\/[^\/]+\/image\/?$/,
@@ -361,6 +366,12 @@ async function start() {
   app.get(['/trackers/admin', '/trackers/admin/'], (_req, res) => {
     res.sendFile(path.join(trackersDir, 'admin.html'));
   });
+  const fm391Dir = path.join(__dirname, 'public', 'fm391-p05w3');
+  app.use('/fm391-p05w3/assets', express.static(path.join(fm391Dir, 'assets'), { fallthrough: false }));
+  app.get(['/fm391-p05w3', '/fm391-p05w3/'], (_req, res) => {
+    res.sendFile(path.join(fm391Dir, 'index.html'));
+  });
+  app.use('/api/fm391-p05w3', createFm391P05W3PhotosRouter({ resend, logger }));
 
   // Initialize SAS bridge (session receiver, upload queue, worker)
   await sasBridge.init(app, pool);

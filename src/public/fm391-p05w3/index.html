@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FM391 P05W3 Photos</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="hero">
+      <p class="eyebrow">FM391 photo capture</p>
+      <h1>P05W3 bay photos</h1>
+      <p>Take one straight-on picture for every 4 ft bay. If a section is less than 4 ft, it still needs one photo.</p>
+      <div class="progress-wrap" aria-live="polite">
+        <div class="progress-label">
+          <span id="progress-text">Loading...</span>
+          <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-bar" aria-hidden="true">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <p><strong id="total-photos">50 bay photos required</strong>. Photos are compressed on this device, saved locally until sent, and emailed in batches under the 25 MB limit.</p>
+      <div class="actions">
+        <button class="button button-primary" id="send-button" type="button" disabled>Send unsent photos</button>
+        <button class="button button-secondary" id="resend-button" type="button" disabled>Resend all captured</button>
+        <button class="button button-danger" id="clear-button" type="button">Clear device photos</button>
+      </div>
+      <div class="status" id="status" role="status"></div>
+      <p class="tiny">Tip: keep the phone landscape for wide bays when possible. The final partial bay for 7 ft, 5 ft, or 2 ft sections still counts as its own bay photo.</p>
+    </section>
+
+    <div class="set-list" id="set-list"></div>
+  </main>
+
+  <script src="./assets/manifest.js"></script>
+  <script src="./assets/app.js"></script>
+</body>
+</html>

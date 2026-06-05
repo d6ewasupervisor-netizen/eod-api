@@ -1,0 +1,299 @@
+:root {
+  color-scheme: light;
+  --bg: #f6f7fb;
+  --card: #ffffff;
+  --ink: #172033;
+  --muted: #657083;
+  --line: #d9deea;
+  --brand: #1d4ed8;
+  --brand-dark: #173fae;
+  --good: #0f8a4b;
+  --warn: #a15c00;
+  --danger: #b42318;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app-shell {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.hero,
+.panel,
+.set-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgba(18, 28, 45, 0.06);
+}
+
+.hero {
+  padding: 20px;
+  margin-bottom: 14px;
+}
+
+.eyebrow {
+  color: var(--brand);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+h1 {
+  font-size: clamp(1.7rem, 8vw, 3rem);
+  line-height: 1;
+  margin: 0 0 8px;
+}
+
+.hero p,
+.panel p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.progress-wrap {
+  margin-top: 18px;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.progress-bar {
+  background: #e8ecf5;
+  border-radius: 999px;
+  height: 14px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #16a34a);
+  transition: width 180ms ease;
+}
+
+.panel {
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+@media (min-width: 680px) {
+  .actions {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.button {
+  align-items: center;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 48px;
+  padding: 12px 14px;
+  text-decoration: none;
+}
+
+.button-primary {
+  background: var(--brand);
+  color: white;
+}
+
+.button-primary:hover {
+  background: var(--brand-dark);
+}
+
+.button-secondary {
+  background: #eaf0ff;
+  color: var(--brand);
+}
+
+.button-danger {
+  background: #fff1f0;
+  color: var(--danger);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.status {
+  border-radius: 12px;
+  font-weight: 700;
+  margin-top: 12px;
+  min-height: 24px;
+  padding: 10px 12px;
+}
+
+.status:empty {
+  display: none;
+}
+
+.status.info {
+  background: #eef4ff;
+  color: #1e40af;
+}
+
+.status.good {
+  background: #eaf8f0;
+  color: var(--good);
+}
+
+.status.warn {
+  background: #fff7e8;
+  color: var(--warn);
+}
+
+.status.error {
+  background: #fff1f0;
+  color: var(--danger);
+}
+
+.set-list {
+  display: grid;
+  gap: 12px;
+}
+
+.set-card {
+  overflow: hidden;
+}
+
+.set-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.set-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.set-meta {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.88rem;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.badge {
+  background: #eef2f8;
+  border-radius: 999px;
+  color: #475569;
+  font-weight: 750;
+  padding: 4px 8px;
+}
+
+.set-count {
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-weight: 850;
+}
+
+.bay-grid {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+@media (min-width: 560px) {
+  .bay-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.bay-row {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr auto;
+  padding: 10px;
+}
+
+.bay-row.captured {
+  background: #edfdf4;
+  border-color: #a7f3d0;
+}
+
+.bay-label {
+  font-weight: 850;
+}
+
+.bay-detail {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-top: 2px;
+}
+
+.file-input {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.capture-label {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--brand);
+  cursor: pointer;
+  font-weight: 850;
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+
+.captured .capture-label {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: var(--good);
+}
+
+.tiny {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
