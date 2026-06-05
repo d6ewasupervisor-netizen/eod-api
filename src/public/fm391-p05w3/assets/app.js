@@ -183,8 +183,8 @@
               <div class="bay-detail">${sentText}</div>
             </div>
             <label class="capture-label">
-              ${photo ? 'Retake' : 'Take photo'}
-              <input class="file-input" type="file" accept="image/*" capture="environment" data-task-id="${task.id}">
+              ${photo ? 'Replace' : 'Add photo'}
+              <input class="file-input" type="file" accept="image/*" data-task-id="${task.id}">
             </label>
           </div>`;
       }).join('');
