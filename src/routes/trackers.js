@@ -15,6 +15,7 @@ const {
   DEFAULT_PROJECT_IDS,
   districtOptions,
   normalizeDistricts,
+  projectLabel,
   storesForDistricts,
 } = require('../lib/trackers/metadata');
 const {
@@ -158,6 +159,35 @@ function classifySourceError(err) {
   return 'source_error';
 }
 
+function formatShortDate(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return String(value || '').trim();
+  const [, year, month, day] = match;
+  return `${Number(month)}/${Number(day)}/${year.slice(2)}`;
+}
+
+function formatRunDateRange(dateFrom, dateTo) {
+  const from = formatShortDate(dateFrom);
+  const to = formatShortDate(dateTo || dateFrom);
+  if (!from) return 'the selected dates';
+  return !to || to === from ? from : `${from}-${to}`;
+}
+
+function friendlySourceMessage(info = {}, range = {}) {
+  if (info.source === 'prod') {
+    const projectName = info.projectName || projectLabel(info.projectId, 'PROD');
+    const store = info.storeNumber ? ` for store ${info.storeNumber}` : '';
+    const dates = formatRunDateRange(info.dateFrom || range.dateFrom, info.dateTo || range.dateTo);
+    return `Pulling ${dates} ${projectName}${store}.`;
+  }
+  if (info.source === 'si') {
+    const store = info.storeNumber ? ` for store ${info.storeNumber}` : '';
+    const date = info.date ? ` on ${formatShortDate(info.date)}` : ` for ${formatRunDateRange(range.dateFrom, range.dateTo)}`;
+    return `Pulling Store Intelligence${store}${date}.`;
+  }
+  return 'Pulling tracker data.';
+}
+
 async function updateRun(pool, runId, fields) {
   const keys = Object.keys(fields);
   if (!keys.length) return;
@@ -285,7 +315,7 @@ async function processRun(pool, run) {
       progress_json: JSON.stringify({
         stage: 'pulling_sources',
         progress: 15,
-        message: 'Pulling SAS PROD and Rebotics data',
+        message: `Starting source pulls for ${formatRunDateRange(range.dateFrom, range.dateTo)}.`,
         stores: params.stores.length,
         dates: range.dates.length,
         dateFrom: range.dateFrom,
@@ -306,11 +336,18 @@ async function processRun(pool, run) {
           progress_json: JSON.stringify({
             stage: 'pulling_prod',
             progress: Math.min(55, 15 + Math.round((info.completedLookups / info.totalLookups) * 35)),
+            message: friendlySourceMessage({ ...info, source: 'prod' }, range),
+            source: 'prod',
+            storeNumber: info.storeNumber || null,
+            projectId: info.projectId || null,
+            projectName: info.projectName || projectLabel(info.projectId, 'PROD'),
+            completedLookups: info.completedLookups,
+            totalLookups: info.totalLookups,
             prodRows: info.rows,
             stores: params.stores.length,
             dates: range.dates.length,
-            dateFrom: range.dateFrom,
-            dateTo: range.dateTo,
+            dateFrom: info.dateFrom || range.dateFrom,
+            dateTo: info.dateTo || range.dateTo,
             projects: params.projects.length,
           }),
         }).catch(() => {}),
@@ -324,6 +361,12 @@ async function processRun(pool, run) {
           progress_json: JSON.stringify({
             stage: 'pulling_rebotics',
             progress: Math.min(65, 15 + Math.round((info.completedLookups / info.totalLookups) * 45)),
+            message: friendlySourceMessage({ ...info, source: 'si' }, range),
+            source: 'si',
+            storeNumber: info.storeNumber || null,
+            date: info.date || null,
+            completedLookups: info.completedLookups,
+            totalLookups: info.totalLookups,
             siRows: info.rows,
             stores: params.stores.length,
             dates: range.dates.length,
@@ -348,7 +391,7 @@ async function processRun(pool, run) {
       progress_json: JSON.stringify({
         stage: 'comparing',
         progress: 70,
-        message: 'Comparing source rows and image counts',
+        message: 'Comparing PROD and Store Intelligence results.',
         prodRows: prodRows.length,
         siRows: siRows.length,
         dateFrom: range.dateFrom,

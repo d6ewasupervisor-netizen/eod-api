@@ -117,7 +117,39 @@ legend {
   width: auto;
 }
 .hint { color: #94a3b8; font-size: 12px; }
-.run-status { white-space: pre-wrap; color: #cbd5e1; }
+.run-status { color: #cbd5e1; }
+.run-current {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.run-state {
+  border: 1px solid #334155;
+  border-radius: 999px;
+  color: #bfdbfe;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+.run-state-completed { color: #86efac; }
+.run-state-failed { color: #fecaca; }
+.run-meta {
+  color: #94a3b8;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.run-log {
+  display: grid;
+  gap: 5px;
+  margin: 10px 0 0;
+  padding-left: 22px;
+}
+.run-log li { color: #94a3b8; }
+.run-log li.is-current { color: #e2e8f0; }
+.run-inline-error {
+  color: #fecaca;
+  margin-top: 8px;
+}
 .run-actions { display: flex; gap: 14px; margin-top: 8px; }
 .run-actions a { color: #7dd3fc; }
 .hidden { display: none; }

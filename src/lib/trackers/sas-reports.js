@@ -225,10 +225,22 @@ async function fetchRows({ stores, projects, dateFrom, dateTo, settings = {}, on
     const projectStores = await fetchProjectStores(projectId, { settings });
     const byStoreNumber = new Map(projectStores.map((ps) => [String(ps?.store?.number), ps]));
     for (const storeNumber of normalizedStores) {
+      const progressContext = {
+        completedLookups,
+        totalLookups,
+        rows: allRows.length,
+        source: 'prod',
+        projectId,
+        projectName: projectLabel(projectId),
+        storeNumber,
+        dateFrom,
+        dateTo,
+      };
+      if (onProgress) onProgress({ ...progressContext, status: 'pulling' });
       const projectStore = byStoreNumber.get(String(parseInt(storeNumber, 10)));
       if (!projectStore) {
         completedLookups += 1;
-        if (onProgress) onProgress({ completedLookups, totalLookups, rows: allRows.length });
+        if (onProgress) onProgress({ ...progressContext, completedLookups, rows: allRows.length, status: 'complete' });
         continue;
       }
       const csvText = await pullCategoryReportCsv({
@@ -239,7 +251,7 @@ async function fetchRows({ stores, projects, dateFrom, dateTo, settings = {}, on
         settings,
       });
       completedLookups += 1;
-      if (onProgress) onProgress({ completedLookups, totalLookups, rows: allRows.length });
+      if (onProgress) onProgress({ ...progressContext, completedLookups, rows: allRows.length, status: 'complete' });
       if (!csvText) continue;
       const rows = parseCsv(await csvText);
       for (const row of rows) {

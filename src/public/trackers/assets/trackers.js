@@ -6,6 +6,7 @@
     page: 1,
     pageSize: 200,
     total: 0,
+    runLog: [],
   };
 
   class ApiError extends Error {
@@ -62,6 +63,118 @@
 
   function setRunStatus(text) {
     document.getElementById('runStatus').textContent = text;
+  }
+
+  function formatShortDate(value) {
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return String(value || '').trim();
+    const [, year, month, day] = match;
+    return `${Number(month)}/${Number(day)}/${year.slice(2)}`;
+  }
+
+  function formatDateRange(fromValue, toValue) {
+    const from = formatShortDate(fromValue);
+    const to = formatShortDate(toValue || fromValue);
+    if (!from) return 'the selected dates';
+    return !to || to === from ? from : `${from}-${to}`;
+  }
+
+  function plural(count, singular, pluralText) {
+    return `${count} ${count === 1 ? singular : pluralText || `${singular}s`}`;
+  }
+
+  function projectNameForId(projectId) {
+    const project = (state.bootstrap?.projects || []).find((p) => String(p.id) === String(projectId));
+    return project?.displayName || project?.label || project?.name || (projectId ? `Project ${projectId}` : 'PROD');
+  }
+
+  function runScopeText(run) {
+    const progress = run.progress || {};
+    const params = run.params || {};
+    const stores = Number(progress.stores || params.stores?.length || 0);
+    const dates = Number(progress.dates || 0);
+    const projects = Number(progress.projects || params.projects?.length || 0);
+    const parts = [];
+    if (stores) parts.push(plural(stores, 'store'));
+    if (dates) parts.push(plural(dates, 'day'));
+    if (projects) parts.push(plural(projects, 'project'));
+    return parts.length ? parts.join(', ') : 'selected scope';
+  }
+
+  function sourceMessage(run) {
+    const progress = run.progress || {};
+    const params = run.params || {};
+    if (progress.stage === 'pulling_prod') {
+      const projectName = progress.projectName || projectNameForId(progress.projectId);
+      const store = progress.storeNumber ? ` for store ${progress.storeNumber}` : '';
+      return `Pulling ${formatDateRange(progress.dateFrom || params.dateFrom, progress.dateTo || params.dateTo)} ${projectName}${store}.`;
+    }
+    if (progress.stage === 'pulling_rebotics') {
+      const store = progress.storeNumber ? ` for store ${progress.storeNumber}` : '';
+      const date = progress.date
+        ? ` on ${formatShortDate(progress.date)}`
+        : ` for ${formatDateRange(progress.dateFrom || params.dateFrom, progress.dateTo || params.dateTo)}`;
+      return `Pulling Store Intelligence${store}${date}.`;
+    }
+    return '';
+  }
+
+  function friendlyRunMessage(run) {
+    const progress = run.progress || {};
+    if (run.error || progress.stage === 'failed') return 'Run failed before the comparison finished.';
+    if (run.status === 'completed' || progress.stage === 'done') {
+      const total = Number(progress.total ?? run.summary?.total ?? 0);
+      return total ? `Finished comparing ${plural(total, 'row')}.` : 'Finished; no matching rows were found.';
+    }
+    if (progress.message) return progress.message;
+    const source = sourceMessage(run);
+    if (source) return source;
+    if (progress.stage === 'queued') return `Queued ${runScopeText(run)}.`;
+    if (progress.stage === 'starting') return 'Getting the run ready.';
+    if (progress.stage === 'pulling_sources') {
+      return `Starting source pulls for ${formatDateRange(progress.dateFrom || run.params?.dateFrom, progress.dateTo || run.params?.dateTo)}.`;
+    }
+    if (progress.stage === 'comparing') return 'Comparing PROD and Store Intelligence results.';
+    return 'Working on the tracker run.';
+  }
+
+  function appendRunLog(message) {
+    const clean = String(message || '').trim();
+    if (!clean || state.runLog[state.runLog.length - 1] === clean) return;
+    state.runLog.push(clean);
+    if (state.runLog.length > 10) state.runLog = state.runLog.slice(-10);
+  }
+
+  function statusLabel(status) {
+    if (status === 'completed') return 'Complete';
+    if (status === 'failed') return 'Failed';
+    if (status === 'queued') return 'Queued';
+    return 'Running';
+  }
+
+  function renderRunStatus(run) {
+    const progress = run.progress || {};
+    const summary = run.summary || {};
+    const message = friendlyRunMessage(run);
+    appendRunLog(message);
+    const pct = Math.round(Number(progress.progress || 0));
+    const prodRows = progress.prodRows ?? summary.prodRows;
+    const siRows = progress.siRows ?? summary.siRows;
+    const meta = [`${pct}%`, runScopeText(run)];
+    if (prodRows != null || siRows != null) meta.push(`Rows: PROD ${prodRows ?? '-'} / SI ${siRows ?? '-'}`);
+    if ((run.warnings || []).length) meta.push(plural((run.warnings || []).length, 'warning'));
+    const logItems = state.runLog
+      .map((item, idx) => `<li class="${idx === state.runLog.length - 1 ? 'is-current' : ''}">${escapeHtml(item)}</li>`)
+      .join('');
+    document.getElementById('runStatus').innerHTML = `
+      <div class="run-current">
+        <span class="run-state run-state-${escapeHtml(run.status || 'running')}">${escapeHtml(statusLabel(run.status))}</span>
+        <strong>${escapeHtml(message)}</strong>
+      </div>
+      <div class="run-meta">${escapeHtml(meta.join(' | '))}</div>
+      <ol class="run-log">${logItems}</ol>
+      ${run.error ? `<div class="run-inline-error">Error: ${escapeHtml(run.error)}</div>` : ''}
+    `;
   }
 
   function setProgress(progress) {
@@ -355,15 +468,7 @@
       const run = data.run;
       state.lastRun = run;
       setProgress(run.progress.progress || 0);
-      setRunStatus(
-        `Status: ${run.status}\n` +
-        `Stage: ${run.progress.stage || 'unknown'} (${run.progress.progress || 0}%) ${run.progress.message ? `- ${run.progress.message}` : ''}\n` +
-        `Scope: ${run.progress.stores || run.params.stores?.length || 0} stores, ${run.progress.dates || '?'} days, ${run.progress.projects || run.params.projects?.length || 0} projects\n` +
-        `Dates: ${run.progress.dateFrom || run.params.dateFrom || '-'} to ${run.progress.dateTo || run.params.dateTo || '-'}\n` +
-        `Rows: PROD ${run.progress.prodRows ?? run.summary.prodRows ?? '-'} / SI ${run.progress.siRows ?? run.summary.siRows ?? '-'}\n` +
-        `Warnings: ${(run.warnings || []).length}\n` +
-        `${run.error ? `Error: ${run.error}` : ''}`
-      );
+      renderRunStatus(run);
       if (run.error) showRunError({ message: run.error, errorType: run.progress.errorType }, 'Run failed');
       if (run.status === 'completed' || run.status === 'failed') {
         clearInterval(state.pollTimer);
@@ -382,6 +487,7 @@
     event.preventDefault();
     clearRunError();
     setProgress(2);
+    state.runLog = [];
     setRunStatus('Submitting run...');
     try {
       const created = await api('/api/trackers/runs', {
@@ -390,7 +496,11 @@
       });
       state.runId = created.runId;
       state.page = 1;
-      setRunStatus(`Run ${state.runId} created. Waiting...${created.warnings?.length ? `\nWarnings: ${created.warnings.join('; ')}` : ''}`);
+      appendRunLog('Run submitted. Waiting for source checks to begin.');
+      if (created.warnings?.length) {
+        created.warnings.forEach((warning) => appendRunLog(`Heads up: ${warning}`));
+      }
+      setRunStatus(state.runLog.join('\n'));
       await pollRun();
       if (state.pollTimer) clearInterval(state.pollTimer);
       state.pollTimer = setInterval(pollRun, 3000);
