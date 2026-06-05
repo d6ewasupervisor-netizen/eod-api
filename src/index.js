@@ -375,10 +375,7 @@ async function start() {
   });
   const fm391Dir = path.join(__dirname, 'public', 'fm391-p05w3');
   app.use('/fm391-p05w3/assets', express.static(path.join(fm391Dir, 'assets'), { fallthrough: false }));
-  app.get('/fm391-p05w3', (_req, res) => {
-    res.redirect(301, '/fm391-p05w3/');
-  });
-  app.get('/fm391-p05w3/', (_req, res) => {
+  app.get(['/fm391-p05w3', '/fm391-p05w3/'], (_req, res) => {
     res.sendFile(path.join(fm391Dir, 'index.html'));
   });
   app.use('/api/fm391-p05w3', createFm391P05W3PhotosRouter({ resend, logger }));
