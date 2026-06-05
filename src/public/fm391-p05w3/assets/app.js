@@ -229,10 +229,16 @@
               <div class="bay-label">Bay ${task.bayNumber} of ${set.bays}</div>
               <div class="bay-detail">${sentText}</div>
             </div>
-            <label class="capture-label">
-              ${photo ? 'Replace' : 'Add photo'}
-              <input class="file-input bay-file-input" type="file" accept="image/*" data-task-id="${task.id}">
-            </label>
+            <div class="bay-actions">
+              <label class="capture-label">
+                Take
+                <input class="file-input bay-file-input" type="file" accept="image/*" capture="environment" data-task-id="${task.id}">
+              </label>
+              <label class="capture-label">
+                Load
+                <input class="file-input bay-file-input" type="file" accept="image/*" data-task-id="${task.id}">
+              </label>
+            </div>
           </div>`;
       }).join('');
 
