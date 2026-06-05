@@ -43,7 +43,10 @@ const DEFAULTS = {
 };
 
 function trackerAdminEmails() {
-  return parseCsvEnv('TRACKER_ADMIN_EMAILS', DEFAULT_ADMIN_EMAILS).map((e) => e.toLowerCase());
+  return [...new Set([
+    ...DEFAULT_ADMIN_EMAILS,
+    ...parseCsvEnv('TRACKER_ADMIN_EMAILS', []),
+  ].map((e) => e.toLowerCase()))];
 }
 
 function sanitize(input = {}) {

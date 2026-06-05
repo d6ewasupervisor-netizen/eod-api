@@ -5,12 +5,19 @@ const assert = require('node:assert/strict');
 
 process.env.TRACKER_ADMIN_EMAILS = 'admin@example.com';
 
-const { isTrackerUserAllowed, sanitize } = require('../src/lib/trackers/settings');
+const { isTrackerUserAllowed, sanitize, trackerAdminEmails } = require('../src/lib/trackers/settings');
 
 test('isTrackerUserAllowed admits tracker admins regardless of settings', () => {
   assert.equal(
     isTrackerUserAllowed({ email: 'ADMIN@example.com', roles: [] }, { trackerAllowedEmails: [] }),
     true
+  );
+});
+
+test('trackerAdminEmails always includes the built-in owner account', () => {
+  assert.deepEqual(
+    trackerAdminEmails().sort(),
+    ['admin@example.com', 'd6ewa.supervisor@gmail.com'].sort()
   );
 });
 
