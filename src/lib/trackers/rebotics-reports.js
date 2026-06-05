@@ -212,7 +212,7 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
         storeNumber,
         date,
       };
-      if (onProgress) onProgress({ ...progressContext, status: 'pulling' });
+      if (onProgress) await onProgress({ ...progressContext, status: 'pulling' });
       let internalId = storeCustomToInternal.get(customId);
       if (!internalId) {
         try {
@@ -225,12 +225,12 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
           if (isAuthError(err)) throw err;
           warn({ onWarning }, `Rebotics store lookup skipped for ${customId} on ${date}: ${err.message}`);
           completedLookups += 1;
-          if (onProgress) onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
+          if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
           continue;
         }
         if (!internalId) {
           completedLookups += 1;
-          if (onProgress) onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
+          if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
           continue;
         }
         storeCustomToInternal.set(customId, internalId);
@@ -250,7 +250,7 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
         }),
       ]);
       completedLookups += 1;
-      if (onProgress) onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
+      if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
 
       if (tasksResult.status === 'rejected') {
         if (isAuthError(tasksResult.reason)) throw tasksResult.reason;

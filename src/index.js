@@ -401,7 +401,13 @@ async function start() {
 
   const trackersDir = path.join(__dirname, 'public', 'trackers');
   const trackersAssetsDir = path.join(trackersDir, 'assets');
-  app.use('/trackers/assets', express.static(trackersAssetsDir, { fallthrough: false }));
+  app.use('/trackers/assets', express.static(trackersAssetsDir, {
+    fallthrough: false,
+    maxAge: 0,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    },
+  }));
   app.get(['/trackers', '/trackers/'], (_req, res) => {
     res.sendFile(path.join(trackersDir, 'index.html'));
   });

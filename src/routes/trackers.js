@@ -28,6 +28,7 @@ const {
 
 const inFlightRuns = new Map();
 const TRACKER_ADMIN_EMAILS = trackerAdminEmails();
+const RUN_HEARTBEAT_MS = 15000;
 
 function requireTrackerAdmin(req, res, next) {
   const email = String(req.user?.email || '').trim().toLowerCase();
@@ -188,6 +189,64 @@ function friendlySourceMessage(info = {}, range = {}) {
   return 'Pulling tracker data.';
 }
 
+function friendlyHeartbeatMessage(info = {}, range = {}, elapsedMs = 0) {
+  const elapsedSeconds = Math.max(15, Math.round(elapsedMs / 1000));
+  const elapsedText = elapsedSeconds >= 90
+    ? `about ${Math.round(elapsedSeconds / 60)} minutes`
+    : `${elapsedSeconds} seconds`;
+  const base = friendlySourceMessage(info, range).replace(/\.$/, '');
+  if (info.source === 'si') {
+    return `${base}. Still checking Store Intelligence; this source can take a few minutes (${elapsedText}).`;
+  }
+  return `${base}. Still working on this source (${elapsedText}).`;
+}
+
+function buildProdProgress(info = {}, range = {}, params = {}) {
+  const completed = Number(info.completedLookups || 0);
+  const total = Math.max(1, Number(info.totalLookups || params.projects?.length || 1));
+  return {
+    stage: 'pulling_prod',
+    progress: Math.min(50, 15 + Math.round((completed / total) * 35)),
+    message: friendlySourceMessage({ ...info, source: 'prod' }, range),
+    source: 'prod',
+    storeNumber: info.storeNumber || null,
+    projectId: info.projectId || null,
+    projectName: info.projectName || projectLabel(info.projectId, 'PROD'),
+    completedLookups: completed,
+    totalLookups: total,
+    prodRows: info.rows,
+    stores: params.stores?.length || 0,
+    dates: range.dates?.length || 0,
+    dateFrom: info.dateFrom || range.dateFrom,
+    dateTo: info.dateTo || range.dateTo,
+    projects: params.projects?.length || 0,
+  };
+}
+
+function buildSiProgress(info = {}, range = {}, params = {}, { heartbeat = false, elapsedMs = 0, prodDone = false } = {}) {
+  const completed = Number(info.completedLookups || 0);
+  const total = Math.max(1, Number(info.totalLookups || ((range.dates?.length || 1) * (params.stores?.length || 1))));
+  const progressBase = prodDone ? 50 : 15;
+  const progressSpan = prodDone ? 15 : 45;
+  return {
+    stage: 'pulling_rebotics',
+    progress: Math.min(65, progressBase + Math.round((completed / total) * progressSpan)),
+    message: heartbeat
+      ? friendlyHeartbeatMessage({ ...info, source: 'si' }, range, elapsedMs)
+      : friendlySourceMessage({ ...info, source: 'si' }, range),
+    source: 'si',
+    storeNumber: info.storeNumber || params.stores?.[0] || null,
+    date: info.date || range.dates?.[Math.min(completed, Math.max(0, (range.dates?.length || 1) - 1))] || null,
+    completedLookups: completed,
+    totalLookups: total,
+    siRows: info.rows,
+    stores: params.stores?.length || 0,
+    dates: range.dates?.length || 0,
+    dateFrom: range.dateFrom,
+    dateTo: range.dateTo,
+  };
+}
+
 async function updateRun(pool, runId, fields) {
   const keys = Object.keys(fields);
   if (!keys.length) return;
@@ -325,57 +384,71 @@ async function processRun(pool, run) {
       }),
     });
 
-    const [prodResult, siResult] = await Promise.allSettled([
-      sasReports.fetchRows({
-        stores: params.stores,
-        projects: params.projects,
-        dateFrom: range.dateFrom,
-        dateTo: range.dateTo,
-        settings,
-        onProgress: (info) => updateRun(pool, run.id, {
-          progress_json: JSON.stringify({
-            stage: 'pulling_prod',
-            progress: Math.min(55, 15 + Math.round((info.completedLookups / info.totalLookups) * 35)),
-            message: friendlySourceMessage({ ...info, source: 'prod' }, range),
-            source: 'prod',
-            storeNumber: info.storeNumber || null,
-            projectId: info.projectId || null,
-            projectName: info.projectName || projectLabel(info.projectId, 'PROD'),
-            completedLookups: info.completedLookups,
-            totalLookups: info.totalLookups,
-            prodRows: info.rows,
-            stores: params.stores.length,
-            dates: range.dates.length,
-            dateFrom: info.dateFrom || range.dateFrom,
-            dateTo: info.dateTo || range.dateTo,
-            projects: params.projects.length,
-          }),
-        }).catch(() => {}),
+    const sourceState = {
+      prod: { done: false, info: null },
+      si: { done: false, info: null, startedAt: 0 },
+    };
+    const writeProgress = (progress) => updateRun(pool, run.id, {
+      progress_json: JSON.stringify({
+        ...progress,
+        updatedAt: new Date().toISOString(),
       }),
-      reboticsReports.fetchRows({
-        stores: params.stores,
-        dates: range.dates,
-        settings,
-        onWarning: (message) => warnings.push(message),
-        onProgress: (info) => updateRun(pool, run.id, {
-          progress_json: JSON.stringify({
-            stage: 'pulling_rebotics',
-            progress: Math.min(65, 15 + Math.round((info.completedLookups / info.totalLookups) * 45)),
-            message: friendlySourceMessage({ ...info, source: 'si' }, range),
-            source: 'si',
-            storeNumber: info.storeNumber || null,
-            date: info.date || null,
-            completedLookups: info.completedLookups,
-            totalLookups: info.totalLookups,
-            siRows: info.rows,
-            stores: params.stores.length,
-            dates: range.dates.length,
-            dateFrom: range.dateFrom,
-            dateTo: range.dateTo,
-          }),
-        }).catch(() => {}),
-      }),
-    ]);
+    });
+    const writeProdProgress = async (info) => {
+      sourceState.prod.info = { ...info };
+      await writeProgress(buildProdProgress(info, range, params));
+    };
+    const writeSiProgress = async (info) => {
+      sourceState.si.info = { ...info };
+      if (!sourceState.si.startedAt) sourceState.si.startedAt = Date.now();
+      await writeProgress(buildSiProgress(info, range, params, { prodDone: sourceState.prod.done }));
+    };
+    const heartbeat = setInterval(() => {
+      if (sourceState.si.done) return;
+      const info = sourceState.si.info || (sourceState.prod.done ? {
+        source: 'si',
+        storeNumber: params.stores[0] || null,
+        date: range.dates[0] || null,
+        completedLookups: 0,
+        totalLookups: Math.max(1, range.dates.length * params.stores.length),
+        rows: 0,
+      } : null);
+      if (!info) return;
+      if (!sourceState.si.startedAt) sourceState.si.startedAt = Date.now();
+      writeProgress(buildSiProgress(info, range, params, {
+        heartbeat: true,
+        elapsedMs: Date.now() - sourceState.si.startedAt,
+        prodDone: sourceState.prod.done,
+      })).catch(() => {});
+    }, RUN_HEARTBEAT_MS);
+
+    let prodResult;
+    let siResult;
+    try {
+      [prodResult, siResult] = await Promise.allSettled([
+        sasReports.fetchRows({
+          stores: params.stores,
+          projects: params.projects,
+          dateFrom: range.dateFrom,
+          dateTo: range.dateTo,
+          settings,
+          onProgress: (info) => writeProdProgress(info).catch(() => {}),
+        }).finally(() => {
+          sourceState.prod.done = true;
+        }),
+        reboticsReports.fetchRows({
+          stores: params.stores,
+          dates: range.dates,
+          settings,
+          onWarning: (message) => warnings.push(message),
+          onProgress: (info) => writeSiProgress(info).catch(() => {}),
+        }).finally(() => {
+          sourceState.si.done = true;
+        }),
+      ]);
+    } finally {
+      clearInterval(heartbeat);
+    }
 
     let prodRows = [];
     let siRows = [];
