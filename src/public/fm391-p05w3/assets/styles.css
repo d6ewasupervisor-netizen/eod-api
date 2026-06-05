@@ -225,6 +225,21 @@ h1 {
   padding: 4px 8px;
 }
 
+.set-actions {
+  margin-top: 10px;
+}
+
+.bulk-label {
+  background: #111827;
+  border: 1px solid #64748b;
+  border-radius: 10px;
+  color: var(--brand);
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 850;
+  padding: 10px 12px;
+}
+
 .set-count {
   color: var(--ink);
   flex: 0 0 auto;
@@ -262,6 +277,11 @@ h1 {
   border-color: #22c55e;
 }
 
+.bay-row.next-bay {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.35);
+}
+
 .bay-label {
   font-weight: 850;
 }
@@ -295,4 +315,79 @@ h1 {
   background: #064e3b;
   border-color: #34d399;
   color: var(--good);
+}
+
+.bulk-review {
+  background: #08111f;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.bulk-title {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.bulk-item {
+  align-items: center;
+  background: #0b1220;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 72px 1fr;
+  padding: 10px;
+}
+
+.bulk-thumb {
+  background: #020617;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  height: 72px;
+  object-fit: cover;
+  width: 72px;
+}
+
+.bulk-fields {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bulk-file {
+  color: var(--muted);
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bulk-select-label {
+  color: var(--ink);
+  display: grid;
+  font-weight: 850;
+  gap: 4px;
+}
+
+.bulk-bay-select {
+  background: #111827;
+  border: 1px solid #64748b;
+  border-radius: 10px;
+  color: var(--ink);
+  min-height: 42px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.bulk-actions {
+  display: grid;
+  gap: 10px;
+}
+
+@media (min-width: 560px) {
+  .bulk-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

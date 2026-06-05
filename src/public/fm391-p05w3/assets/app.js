@@ -35,6 +35,8 @@
 
   let dbPromise = null;
   let photoState = new Map();
+  let nextTaskId = null;
+  let pendingBulk = null;
 
   function openDb() {
     if (dbPromise) return dbPromise;
@@ -109,6 +111,15 @@
       .slice(0, 70);
   }
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function fileNameFor(task) {
     const set = task.set;
     const bay = String(task.bayNumber).padStart(2, '0');
@@ -168,6 +179,42 @@
     };
   }
 
+  function renderBulkReview(set, setTasks) {
+    if (!pendingBulk || pendingBulk.setId !== set.id) return '';
+    const rows = pendingBulk.items.map((item, index) => {
+      const bayOptions = setTasks.map((task) => `
+        <option value="${task.bayNumber}" ${task.bayNumber === item.assignmentBayNumber ? 'selected' : ''}>
+          Bay ${task.bayNumber} of ${set.bays}
+        </option>
+      `).join('');
+      return `
+        <div class="bulk-item" data-bulk-index="${index}">
+          <img class="bulk-thumb" src="${item.url}" alt="">
+          <div class="bulk-fields">
+            <div class="bulk-file">${escapeHtml(item.file.name || `Photo ${index + 1}`)}</div>
+            <label class="bulk-select-label">
+              Bay
+              <select class="bulk-bay-select" data-bulk-index="${index}">
+                ${bayOptions}
+              </select>
+            </label>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="bulk-review" data-set-id="${set.id}">
+        <div class="bulk-title">Review bay assignments</div>
+        ${rows}
+        <div class="bulk-actions">
+          <button class="button button-primary bulk-save-button" type="button">Save assigned photos</button>
+          <button class="button button-secondary bulk-cancel-button" type="button">Cancel</button>
+        </div>
+      </div>
+    `;
+  }
+
   function renderSets() {
     els.setList.innerHTML = manifest.sets.map((set) => {
       const setTasks = tasks.filter((task) => task.setId === set.id);
@@ -177,14 +224,14 @@
         const photo = photoState.get(task.id);
         const sentText = photo?.sentAt ? 'Sent' : photo ? 'Captured' : 'Needed';
         return `
-          <div class="bay-row ${photo ? 'captured' : ''}" data-task-id="${task.id}">
+          <div class="bay-row ${photo ? 'captured' : ''} ${task.id === nextTaskId ? 'next-bay' : ''}" data-task-id="${task.id}">
             <div>
               <div class="bay-label">Bay ${task.bayNumber} of ${set.bays}</div>
               <div class="bay-detail">${sentText}</div>
             </div>
             <label class="capture-label">
               ${photo ? 'Replace' : 'Add photo'}
-              <input class="file-input" type="file" accept="image/*" data-task-id="${task.id}">
+              <input class="file-input bay-file-input" type="file" accept="image/*" data-task-id="${task.id}">
             </label>
           </div>`;
       }).join('');
@@ -201,12 +248,20 @@
                 <span class="badge">POG ${set.pogShort}</span>
                 <span class="badge">${set.department}</span>
               </div>
+              <div class="set-actions">
+                <label class="bulk-label">
+                  Add set photos
+                  <input class="file-input set-file-input" type="file" accept="image/*" multiple data-set-id="${set.id}">
+                </label>
+              </div>
             </div>
             <div class="set-count">${captured} captured<br>${needed} needed</div>
           </div>
+          ${renderBulkReview(set, setTasks)}
           <div class="bay-grid">${bayRows}</div>
         </section>`;
     }).join('');
+
   }
 
   function updateProgress() {
@@ -233,6 +288,60 @@
     return task;
   }
 
+  function tasksForSet(setId) {
+    return tasks.filter((task) => task.setId === setId);
+  }
+
+  function buildPhotoRecord(task, compressed) {
+    return {
+      id: task.id,
+      setId: task.setId,
+      bayNumber: task.bayNumber,
+      fileName: fileNameFor(task),
+      contentType: 'image/jpeg',
+      dataUrl: compressed.dataUrl,
+      bytes: compressed.bytes,
+      width: compressed.width,
+      height: compressed.height,
+      capturedAt: new Date().toISOString(),
+      sentAt: null,
+      manifest: {
+        store: manifest.store,
+        periodWeek: manifest.periodWeek,
+        workDate: manifest.workDate,
+        source: task.set.source,
+        categoryNumber: task.set.categoryNumber,
+        categoryName: task.set.categoryName,
+        sectionSizeFeet: task.set.sectionSizeFeet,
+        bayCount: task.set.bays,
+        pogId: task.set.pogId,
+        pogShort: task.set.pogShort,
+        setType: task.set.setType,
+        department: task.set.department,
+      },
+    };
+  }
+
+  function findNextNeededTask(afterTaskId) {
+    const startIndex = Math.max(0, tasks.findIndex((task) => task.id === afterTaskId));
+    const after = tasks.slice(startIndex + 1).find((task) => !photoState.has(task.id));
+    if (after) return after;
+    return tasks.slice(0, startIndex + 1).find((task) => !photoState.has(task.id)) || null;
+  }
+
+  function focusNextTask() {
+    if (!nextTaskId) return;
+    const row = document.querySelector(`[data-task-id="${nextTaskId}"]`);
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function clearPendingBulk() {
+    if (pendingBulk?.items) {
+      pendingBulk.items.forEach((item) => URL.revokeObjectURL(item.url));
+    }
+    pendingBulk = null;
+  }
+
   async function handleCapture(input) {
     const task = taskById(input.dataset.taskId);
     const file = input.files && input.files[0];
@@ -242,37 +351,78 @@
     setStatus(`Saving bay ${task.bayNumber}...`, 'info');
     try {
       const compressed = await compressPhoto(file);
-      await savePhoto({
-        id: task.id,
-        setId: task.setId,
-        bayNumber: task.bayNumber,
-        fileName: fileNameFor(task),
-        contentType: 'image/jpeg',
-        dataUrl: compressed.dataUrl,
-        bytes: compressed.bytes,
-        width: compressed.width,
-        height: compressed.height,
-        capturedAt: new Date().toISOString(),
-        sentAt: null,
-        manifest: {
-          store: manifest.store,
-          periodWeek: manifest.periodWeek,
-          workDate: manifest.workDate,
-          source: task.set.source,
-          categoryNumber: task.set.categoryNumber,
-          categoryName: task.set.categoryName,
-          sectionSizeFeet: task.set.sectionSizeFeet,
-          bayCount: task.set.bays,
-          pogId: task.set.pogId,
-          pogShort: task.set.pogShort,
-          setType: task.set.setType,
-          department: task.set.department,
-        },
-      });
-      setStatus(`Bay ${task.bayNumber} captured.`, 'good');
+      await savePhoto(buildPhotoRecord(task, compressed));
+      const nextTask = findNextNeededTask(task.id);
+      nextTaskId = nextTask?.id || null;
+      setStatus(nextTask ? `Next: Bay ${nextTask.bayNumber}.` : 'Complete.', 'good');
       await refresh();
+      focusNextTask();
     } catch (err) {
       setStatus(err.message || 'Save failed.', 'error');
+    }
+  }
+
+  async function handleSetBulk(input) {
+    const setTasks = tasksForSet(input.dataset.setId);
+    const files = Array.from(input.files || []);
+    input.value = '';
+    if (!setTasks.length || !files.length) return;
+
+    const openTasks = setTasks.filter((task) => !photoState.has(task.id));
+    const capturedTasks = setTasks.filter((task) => photoState.has(task.id));
+    const orderedTargets = files.length >= setTasks.length ? setTasks : [...openTasks, ...capturedTasks];
+    const targetTasks = orderedTargets.slice(0, Math.min(files.length, setTasks.length));
+
+    clearPendingBulk();
+    pendingBulk = {
+      setId: input.dataset.setId,
+      items: files.slice(0, targetTasks.length).map((file, index) => ({
+        file,
+        url: URL.createObjectURL(file),
+        assignmentBayNumber: targetTasks[index].bayNumber,
+      })),
+    };
+    setStatus(`Review ${pendingBulk.items.length}.`, 'info');
+    await refresh();
+    document.querySelector(`.bulk-review[data-set-id="${pendingBulk.setId}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function handleBulkBayChange(select) {
+    if (!pendingBulk) return;
+    const item = pendingBulk.items[Number(select.dataset.bulkIndex)];
+    if (item) item.assignmentBayNumber = parseInt(select.value, 10);
+  }
+
+  async function savePendingBulk() {
+    if (!pendingBulk) return;
+    const setTasks = tasksForSet(pendingBulk.setId);
+    const bayNumbers = pendingBulk.items.map((item) => item.assignmentBayNumber);
+    if (new Set(bayNumbers).size !== bayNumbers.length) {
+      setStatus('Duplicate bay selected.', 'error');
+      return;
+    }
+
+    let lastTask = null;
+    try {
+      for (let i = 0; i < pendingBulk.items.length; i += 1) {
+        const item = pendingBulk.items[i];
+        const task = setTasks.find((candidate) => candidate.bayNumber === item.assignmentBayNumber);
+        if (!task) throw new Error(`Bay ${item.assignmentBayNumber} not found.`);
+        setStatus(`Saving ${i + 1}/${pendingBulk.items.length}...`, 'info');
+        const compressed = await compressPhoto(item.file);
+        await savePhoto(buildPhotoRecord(task, compressed));
+        lastTask = task;
+      }
+      const nextTask = findNextNeededTask(lastTask?.id);
+      nextTaskId = nextTask?.id || null;
+      const savedCount = pendingBulk.items.length;
+      clearPendingBulk();
+      setStatus(`Saved ${savedCount}.`, 'good');
+      await refresh();
+      focusNextTask();
+    } catch (err) {
+      setStatus(err.message || 'Bulk add failed.', 'error');
     }
   }
 
@@ -360,14 +510,28 @@
 
   function wireEvents() {
     els.setList.addEventListener('change', (event) => {
-      if (event.target.matches('.file-input')) {
+      if (event.target.matches('.set-file-input')) {
+        handleSetBulk(event.target);
+      } else if (event.target.matches('.bay-file-input')) {
         handleCapture(event.target);
+      } else if (event.target.matches('.bulk-bay-select')) {
+        handleBulkBayChange(event.target);
+      }
+    });
+    els.setList.addEventListener('click', (event) => {
+      if (event.target.matches('.bulk-save-button')) {
+        savePendingBulk();
+      } else if (event.target.matches('.bulk-cancel-button')) {
+        clearPendingBulk();
+        setStatus('Cancelled.', 'warn');
+        refresh();
       }
     });
     els.sendButton.addEventListener('click', () => sendPhotos({ includeSent: false }));
     els.resendButton.addEventListener('click', () => sendPhotos({ includeSent: true }));
     els.clearButton.addEventListener('click', async () => {
       if (!confirm('Clear all captured photos stored on this device?')) return;
+      clearPendingBulk();
       await clearPhotos();
       setStatus('Cleared.', 'warn');
       await refresh();
