@@ -194,6 +194,41 @@ function buildFromAddress(storeNumber) {
   return `EOD_FM${String(storeNumber).padStart(3, '0')}@retail-odyssey.com`;
 }
 
+const SIGNOFF_IMAGE_EXTENSIONS = {
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+  'image/heic-sequence': 'heic',
+  'image/heif-sequence': 'heif',
+};
+
+function parseSignoffPhoto(photo, index) {
+  const raw = typeof photo === 'string' ? photo : photo?.dataUrl || photo?.imageBase64 || '';
+  const match = String(raw).match(/^data:([^;]+);base64,(.*)$/i);
+  const contentType = (match ? match[1] : 'image/jpeg').toLowerCase();
+  const ext = SIGNOFF_IMAGE_EXTENSIONS[contentType];
+
+  if (!ext) {
+    throw new Error(`Unsupported sign-off image type: ${contentType}`);
+  }
+
+  const content = (match ? match[2] : String(raw)).replace(/\s+/g, '');
+  if (!content || !Buffer.from(content, 'base64').length) {
+    throw new Error(`signoff_${index} decoded to an empty image`);
+  }
+
+  return {
+    filename: `signoff_${index}.${ext}`,
+    content,
+    contentId: `signoff_${index}`,
+    content_type: contentType === 'image/jpg' ? 'image/jpeg' : contentType,
+  };
+}
+
 function buildHtml({ body, signoffPhotos, userName, userEmail }) {
   const hasPhotos = Array.isArray(signoffPhotos) && signoffPhotos.length > 0;
 
@@ -622,16 +657,7 @@ async function start() {
 
     if (Array.isArray(signoffPhotos)) {
       signoffPhotos.forEach((photo, i) => {
-        const match = photo.match(/^data:(image\/\w+);base64,/);
-        const contentType = match ? match[1] : 'image/jpeg';
-        const ext = contentType.split('/')[1] || 'jpg';
-        const rawBase64 = photo.replace(/^data:image\/\w+;base64,/, '');
-        attachments.push({
-          filename: `signoff_${i}.${ext}`,
-          content: rawBase64,
-          contentId: `signoff_${i}`,
-          content_type: contentType,
-        });
+        attachments.push(parseSignoffPhoto(photo, i));
       });
     }
 
