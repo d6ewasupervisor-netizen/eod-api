@@ -16,16 +16,21 @@ function jsonResponse(body) {
 test('fetchRows keeps partial SI rows when one task page times out', async (t) => {
   t.mock.method(reboticsBridge, 'getTokenForServer', () => 'test-token');
   t.mock.method(reboticsBridge, 'getApiBase', () => 'https://krcs.rebotics.net');
+  let storeLookups = 0;
+  let actionScans = 0;
   t.mock.method(global, 'fetch', async (url) => {
     const path = new URL(url).pathname;
     const params = new URL(url).searchParams;
     const date = params.get('from_date');
     const store = params.get('store');
 
-    if (path === '/api/v1/tasks/' && !store) {
+    if (path === '/api/v1/stores/') {
+      storeLookups += 1;
+      assert.equal(params.get('custom_id'), '701-00019');
       return jsonResponse({
         results: [{
-          store: { custom_id: '701-00019', id: 3837 },
+          custom_id: '701-00019',
+          id: 3837,
         }],
         next: null,
       });
@@ -52,7 +57,29 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
     }
 
     if (path === '/api/v4/processing/actions/') {
-      return jsonResponse({ results: [], next: null });
+      actionScans += 1;
+      return jsonResponse({
+        results: [{
+          id: 500,
+          captured_at: '2026-06-01T15:00:00Z',
+          stage: 'pre_photo',
+          deactivated: false,
+          rejected: false,
+          merged_image: 'https://example.test/merged.jpg',
+          section_info: { name: '1' },
+          store_planogram: { planogram: { custom_id: '8732361' } },
+        }, {
+          id: 499,
+          captured_at: '2026-05-31T15:00:00Z',
+          stage: 'pre_photo',
+          deactivated: false,
+          rejected: false,
+          merged_image: 'https://example.test/older.jpg',
+          section_info: { name: '1' },
+          store_planogram: { planogram: { custom_id: '1111111' } },
+        }],
+        next: null,
+      });
     }
 
     throw new Error(`Unexpected Rebotics URL: ${url}`);
@@ -69,7 +96,11 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
   assert.equal(rows.length, 1);
   assert.equal(rows[0].dbkey, '8732361');
   assert.equal(rows[0].source, 'si');
+  assert.equal(rows[0].photoCount, 1);
+  assert.equal(rows[0].images.length, 1);
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /Rebotics tasks skipped/);
   assert.match(warnings[0], /2026-05-31/);
+  assert.equal(storeLookups, 1);
+  assert.equal(actionScans, 1);
 });

@@ -2,6 +2,7 @@
 
 const sasBridge = require('../../sas-bridge');
 const { DEFAULT_PROJECT_IDS, projectLabel, knownProjectOptions } = require('./metadata');
+const { mapLimit, normalizeConcurrency } = require('./concurrency');
 
 const CUSTOMER_ID = 2;
 const OFFSET_MIN = 420;
@@ -219,70 +220,86 @@ async function fetchRows({ stores, projects, dateFrom, dateTo, settings = {}, on
   const normalizedStores = (stores || []).map((s) => String(parseInt(String(s), 10))).filter(Boolean);
   const allRows = [];
   const totalLookups = Math.max(1, normalizedProjects.length * normalizedStores.length);
+  const sasConcurrency = normalizeConcurrency(settings.sasConcurrency, 3, 10);
   let completedLookups = 0;
 
-  for (const projectId of normalizedProjects) {
+  const projectContexts = await mapLimit(normalizedProjects, sasConcurrency, async (projectId) => {
     const projectStores = await fetchProjectStores(projectId, { settings });
-    const byStoreNumber = new Map(projectStores.map((ps) => [String(ps?.store?.number), ps]));
+    return {
+      projectId,
+      byStoreNumber: new Map(projectStores.map((ps) => [String(ps?.store?.number), ps])),
+    };
+  });
+
+  const units = [];
+  for (const context of projectContexts) {
     for (const storeNumber of normalizedStores) {
-      const progressContext = {
-        completedLookups,
-        totalLookups,
-        rows: allRows.length,
-        source: 'prod',
-        projectId,
-        projectName: projectLabel(projectId),
-        storeNumber,
-        dateFrom,
-        dateTo,
-      };
-      if (onProgress) await onProgress({ ...progressContext, status: 'pulling' });
-      const projectStore = byStoreNumber.get(String(parseInt(storeNumber, 10)));
-      if (!projectStore) {
-        completedLookups += 1;
-        if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: allRows.length, status: 'complete' });
-        continue;
-      }
-      const csvText = await pullCategoryReportCsv({
-        projectId,
-        projectStoreId: projectStore.id,
-        dateFrom,
-        dateTo,
-        settings,
-      });
-      completedLookups += 1;
-      if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: allRows.length, status: 'complete' });
-      if (!csvText) continue;
-      const rows = parseCsv(await csvText);
-      for (const row of rows) {
-        const workDate = String(row['Date'] || row['Reported Date'] || row['Scheduled Date'] || '').slice(0, 10);
-        const planogramId = row['Planogram ID'] || '';
-        const dbkey = extractDbkey(planogramId);
-        const afterUrls = parseAfterUrls(row['After Pictures Link']);
-        allRows.push({
-          source: 'prod',
-          storeNumber: String(row['Store #'] || row.Store || storeNumber),
-          workDate,
-          projectId,
-          projectName: projectLabel(projectId, String(row.Project || row['Project Name'] || '')),
-          dbkey,
-          pog: dbkey,
-          categorySetLabel: String(row.Category || row['Category Name'] || row['Department Name'] || ''),
-          planogramId,
-          status: String(row['Shift Status'] || row['Status'] || 'unknown').toLowerCase(),
-          photoCount: afterUrls.length,
-          images: afterUrls.map((url, idx) => ({
-            sourceSystem: 'prod',
-            sourceRef: row['Visit ID'] ? `visit:${row['Visit ID']}` : null,
-            sourceUrl: url,
-            bayIndex: idx + 1,
-            capturedAt: null,
-          })),
-          raw: row,
-        });
-      }
+      units.push({ ...context, storeNumber });
     }
   }
+
+  await mapLimit(units, sasConcurrency, async (unit) => {
+    const { projectId, byStoreNumber, storeNumber } = unit;
+    const progressContext = {
+      completedLookups,
+      totalLookups,
+      rows: allRows.length,
+      source: 'prod',
+      projectId,
+      projectName: projectLabel(projectId),
+      storeNumber,
+      dateFrom,
+      dateTo,
+    };
+    if (onProgress) await onProgress({ ...progressContext, status: 'pulling' });
+    const projectStore = byStoreNumber.get(String(parseInt(storeNumber, 10)));
+    if (!projectStore) {
+      completedLookups += 1;
+      if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: allRows.length, status: 'complete' });
+      return;
+    }
+    const csvText = await pullCategoryReportCsv({
+      projectId,
+      projectStoreId: projectStore.id,
+      dateFrom,
+      dateTo,
+      settings,
+    });
+    completedLookups += 1;
+    if (!csvText) {
+      if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: allRows.length, status: 'complete' });
+      return;
+    }
+    const rows = parseCsv(await csvText);
+    for (const row of rows) {
+      const workDate = String(row['Date'] || row['Reported Date'] || row['Scheduled Date'] || '').slice(0, 10);
+      const planogramId = row['Planogram ID'] || '';
+      const dbkey = extractDbkey(planogramId);
+      const afterUrls = parseAfterUrls(row['After Pictures Link']);
+      allRows.push({
+        source: 'prod',
+        storeNumber: String(row['Store #'] || row.Store || storeNumber),
+        workDate,
+        projectId,
+        projectName: projectLabel(projectId, String(row.Project || row['Project Name'] || '')),
+        dbkey,
+        pog: dbkey,
+        categorySetLabel: String(row.Category || row['Category Name'] || row['Department Name'] || ''),
+        planogramId,
+        status: String(row['Shift Status'] || row['Status'] || 'unknown').toLowerCase(),
+        photoCount: afterUrls.length,
+        images: afterUrls.map((url, idx) => ({
+          sourceSystem: 'prod',
+          sourceRef: row['Visit ID'] ? `visit:${row['Visit ID']}` : null,
+          sourceUrl: url,
+          bayIndex: idx + 1,
+          capturedAt: null,
+        })),
+        raw: row,
+      });
+    }
+    if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: allRows.length, status: 'complete' });
+  });
   return allRows;
 }
 

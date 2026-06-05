@@ -44,6 +44,8 @@ test('isTrackerUserAllowed denies unlisted non-role users', () => {
 test('sanitize clamps runtime settings and drops invalid emails', () => {
   const settings = sanitize({
     reboticsRequestTimeoutMs: 1,
+    reboticsConcurrency: 99,
+    sasConcurrency: 0,
     runItemsPageSizeDefault: 999,
     runItemsPageSizeMax: 50,
     maxRunDates: 999,
@@ -51,6 +53,8 @@ test('sanitize clamps runtime settings and drops invalid emails', () => {
   });
 
   assert.equal(settings.reboticsRequestTimeoutMs, 2000);
+  assert.equal(settings.reboticsConcurrency, 10);
+  assert.equal(settings.sasConcurrency, DEFAULTS.sasConcurrency);
   assert.equal(settings.runItemsPageSizeDefault, 50);
   assert.equal(settings.maxRunDates, 60);
   assert.deepEqual(settings.trackerAllowedEmails, ['ok@example.com']);

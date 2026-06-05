@@ -43,8 +43,10 @@
     document.getElementById('reboticsMaxActionPages').value = settings.reboticsMaxActionPages;
     document.getElementById('reboticsMaxTaskPages').value = settings.reboticsMaxTaskPages;
     document.getElementById('reboticsMaxAttempts').value = settings.reboticsMaxAttempts;
+    document.getElementById('reboticsConcurrency').value = settings.reboticsConcurrency;
     document.getElementById('sasRequestTimeoutMs').value = settings.sasRequestTimeoutMs;
     document.getElementById('sasMaxAttempts').value = settings.sasMaxAttempts;
+    document.getElementById('sasConcurrency').value = settings.sasConcurrency;
     document.getElementById('runItemsPageSizeDefault').value = settings.runItemsPageSizeDefault;
     document.getElementById('runItemsPageSizeMax').value = settings.runItemsPageSizeMax;
     document.getElementById('maxRunStores').value = settings.maxRunStores;
@@ -85,8 +87,10 @@
       reboticsMaxActionPages: readNumber('reboticsMaxActionPages'),
       reboticsMaxTaskPages: readNumber('reboticsMaxTaskPages'),
       reboticsMaxAttempts: readNumber('reboticsMaxAttempts'),
+      reboticsConcurrency: readNumber('reboticsConcurrency'),
       sasRequestTimeoutMs: readNumber('sasRequestTimeoutMs'),
       sasMaxAttempts: readNumber('sasMaxAttempts'),
+      sasConcurrency: readNumber('sasConcurrency'),
       runItemsPageSizeDefault: defaultPageSize,
       runItemsPageSizeMax: maxPageSize,
       maxRunStores: readNumber('maxRunStores'),

@@ -30,8 +30,10 @@ const DEFAULTS = {
   reboticsMaxActionPages: parseIntEnv('TRACKER_REBOTICS_MAX_ACTION_PAGES', 40),
   reboticsMaxTaskPages: parseIntEnv('TRACKER_REBOTICS_MAX_TASK_PAGES', 20),
   reboticsMaxAttempts: parseIntEnv('TRACKER_REBOTICS_MAX_ATTEMPTS', 3),
+  reboticsConcurrency: parseIntEnv('TRACKER_REBOTICS_CONCURRENCY', 3),
   sasRequestTimeoutMs: parseIntEnv('TRACKER_SAS_REQUEST_TIMEOUT_MS', 30000),
   sasMaxAttempts: parseIntEnv('TRACKER_SAS_MAX_ATTEMPTS', 3),
+  sasConcurrency: parseIntEnv('TRACKER_SAS_CONCURRENCY', 3),
   runItemsPageSizeDefault: parseIntEnv('TRACKER_RUN_ITEMS_PAGE_SIZE_DEFAULT', 100),
   runItemsPageSizeMax: parseIntEnv('TRACKER_RUN_ITEMS_PAGE_SIZE_MAX', 500),
   maxRunStores: parseIntEnv('TRACKER_MAX_RUN_STORES', 120),
@@ -56,8 +58,10 @@ function sanitize(input = {}) {
   out.reboticsMaxActionPages = Math.min(200, Math.max(1, parseInt(input.reboticsMaxActionPages, 10) || DEFAULTS.reboticsMaxActionPages));
   out.reboticsMaxTaskPages = Math.min(200, Math.max(1, parseInt(input.reboticsMaxTaskPages, 10) || DEFAULTS.reboticsMaxTaskPages));
   out.reboticsMaxAttempts = Math.min(5, Math.max(1, parseInt(input.reboticsMaxAttempts, 10) || DEFAULTS.reboticsMaxAttempts));
+  out.reboticsConcurrency = Math.min(10, Math.max(1, parseInt(input.reboticsConcurrency, 10) || DEFAULTS.reboticsConcurrency));
   out.sasRequestTimeoutMs = Math.min(120000, Math.max(5000, parseInt(input.sasRequestTimeoutMs, 10) || DEFAULTS.sasRequestTimeoutMs));
   out.sasMaxAttempts = Math.min(5, Math.max(1, parseInt(input.sasMaxAttempts, 10) || DEFAULTS.sasMaxAttempts));
+  out.sasConcurrency = Math.min(10, Math.max(1, parseInt(input.sasConcurrency, 10) || DEFAULTS.sasConcurrency));
   out.runItemsPageSizeDefault = Math.min(500, Math.max(10, parseInt(input.runItemsPageSizeDefault, 10) || DEFAULTS.runItemsPageSizeDefault));
   out.runItemsPageSizeMax = Math.min(1000, Math.max(50, parseInt(input.runItemsPageSizeMax, 10) || DEFAULTS.runItemsPageSizeMax));
   if (out.runItemsPageSizeDefault > out.runItemsPageSizeMax) {

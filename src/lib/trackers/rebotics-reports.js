@@ -1,6 +1,7 @@
 'use strict';
 
 const reboticsBridge = require('../../rebotics-bridge');
+const { mapLimit, normalizeConcurrency } = require('./concurrency');
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 const DEFAULT_ACTIONS_PAGE_LIMIT = 200;
@@ -111,25 +112,12 @@ async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, attempt
   throw lastErr;
 }
 
-async function resolveStoreInternalId(customId, date, options = {}) {
-  const maxTaskPages = options.maxTaskPages || DEFAULT_MAX_TASK_PAGES;
+async function resolveStoreInternalId(customId, options = {}) {
   const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
   const attempts = options.reboticsMaxAttempts || DEFAULT_MAX_ATTEMPTS;
-  let offset = 0;
-  for (let page = 0; page < maxTaskPages; page += 1) {
-    const data = await fetchJson(`/api/v1/tasks/?from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}`, { timeoutMs, attempts });
-    const rows = Array.isArray(data) ? data : (data?.results || []);
-    if (!rows.length) break;
-    for (const row of rows) {
-      if (row?.store?.custom_id === customId && row?.store?.id != null) {
-        return row.store.id;
-      }
-    }
-    const hasMore = data && typeof data === 'object' && data.next != null;
-    if (!hasMore) break;
-    offset += 200;
-  }
-  return null;
+  const data = await fetchJson(`/api/v1/stores/?custom_id=${encodeURIComponent(customId)}`, { timeoutMs, attempts });
+  const rows = Array.isArray(data) ? data : (data?.results || []);
+  return rows[0]?.id || null;
 }
 
 async function listTasksForStoreAndDate(storeId, date, options = {}) {
@@ -151,11 +139,15 @@ async function listTasksForStoreAndDate(storeId, date, options = {}) {
   return out;
 }
 
-async function listPrePhotoActionsForStoreOnDate(storeId, date, options = {}) {
+async function listPrePhotoActionsForStoreDateRange(storeId, dates, options = {}) {
   const maxActionPages = options.maxActionPages || DEFAULT_MAX_ACTION_PAGES;
   const actionsPageLimit = options.actionsPageLimit || DEFAULT_ACTIONS_PAGE_LIMIT;
   const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
   const attempts = options.reboticsMaxAttempts || DEFAULT_MAX_ATTEMPTS;
+  const dateSet = new Set((dates || []).map((d) => String(d)));
+  const sortedDates = [...dateSet].sort();
+  const earliest = sortedDates[0] || '';
+  const latest = sortedDates[sortedDates.length - 1] || '';
   let offset = 0;
   const out = [];
   for (let page = 0; page < maxActionPages; page += 1) {
@@ -164,8 +156,9 @@ async function listPrePhotoActionsForStoreOnDate(storeId, date, options = {}) {
     if (!rows.length) break;
     for (const row of rows) {
       const day = String(row?.captured_at || '').slice(0, 10);
-      if (day < date) return out;
-      if (day !== date) continue;
+      if (earliest && day < earliest) return out;
+      if (latest && day > latest) continue;
+      if (!dateSet.has(day)) continue;
       if (row?.stage !== 'pre_photo') continue;
       if (row?.deactivated || row?.rejected) continue;
       if (!row?.merged_image) continue;
@@ -176,6 +169,19 @@ async function listPrePhotoActionsForStoreOnDate(storeId, date, options = {}) {
     offset += actionsPageLimit;
   }
   return out;
+}
+
+function bucketActionsByDateAndDbkey(actions) {
+  const buckets = new Map();
+  for (const action of actions || []) {
+    const day = String(action?.captured_at || '').slice(0, 10);
+    const dbkey = String(action?.store_planogram?.planogram?.custom_id || '').trim();
+    if (!day || !dbkey) continue;
+    const key = `${day}|${dbkey}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(actionToImage(action));
+  }
+  return buckets;
 }
 
 function actionToImage(action) {
@@ -194,91 +200,106 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
   const rows = [];
   const storeCustomToInternal = new Map();
   const totalLookups = Math.max(1, dates.length * stores.length);
-  const reboticsRequestTimeoutMs = Math.max(
-    DEFAULT_REQUEST_TIMEOUT_MS,
-    parseInt(settings.reboticsRequestTimeoutMs, 10) || DEFAULT_REQUEST_TIMEOUT_MS
-  );
+  const reboticsRequestTimeoutMs = parseInt(settings.reboticsRequestTimeoutMs, 10) || DEFAULT_REQUEST_TIMEOUT_MS;
+  const reboticsConcurrency = normalizeConcurrency(settings.reboticsConcurrency, 3, 10);
   let completedLookups = 0;
+  const storeContexts = new Map();
 
-  for (const date of dates) {
-    for (const storeNumber of stores) {
+  await mapLimit(stores || [], reboticsConcurrency, async (storeNumber) => {
+    const customId = toCustomId(storeNumber);
+    if (!customId) return;
+    if (onProgress) {
+      await onProgress({
+        completedLookups,
+        totalLookups,
+        rows: rows.length,
+        source: 'si',
+        storeNumber,
+        date: dates?.[0] || null,
+        status: 'pulling',
+      });
+    }
+    try {
+      let internalId = storeCustomToInternal.get(customId);
+      if (!internalId) {
+        internalId = await resolveStoreInternalId(customId, {
+          reboticsRequestTimeoutMs,
+          reboticsMaxAttempts: settings.reboticsMaxAttempts,
+        });
+        if (internalId) storeCustomToInternal.set(customId, internalId);
+      }
+      if (!internalId) {
+        warn({ onWarning }, `Rebotics store lookup skipped for ${customId}: store not found`);
+        return;
+      }
+      let actions = [];
+      try {
+        actions = await listPrePhotoActionsForStoreDateRange(internalId, dates, {
+          maxActionPages: settings.reboticsMaxActionPages,
+          actionsPageLimit: settings.reboticsActionsPageLimit,
+          reboticsRequestTimeoutMs,
+          reboticsMaxAttempts: settings.reboticsMaxAttempts,
+        });
+      } catch (err) {
+        if (isAuthError(err)) throw err;
+        warn({ onWarning }, `Rebotics photos skipped for store ${storeNumber}: ${err.message}`);
+      }
+      storeContexts.set(String(parseInt(String(storeNumber), 10)), {
+        internalId,
+        actionsByDateDbkey: bucketActionsByDateAndDbkey(actions),
+      });
+    } catch (err) {
+      if (isAuthError(err)) throw err;
+      warn({ onWarning }, `Rebotics store setup skipped for ${customId}: ${err.message}`);
+    }
+  });
+
+  const units = [];
+  for (const date of dates || []) {
+    for (const storeNumber of stores || []) {
       const customId = toCustomId(storeNumber);
       if (!customId) continue;
-      const progressContext = {
+      units.push({
+        storeNumber: String(parseInt(String(storeNumber), 10)),
+        customId,
+        date,
+      });
+    }
+  }
+
+  await mapLimit(units, reboticsConcurrency, async (unit) => {
+    const { storeNumber, customId, date } = unit;
+    const progressContext = {
         completedLookups,
         totalLookups,
         rows: rows.length,
         source: 'si',
         storeNumber,
         date,
-      };
-      if (onProgress) await onProgress({ ...progressContext, status: 'pulling' });
-      let internalId = storeCustomToInternal.get(customId);
-      if (!internalId) {
-        try {
-          internalId = await resolveStoreInternalId(customId, date, {
-            maxTaskPages: settings.reboticsMaxTaskPages,
-            reboticsRequestTimeoutMs,
-            reboticsMaxAttempts: settings.reboticsMaxAttempts,
-          });
-        } catch (err) {
-          if (isAuthError(err)) throw err;
-          warn({ onWarning }, `Rebotics store lookup skipped for ${customId} on ${date}: ${err.message}`);
-          completedLookups += 1;
-          if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
-          continue;
-        }
-        if (!internalId) {
-          completedLookups += 1;
-          if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
-          continue;
-        }
-        storeCustomToInternal.set(customId, internalId);
-      }
+    };
+    if (onProgress) await onProgress({ ...progressContext, status: 'pulling' });
+    const context = storeContexts.get(storeNumber);
+    if (!context?.internalId) {
+      completedLookups += 1;
+      if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
+      return [];
+    }
 
-      const [tasksResult, actionsResult] = await Promise.allSettled([
-        listTasksForStoreAndDate(internalId, date, {
+    try {
+      const tasks = await listTasksForStoreAndDate(context.internalId, date, {
           maxTaskPages: settings.reboticsMaxTaskPages,
           reboticsRequestTimeoutMs,
           reboticsMaxAttempts: settings.reboticsMaxAttempts,
-        }),
-        listPrePhotoActionsForStoreOnDate(internalId, date, {
-          maxActionPages: settings.reboticsMaxActionPages,
-          actionsPageLimit: settings.reboticsActionsPageLimit,
-          reboticsRequestTimeoutMs,
-          reboticsMaxAttempts: settings.reboticsMaxAttempts,
-        }),
-      ]);
+      });
       completedLookups += 1;
-      if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
-
-      if (tasksResult.status === 'rejected') {
-        if (isAuthError(tasksResult.reason)) throw tasksResult.reason;
-        warn({ onWarning }, `Rebotics tasks skipped for store ${storeNumber} on ${date}: ${tasksResult.reason?.message || tasksResult.reason}`);
-        continue;
-      }
-      const tasks = tasksResult.value || [];
-
-      let actions = [];
-      if (actionsResult.status === 'rejected') {
-        if (isAuthError(actionsResult.reason)) throw actionsResult.reason;
-        warn({ onWarning }, `Rebotics photos skipped for store ${storeNumber} on ${date}: ${actionsResult.reason?.message || actionsResult.reason}`);
-      } else {
-        actions = actionsResult.value || [];
-      }
-
-      const actionsByDbkey = new Map();
-      for (const action of actions) {
-        const key = String(action?.store_planogram?.planogram?.custom_id || '').trim();
-        if (!key) continue;
-        if (!actionsByDbkey.has(key)) actionsByDbkey.set(key, []);
-        actionsByDbkey.get(key).push(actionToImage(action));
-      }
-
-      for (const task of tasks) {
+      const out = [];
+      for (const task of tasks || []) {
         const dbkey = dbkeyFromTask(task);
-        const images = dbkey && actionsByDbkey.has(dbkey) ? actionsByDbkey.get(dbkey) : [];
-        rows.push({
+        const imageKey = `${date}|${dbkey || ''}`;
+        const images = dbkey && context.actionsByDateDbkey.has(imageKey)
+          ? context.actionsByDateDbkey.get(imageKey)
+          : [];
+        out.push({
           source: 'si',
           storeNumber: String(parseInt(String(storeNumber), 10)),
           workDate: date,
@@ -297,8 +318,16 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
           },
         });
       }
+      rows.push(...out);
+      if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
+      return;
+    } catch (err) {
+      if (isAuthError(err)) throw err;
+      completedLookups += 1;
+      if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
+      warn({ onWarning }, `Rebotics tasks skipped for store ${storeNumber} on ${date}: ${err.message}`);
     }
-  }
+  });
   return rows;
 }
 
@@ -307,4 +336,5 @@ module.exports = {
   fetchJson,
   toCustomId,
   dbkeyFromTask,
+  listPrePhotoActionsForStoreDateRange,
 };
