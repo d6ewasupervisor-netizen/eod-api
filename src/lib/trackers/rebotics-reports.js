@@ -8,6 +8,7 @@ const DEFAULT_ACTIONS_PAGE_LIMIT = 200;
 const DEFAULT_MAX_ACTION_PAGES = 40;
 const DEFAULT_MAX_TASK_PAGES = 20;
 const DEFAULT_MAX_ATTEMPTS = 3;
+const storeIdCache = new Map();
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -102,6 +103,7 @@ async function fetchJsonOnce(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, sig
 
 async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, attempts = DEFAULT_MAX_ATTEMPTS, signal = null } = {}) {
   let lastErr = null;
+  let refreshedAuth = false;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     throwIfAborted(signal);
     try {
@@ -109,6 +111,20 @@ async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, attempt
     } catch (err) {
       lastErr = err;
       if (err?.code === 'TRACKER_CANCELLED') throw err;
+      if (!refreshedAuth && isAuthError(err)) {
+        refreshedAuth = true;
+        await reboticsBridge.validateCurrentToken({ force: true });
+        throwIfAborted(signal);
+        try {
+          return await fetchJsonOnce(path, { timeoutMs, signal });
+        } catch (retryErr) {
+          lastErr = retryErr;
+          if (retryErr?.code === 'TRACKER_CANCELLED') throw retryErr;
+          if (attempt >= attempts || !isRetriableError(retryErr)) break;
+          await sleep(500 * attempt);
+          continue;
+        }
+      }
       if (attempt >= attempts || !isRetriableError(err)) break;
       await sleep(500 * attempt);
     }
@@ -119,38 +135,53 @@ async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, attempt
   throw lastErr;
 }
 
-async function resolveStoreInternalId(customId, options = {}) {
+function cacheStoreFromTask(task) {
+  const customId = String(task?.store?.custom_id || '').trim();
+  const internalId = task?.store?.id;
+  if (customId && internalId != null) storeIdCache.set(customId, internalId);
+}
+
+async function resolveStoreInternalIds(customIds, options = {}) {
+  const wanted = new Set((customIds || []).map((id) => String(id || '').trim()).filter(Boolean));
   const dates = Array.isArray(options.dates) ? [...options.dates].filter(Boolean).sort().reverse() : [];
   const maxTaskPages = options.maxTaskPages || DEFAULT_MAX_TASK_PAGES;
   const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
   const attempts = options.reboticsMaxAttempts || DEFAULT_MAX_ATTEMPTS;
   const signal = options.cancelSignal || null;
   throwIfAborted(signal);
-  try {
-    const data = await fetchJson(`/api/v1/stores/?custom_id=${encodeURIComponent(customId)}`, { timeoutMs, attempts, signal });
-    const rows = Array.isArray(data) ? data : (data?.results || []);
-    if (rows[0]?.id != null) return rows[0].id;
-  } catch (_err) {
-    // This endpoint often returns the SPA shell; task rows are the reliable fallback.
+
+  const out = new Map();
+  for (const customId of wanted) {
+    if (storeIdCache.has(customId)) out.set(customId, storeIdCache.get(customId));
   }
+  const unresolved = () => [...wanted].filter((customId) => !out.has(customId));
+  if (!unresolved().length) return out;
 
   for (const date of dates) {
     let offset = 0;
     for (let page = 0; page < maxTaskPages; page += 1) {
+      throwIfAborted(signal);
       const data = await fetchJson(`/api/v1/tasks/?from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}`, { timeoutMs, attempts, signal });
       const rows = Array.isArray(data) ? data : (data?.results || []);
       if (!rows.length) break;
       for (const row of rows) {
-        if (row?.store?.custom_id === customId && row?.store?.id != null) {
-          return row.store.id;
-        }
+        cacheStoreFromTask(row);
       }
+      for (const customId of unresolved()) {
+        if (storeIdCache.has(customId)) out.set(customId, storeIdCache.get(customId));
+      }
+      if (!unresolved().length) return out;
       const hasMore = data && typeof data === 'object' && data.next != null;
       if (!hasMore) break;
       offset += 200;
     }
   }
-  return null;
+  return out;
+}
+
+async function resolveStoreInternalId(customId, options = {}) {
+  const ids = await resolveStoreInternalIds([customId], options);
+  return ids.get(customId) || null;
 }
 
 async function listTasksForStoreAndDate(storeId, date, options = {}) {
@@ -174,33 +205,20 @@ async function listTasksForStoreAndDate(storeId, date, options = {}) {
   return out;
 }
 
-async function listPrePhotoActionsForStoreDateRange(storeId, dates, options = {}) {
+async function listActionsForTask(taskId, options = {}) {
   const maxActionPages = options.maxActionPages || DEFAULT_MAX_ACTION_PAGES;
   const actionsPageLimit = options.actionsPageLimit || DEFAULT_ACTIONS_PAGE_LIMIT;
   const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
   const attempts = options.reboticsMaxAttempts || DEFAULT_MAX_ATTEMPTS;
   const signal = options.cancelSignal || null;
-  const dateSet = new Set((dates || []).map((d) => String(d)));
-  const sortedDates = [...dateSet].sort();
-  const earliest = sortedDates[0] || '';
-  const latest = sortedDates[sortedDates.length - 1] || '';
   let offset = 0;
   const out = [];
   for (let page = 0; page < maxActionPages; page += 1) {
     throwIfAborted(signal);
-    const data = await fetchJson(`/api/v4/processing/actions/?store=${storeId}&limit=${actionsPageLimit}&offset=${offset}`, { timeoutMs, attempts, signal });
+    const data = await fetchJson(`/api/v4/processing/actions/?task_id=${encodeURIComponent(taskId)}&limit=${actionsPageLimit}&offset=${offset}`, { timeoutMs, attempts, signal });
     const rows = Array.isArray(data) ? data : (data?.results || []);
     if (!rows.length) break;
-    for (const row of rows) {
-      const day = String(row?.captured_at || '').slice(0, 10);
-      if (earliest && day < earliest) return out;
-      if (latest && day > latest) continue;
-      if (!dateSet.has(day)) continue;
-      if (row?.stage !== 'pre_photo') continue;
-      if (row?.deactivated || row?.rejected) continue;
-      if (!row?.merged_image) continue;
-      out.push(row);
-    }
+    out.push(...rows);
     const hasMore = data && typeof data === 'object' && data.next != null;
     if (!hasMore) break;
     offset += actionsPageLimit;
@@ -208,32 +226,56 @@ async function listPrePhotoActionsForStoreDateRange(storeId, dates, options = {}
   return out;
 }
 
-function bucketActionsByDateAndDbkey(actions) {
-  const buckets = new Map();
-  for (const action of actions || []) {
-    const day = String(action?.captured_at || '').slice(0, 10);
-    const dbkey = String(action?.store_planogram?.planogram?.custom_id || '').trim();
-    const storePlanogramId = action?.store_planogram_id || action?.store_planogram?.id || null;
-    if (!day) continue;
-    for (const keyPart of [dbkey, storePlanogramId].filter(Boolean)) {
-      const key = `${day}|${keyPart}`;
-      if (!buckets.has(key)) buckets.set(key, []);
-      buckets.get(key).push(actionToImage(action));
-    }
-  }
-  return buckets;
+function embeddedPrePhotoActions(task) {
+  const prePhoto = task?.result?.pre_photo;
+  if (!Array.isArray(prePhoto)) return [];
+  return prePhoto
+    .map((action) => ({
+      ...action,
+      id: action?.id ?? action?.action_id ?? action?.actionId ?? null,
+      stage: action?.stage || 'pre_photo',
+      captured_at: action?.captured_at || action?.created_at || action?.created || null,
+      store_planogram_id: action?.store_planogram_id || action?.store_planogram?.id || task?.planograms?.[0]?.store_planogram_id || null,
+      store_planogram: action?.store_planogram || {
+        id: task?.planograms?.[0]?.store_planogram_id || null,
+        planogram: { custom_id: task?.planograms?.[0]?.custom_id || null },
+      },
+    }))
+    .filter((action) => action.id != null);
 }
 
-function actionToImage(action) {
+function isUsablePrePhotoAction(action) {
+  if (!action) return false;
+  if (action.stage && action.stage !== 'pre_photo') return false;
+  if (action.deactivated || action.rejected) return false;
+  if (!action.merged_image && !action.id && !action.action_id) return false;
+  return true;
+}
+
+function dedupeActions(actions) {
+  const out = [];
+  const seen = new Set();
+  for (const action of actions || []) {
+    const id = action?.id ?? action?.action_id ?? action?.actionId ?? `${action?.store_planogram_id || ''}|${action?.section_id || ''}|${action?.captured_at || ''}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(action);
+  }
+  return out;
+}
+
+function actionToImage(action, { dbkey = '', storePlanogramId = null } = {}) {
+  const actionId = action?.id ?? action?.action_id ?? action?.actionId ?? null;
   return {
     sourceSystem: 'si',
-    sourceRef: action?.id != null ? `action:${action.id}` : null,
+    imageRole: 'after',
+    sourceRef: actionId != null ? `action:${actionId}` : null,
     sourceUrl: null,
-    actionId: action?.id || null,
+    actionId,
     bayIndex: parseInt(action?.section_info?.name, 10) || null,
     capturedAt: action?.captured_at || null,
-    dbkey: String(action?.store_planogram?.planogram?.custom_id || ''),
-    storePlanogramId: action?.store_planogram_id || action?.store_planogram?.id || null,
+    dbkey: String(action?.store_planogram?.planogram?.custom_id || dbkey || ''),
+    storePlanogramId: action?.store_planogram_id || action?.store_planogram?.id || storePlanogramId || null,
   };
 }
 
@@ -241,68 +283,10 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
   const cancelSignal = settings.cancelSignal || null;
   throwIfAborted(cancelSignal);
   const rows = [];
-  const storeCustomToInternal = new Map();
   const totalLookups = Math.max(1, dates.length * stores.length);
   const reboticsRequestTimeoutMs = parseInt(settings.reboticsRequestTimeoutMs, 10) || DEFAULT_REQUEST_TIMEOUT_MS;
   const reboticsConcurrency = normalizeConcurrency(settings.reboticsConcurrency, 3, 10);
   let completedLookups = 0;
-  const storeContexts = new Map();
-
-  await mapLimit(stores || [], reboticsConcurrency, async (storeNumber) => {
-    throwIfAborted(cancelSignal);
-    const customId = toCustomId(storeNumber);
-    if (!customId) return;
-    if (onProgress) {
-      await onProgress({
-        completedLookups,
-        totalLookups,
-        rows: rows.length,
-        source: 'si',
-        storeNumber,
-        date: dates?.[0] || null,
-        status: 'pulling',
-      });
-    }
-    try {
-      let internalId = storeCustomToInternal.get(customId);
-      if (!internalId) {
-        internalId = await resolveStoreInternalId(customId, {
-          dates,
-          maxTaskPages: settings.reboticsMaxTaskPages,
-          reboticsRequestTimeoutMs,
-          reboticsMaxAttempts: settings.reboticsMaxAttempts,
-          cancelSignal,
-        });
-        if (internalId) storeCustomToInternal.set(customId, internalId);
-      }
-      if (!internalId) {
-        warn({ onWarning }, `Rebotics store lookup skipped for ${customId}: store not found`);
-        return;
-      }
-      let actions = [];
-      try {
-        actions = await listPrePhotoActionsForStoreDateRange(internalId, dates, {
-          maxActionPages: settings.reboticsMaxActionPages,
-          actionsPageLimit: settings.reboticsActionsPageLimit,
-          reboticsRequestTimeoutMs,
-          reboticsMaxAttempts: settings.reboticsMaxAttempts,
-          cancelSignal,
-        });
-      } catch (err) {
-        throwIfAborted(cancelSignal);
-        if (isAuthError(err)) throw err;
-        warn({ onWarning }, `Rebotics photos skipped for store ${storeNumber}: ${err.message}`);
-      }
-      storeContexts.set(String(parseInt(String(storeNumber), 10)), {
-        internalId,
-        actionsByDateDbkey: bucketActionsByDateAndDbkey(actions),
-      });
-    } catch (err) {
-      throwIfAborted(cancelSignal);
-      if (isAuthError(err)) throw err;
-      warn({ onWarning }, `Rebotics store setup skipped for ${customId}: ${err.message}`);
-    }
-  }, { signal: cancelSignal });
 
   const units = [];
   for (const date of dates || []) {
@@ -316,6 +300,14 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
       });
     }
   }
+  const uniqueCustomIds = [...new Set(units.map((unit) => unit.customId))];
+  const storeIdsPromise = resolveStoreInternalIds(uniqueCustomIds, {
+    dates,
+    maxTaskPages: settings.reboticsMaxTaskPages,
+    reboticsRequestTimeoutMs,
+    reboticsMaxAttempts: settings.reboticsMaxAttempts,
+    cancelSignal,
+  });
 
   await mapLimit(units, reboticsConcurrency, async (unit) => {
     throwIfAborted(cancelSignal);
@@ -329,40 +321,52 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
         date,
     };
     if (onProgress) await onProgress({ ...progressContext, status: 'pulling' });
-    const context = storeContexts.get(storeNumber);
-    if (!context?.internalId) {
+    const storeIds = await storeIdsPromise;
+    throwIfAborted(cancelSignal);
+    const internalId = storeIds.get(customId);
+    if (!internalId) {
+      warn({ onWarning }, `Rebotics store lookup skipped for ${customId}: store not found`);
       completedLookups += 1;
       if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
       return [];
     }
 
     try {
-      const tasks = await listTasksForStoreAndDate(context.internalId, date, {
+      const tasks = await listTasksForStoreAndDate(internalId, date, {
           maxTaskPages: settings.reboticsMaxTaskPages,
           reboticsRequestTimeoutMs,
           reboticsMaxAttempts: settings.reboticsMaxAttempts,
           cancelSignal,
       });
       throwIfAborted(cancelSignal);
-      completedLookups += 1;
+      const actionsByTaskId = new Map();
+      await mapLimit(tasks || [], reboticsConcurrency, async (task) => {
+        throwIfAborted(cancelSignal);
+        const embedded = dedupeActions(embeddedPrePhotoActions(task).filter(isUsablePrePhotoAction));
+        if (embedded.length) {
+          actionsByTaskId.set(task.id, embedded);
+          return;
+        }
+        const fetched = await listActionsForTask(task.id, {
+          maxActionPages: settings.reboticsMaxActionPages,
+          actionsPageLimit: settings.reboticsActionsPageLimit,
+          reboticsRequestTimeoutMs,
+          reboticsMaxAttempts: settings.reboticsMaxAttempts,
+          cancelSignal,
+        });
+        throwIfAborted(cancelSignal);
+        actionsByTaskId.set(task.id, dedupeActions((fetched || []).filter(isUsablePrePhotoAction)));
+      }, { signal: cancelSignal });
+      throwIfAborted(cancelSignal);
+
       const out = [];
       for (const task of tasks || []) {
         const dbkey = dbkeyFromTask(task);
         const storePlanogramId = task?.planograms?.[0]?.store_planogram_id || null;
-        const imageKeys = [
-          dbkey ? `${date}|${dbkey}` : null,
-          storePlanogramId ? `${date}|${storePlanogramId}` : null,
-        ].filter(Boolean);
-        const seenImageIds = new Set();
-        const images = [];
-        for (const key of imageKeys) {
-          for (const image of context.actionsByDateDbkey.get(key) || []) {
-            const imageId = image.actionId || image.sourceRef || `${image.dbkey}|${image.storePlanogramId}|${image.bayIndex}`;
-            if (seenImageIds.has(imageId)) continue;
-            seenImageIds.add(imageId);
-            images.push(image);
-          }
-        }
+        const images = (actionsByTaskId.get(task.id) || []).map((action) => actionToImage(action, {
+          dbkey,
+          storePlanogramId,
+        })).filter((image) => image.actionId != null);
         out.push({
           source: 'si',
           storeNumber: String(parseInt(String(storeNumber), 10)),
@@ -383,6 +387,7 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
         });
       }
       rows.push(...out);
+      completedLookups += 1;
       if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
       return;
     } catch (err) {
@@ -401,5 +406,5 @@ module.exports = {
   fetchJson,
   toCustomId,
   dbkeyFromTask,
-  listPrePhotoActionsForStoreDateRange,
+  listActionsForTask,
 };

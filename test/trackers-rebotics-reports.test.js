@@ -25,15 +25,11 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
     const store = params.get('store');
 
     if (path === '/api/v1/stores/') {
-      storeLookups += 1;
-      assert.equal(params.get('custom_id'), '701-00019');
-      return jsonResponse({
-        results: [],
-        next: null,
-      });
+      throw new Error('Store custom_id endpoint should not be used');
     }
 
     if (path === '/api/v1/tasks/' && !store && date === '2026-06-01') {
+      storeLookups += 1;
       return jsonResponse({
         results: [{
           store: { custom_id: '701-00019', id: 3837 },
@@ -64,6 +60,7 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
 
     if (path === '/api/v4/processing/actions/') {
       actionScans += 1;
+      assert.equal(params.get('task_id'), '99');
       return jsonResponse({
         results: [{
           id: 500,
@@ -75,15 +72,6 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
           section_info: { name: '1' },
           store_planogram_id: 444,
           store_planogram: { id: 444, planogram: {} },
-        }, {
-          id: 499,
-          captured_at: '2026-05-31T15:00:00Z',
-          stage: 'pre_photo',
-          deactivated: false,
-          rejected: false,
-          merged_image: 'https://example.test/older.jpg',
-          section_info: { name: '1' },
-          store_planogram: { planogram: { custom_id: '1111111' } },
         }],
         next: null,
       });

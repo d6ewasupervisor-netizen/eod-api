@@ -31,6 +31,8 @@ const inFlightRuns = new Map();
 const TRACKER_ADMIN_EMAILS = trackerAdminEmails();
 const RUN_HEARTBEAT_MS = 15000;
 const TERMINAL_RUN_STATUSES = new Set(['completed', 'failed', 'cancelled']);
+const STALE_THRESHOLD_MS = RUN_HEARTBEAT_MS * 6;
+const INTERRUPTED_RUN_ERROR = 'Run interrupted by a server restart. Please re-run.';
 
 function requireTrackerAdmin(req, res, next) {
   const email = String(req.user?.email || '').trim().toLowerCase();
@@ -267,6 +269,49 @@ async function updateRun(pool, runId, fields) {
   await pool.query(`UPDATE tracker_runs SET ${sets.join(', ')} WHERE id = $${values.length}`, values);
 }
 
+async function markRunInterrupted(pool, runId) {
+  const { rows } = await pool.query(
+    `UPDATE tracker_runs
+     SET status = 'failed',
+         completed_at = NOW(),
+         error_text = $2,
+         progress_json = progress_json || $3::jsonb
+     WHERE id = $1
+     RETURNING *`,
+    [
+      runId,
+      INTERRUPTED_RUN_ERROR,
+      JSON.stringify({
+        stage: 'failed',
+        progress: 100,
+        errorType: 'interrupted',
+        error: INTERRUPTED_RUN_ERROR,
+      }),
+    ],
+  );
+  return rows[0] || null;
+}
+
+async function sweepInterruptedRuns(pool) {
+  await pool.query(
+    `UPDATE tracker_runs
+     SET status = 'failed',
+         completed_at = NOW(),
+         error_text = $1,
+         progress_json = progress_json || $2::jsonb
+     WHERE status IN ('queued', 'running')`,
+    [
+      INTERRUPTED_RUN_ERROR,
+      JSON.stringify({
+        stage: 'failed',
+        progress: 100,
+        errorType: 'interrupted',
+        error: INTERRUPTED_RUN_ERROR,
+      }),
+    ],
+  );
+}
+
 async function loadRun(pool, idOrKey) {
   const asInt = parseInt(String(idOrKey), 10);
   if (Number.isFinite(asInt) && String(asInt) === String(idOrKey)) {
@@ -275,6 +320,20 @@ async function loadRun(pool, idOrKey) {
   }
   const { rows } = await pool.query('SELECT * FROM tracker_runs WHERE run_key = $1', [String(idOrKey)]);
   return rows[0] || null;
+}
+
+function runFreshnessTime(run) {
+  const progress = run?.progress_json || {};
+  const value = progress.updatedAt || run?.started_at || run?.created_at;
+  const time = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function isStaleOrphanedRun(run) {
+  if (!run || TERMINAL_RUN_STATUSES.has(run.status)) return false;
+  if (inFlightRuns.has(run.id)) return false;
+  const lastSeen = runFreshnessTime(run);
+  return !lastSeen || Date.now() - lastSeen > STALE_THRESHOLD_MS;
 }
 
 async function fetchReboticsAction(actionId) {
@@ -355,6 +414,7 @@ async function insertRunResults(pool, runId, compared) {
 async function processRun(pool, run, options = {}) {
   const cancelSignal = options.signal || null;
   const warnings = [];
+  let keepalive = null;
   try {
     throwIfAborted(cancelSignal);
     const params = normalizeRunParams(run.params_json || {});
@@ -371,6 +431,7 @@ async function processRun(pool, run, options = {}) {
       progress_json: JSON.stringify({
         stage: 'starting',
         progress: 0,
+        updatedAt: new Date().toISOString(),
         stores: params.stores.length,
         dates: range.dates.length,
         dateFrom: range.dateFrom,
@@ -384,6 +445,7 @@ async function processRun(pool, run, options = {}) {
       progress_json: JSON.stringify({
         stage: 'pulling_sources',
         progress: 15,
+        updatedAt: new Date().toISOString(),
         message: `Starting source pulls for ${formatRunDateRange(range.dateFrom, range.dateTo)}.`,
         stores: params.stores.length,
         dates: range.dates.length,
@@ -398,13 +460,15 @@ async function processRun(pool, run, options = {}) {
       prod: { done: false, info: null },
       si: { done: false, info: null, startedAt: 0 },
     };
+    let lastProgress = null;
     const writeProgress = (progress) => {
       throwIfAborted(cancelSignal);
+      lastProgress = {
+        ...progress,
+        updatedAt: new Date().toISOString(),
+      };
       return updateRun(pool, run.id, {
-        progress_json: JSON.stringify({
-          ...progress,
-          updatedAt: new Date().toISOString(),
-        }),
+        progress_json: JSON.stringify(lastProgress),
       });
     };
     const writeProdProgress = async (info) => {
@@ -416,53 +480,53 @@ async function processRun(pool, run, options = {}) {
       if (!sourceState.si.startedAt) sourceState.si.startedAt = Date.now();
       await writeProgress(buildSiProgress(info, range, params, { prodDone: sourceState.prod.done }));
     };
-    const heartbeat = setInterval(() => {
+    keepalive = setInterval(() => {
       if (cancelSignal?.aborted) return;
-      if (sourceState.si.done) return;
-      const info = sourceState.si.info || (sourceState.prod.done ? {
+      const info = !sourceState.si.done && (sourceState.si.info || (sourceState.prod.done ? {
         source: 'si',
         storeNumber: params.stores[0] || null,
         date: range.dates[0] || null,
         completedLookups: 0,
         totalLookups: Math.max(1, range.dates.length * params.stores.length),
         rows: 0,
-      } : null);
-      if (!info) return;
-      if (!sourceState.si.startedAt) sourceState.si.startedAt = Date.now();
-      writeProgress(buildSiProgress(info, range, params, {
-        heartbeat: true,
-        elapsedMs: Date.now() - sourceState.si.startedAt,
-        prodDone: sourceState.prod.done,
-      })).catch(() => {});
+      } : null));
+      if (info) {
+        if (!sourceState.si.startedAt) sourceState.si.startedAt = Date.now();
+        writeProgress(buildSiProgress(info, range, params, {
+          heartbeat: true,
+          elapsedMs: Date.now() - sourceState.si.startedAt,
+          prodDone: sourceState.prod.done,
+        })).catch(() => {});
+        return;
+      }
+      if (lastProgress && !TERMINAL_RUN_STATUSES.has(lastProgress.stage)) {
+        writeProgress(lastProgress).catch(() => {});
+      }
     }, RUN_HEARTBEAT_MS);
 
     let prodResult;
     let siResult;
-    try {
-      [prodResult, siResult] = await Promise.allSettled([
-        sasReports.fetchRows({
-          stores: params.stores,
-          projects: params.projects,
-          dateFrom: range.dateFrom,
-          dateTo: range.dateTo,
-          settings: runSettings,
-          onProgress: (info) => writeProdProgress(info).catch(() => {}),
-        }).finally(() => {
-          sourceState.prod.done = true;
-        }),
-        reboticsReports.fetchRows({
-          stores: params.stores,
-          dates: range.dates,
-          settings: runSettings,
-          onWarning: (message) => warnings.push(message),
-          onProgress: (info) => writeSiProgress(info).catch(() => {}),
-        }).finally(() => {
-          sourceState.si.done = true;
-        }),
-      ]);
-    } finally {
-      clearInterval(heartbeat);
-    }
+    [prodResult, siResult] = await Promise.allSettled([
+      sasReports.fetchRows({
+        stores: params.stores,
+        projects: params.projects,
+        dateFrom: range.dateFrom,
+        dateTo: range.dateTo,
+        settings: runSettings,
+        onProgress: (info) => writeProdProgress(info).catch(() => {}),
+      }).finally(() => {
+        sourceState.prod.done = true;
+      }),
+      reboticsReports.fetchRows({
+        stores: params.stores,
+        dates: range.dates,
+        settings: runSettings,
+        onWarning: (message) => warnings.push(message),
+        onProgress: (info) => writeSiProgress(info).catch(() => {}),
+      }).finally(() => {
+        sourceState.si.done = true;
+      }),
+    ]);
     throwIfAborted(cancelSignal);
 
     let prodRows = [];
@@ -475,16 +539,14 @@ async function processRun(pool, run, options = {}) {
       throw new Error('Both SAS and Rebotics pulls failed; no rows to compare.');
     }
 
-    await updateRun(pool, run.id, {
-      progress_json: JSON.stringify({
-        stage: 'comparing',
-        progress: 70,
-        message: 'Comparing PROD and Store Intelligence results.',
-        prodRows: prodRows.length,
-        siRows: siRows.length,
-        dateFrom: range.dateFrom,
-        dateTo: range.dateTo,
-      }),
+    await writeProgress({
+      stage: 'comparing',
+      progress: 70,
+      message: 'Comparing PROD and Store Intelligence results.',
+      prodRows: prodRows.length,
+      siRows: siRows.length,
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
     });
 
     const compared = compareRows(prodRows, siRows);
@@ -541,6 +603,7 @@ async function processRun(pool, run, options = {}) {
       }),
     });
   } finally {
+    if (keepalive) clearInterval(keepalive);
     inFlightRuns.delete(run.id);
   }
 }
@@ -573,6 +636,10 @@ function jsonToCsv(rows) {
 
 function createTrackersRouter({ pool }) {
   const router = express.Router();
+  sweepInterruptedRuns(pool).catch((err) => {
+    console.error('[trackers] failed to mark interrupted startup runs:', err.message);
+  });
+
   router.use((req, _res, next) => {
     req.trackerPool = pool;
     next();
@@ -700,8 +767,11 @@ function createTrackersRouter({ pool }) {
   });
 
   router.get('/runs/:id', async (req, res) => {
-    const run = await loadRun(pool, req.params.id);
+    let run = await loadRun(pool, req.params.id);
     if (!run) return res.status(404).json({ ok: false, error: 'Run not found' });
+    if (isStaleOrphanedRun(run)) {
+      run = await markRunInterrupted(pool, run.id) || run;
+    }
     return res.json({
       ok: true,
       run: {
