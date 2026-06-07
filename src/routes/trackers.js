@@ -10,7 +10,7 @@ const reboticsBridge = require('../rebotics-bridge');
 const { resolveRange } = require('../lib/trackers/date-range');
 const sasReports = require('../lib/trackers/sas-reports');
 const reboticsReports = require('../lib/trackers/rebotics-reports');
-const { compareRows } = require('../lib/trackers/compare');
+const { compareRows, PHASE2_ROSTER_NOTE } = require('../lib/trackers/compare');
 const { cancelledError, throwIfAborted } = require('../lib/trackers/concurrency');
 const {
   DEFAULT_PROJECT_IDS,
@@ -105,6 +105,10 @@ function normalizeProjects(projects) {
     .filter((n) => Number.isFinite(n));
 }
 
+function truthyFlag(value) {
+  return ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
+}
+
 function normalizeRunParams(params = {}) {
   const explicitStores = normalizeStores(params.stores);
   const districts = normalizeDistricts(params.districts);
@@ -116,15 +120,16 @@ function normalizeRunParams(params = {}) {
     ...params,
     stores,
     districts,
-    projects: projects.length ? projects : DEFAULT_PROJECT_IDS,
+    projects,
+    includeOffScope: truthyFlag(params.includeOffScope),
   };
 }
 
-function validateRunShape({ params, range, settings }) {
-  const projects = params.projects?.length ? params.projects : DEFAULT_PROJECT_IDS;
+function validateRunShape({ params, range, settings, effectiveProjectCount = null }) {
+  const projectCount = effectiveProjectCount || params.projects?.length || DEFAULT_PROJECT_IDS.length;
   const stores = params.stores || [];
   const dates = range.dates || [];
-  const workUnits = stores.length * dates.length * projects.length;
+  const workUnits = stores.length * dates.length * projectCount;
   const warnings = [];
 
   if (!stores.length) {
@@ -359,10 +364,12 @@ async function insertRunResults(pool, runId, compared) {
     const { rows } = await pool.query(
       `INSERT INTO tracker_run_items (
         run_id, store_number, work_date, period_week, project_id, project_name, dbkey, pog, category_set_label,
-        prod_status, si_status, prod_photo_count, si_photo_count, confidence, notes, source_refs_json
+        prod_status, si_status, prod_photo_count, si_photo_count, confidence, notes, source_refs_json,
+        expectation, prod_presence_state, si_presence_state, row_state, reason
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9,
-        $10, $11, $12, $13, $14, $15, $16::jsonb
+        $10, $11, $12, $13, $14, $15, $16::jsonb,
+        $17, $18, $19, $20, $21
       ) RETURNING id`,
       [
         runId,
@@ -381,10 +388,15 @@ async function insertRunResults(pool, runId, compared) {
         item.confidence || 'needs_review',
         item.notes || null,
         JSON.stringify(sourceRefs),
+        item.expectation || null,
+        item.prodPresenceState || null,
+        item.siPresenceState || null,
+        item.rowState || item.comparisonStatus || null,
+        item.reason || null,
       ],
     );
     const itemId = rows[0].id;
-    const key = `${item.storeNumber || ''}|${item.dbkey || ''}|${item.workDate || ''}`;
+    const key = item.itemKey || `${item.storeNumber || ''}|${item.dbkey || ''}`;
     itemIdByKey.set(key, itemId);
   }
 
@@ -422,7 +434,16 @@ async function processRun(pool, run, options = {}) {
     const settings = await loadTrackerSettings(pool);
     const runSettings = { ...settings, cancelSignal };
     const range = resolveRange(params);
-    const guard = validateRunShape({ params, range, settings });
+    const projectMode = Boolean(params.projects.length);
+    const effectiveProjects = projectMode
+      ? params.projects
+      : (await sasReports.discoverProjects())
+        .map((project) => Number(project.id))
+        .filter((id) => Number.isFinite(id));
+    if (!effectiveProjects.length) throw new Error('No SAS projects are available for full reconciliation.');
+    const includeOffScope = Boolean(settings.includeOffScope || params.includeOffScope);
+    const sourceParams = { ...params, projects: effectiveProjects };
+    const guard = validateRunShape({ params, range, settings, effectiveProjectCount: effectiveProjects.length });
     if (!guard.ok) throw new Error(guard.error);
     warnings.push(...guard.warnings);
 
@@ -437,7 +458,7 @@ async function processRun(pool, run, options = {}) {
         dates: range.dates.length,
         dateFrom: range.dateFrom,
         dateTo: range.dateTo,
-        projects: params.projects.length,
+        projects: effectiveProjects.length,
         workUnits: guard.workUnits,
       }),
     });
@@ -452,7 +473,7 @@ async function processRun(pool, run, options = {}) {
         dates: range.dates.length,
         dateFrom: range.dateFrom,
         dateTo: range.dateTo,
-        projects: params.projects.length,
+        projects: effectiveProjects.length,
         workUnits: guard.workUnits,
       }),
     });
@@ -474,7 +495,7 @@ async function processRun(pool, run, options = {}) {
     };
     const writeProdProgress = async (info) => {
       sourceState.prod.info = { ...info };
-      await writeProgress(buildProdProgress(info, range, params));
+      await writeProgress(buildProdProgress(info, range, sourceParams));
     };
     const writeSiProgress = async (info) => {
       sourceState.si.info = { ...info };
@@ -510,7 +531,7 @@ async function processRun(pool, run, options = {}) {
     [prodResult, siResult] = await Promise.allSettled([
       sasReports.fetchRows({
         stores: params.stores,
-        projects: params.projects,
+        projects: effectiveProjects,
         dateFrom: range.dateFrom,
         dateTo: range.dateTo,
         settings: runSettings,
@@ -550,7 +571,12 @@ async function processRun(pool, run, options = {}) {
       dateTo: range.dateTo,
     });
 
-    const compared = compareRows(prodRows, siRows);
+    const compared = compareRows(prodRows, siRows, {
+      expectedProdRows: [],
+      projectMode,
+      includeOffScope,
+    });
+    if (!warnings.includes(PHASE2_ROSTER_NOTE)) warnings.push(PHASE2_ROSTER_NOTE);
     throwIfAborted(cancelSignal);
     await insertRunResults(pool, run.id, compared);
     throwIfAborted(cancelSignal);
@@ -684,7 +710,10 @@ function createTrackersRouter({ pool }) {
   });
 
   router.post('/runs', async (req, res) => {
-    const params = normalizeRunParams(req.body || {});
+    const params = normalizeRunParams({
+      ...(req.body || {}),
+      includeOffScope: req.body?.includeOffScope ?? req.query.includeOffScope,
+    });
     let range;
     try {
       range = resolveRange(params);
@@ -692,7 +721,13 @@ function createTrackersRouter({ pool }) {
       return res.status(400).json({ ok: false, error: err.message, errorType: 'validation' });
     }
     const settings = req.trackerSettings || await loadTrackerSettings(pool);
-    const guard = validateRunShape({ params, range, settings });
+    const effectiveProjectCount = params.projects.length
+      ? params.projects.length
+      : (await sasReports.discoverProjects()).filter((project) => Number.isFinite(Number(project.id))).length;
+    if (!effectiveProjectCount) {
+      return res.status(400).json({ ok: false, error: 'No SAS projects are available for full reconciliation.', errorType: 'validation' });
+    }
+    const guard = validateRunShape({ params, range, settings, effectiveProjectCount });
     if (!guard.ok) {
       return res.status(guard.status).json({ ok: false, error: guard.error, errorType: 'request_too_large' });
     }
@@ -709,6 +744,7 @@ function createTrackersRouter({ pool }) {
           stores: params.stores,
           districts: params.districts,
           projects: params.projects,
+          includeOffScope: Boolean(settings.includeOffScope || params.includeOffScope),
           dateFrom: range.dateFrom,
           dateTo: range.dateTo,
           guardWarnings: guard.warnings,
@@ -720,7 +756,7 @@ function createTrackersRouter({ pool }) {
           dates: range.dates.length,
           dateFrom: range.dateFrom,
           dateTo: range.dateTo,
-          projects: params.projects.length,
+          projects: effectiveProjectCount,
           workUnits: guard.workUnits,
           warnings: guard.warnings,
         }),
@@ -831,7 +867,7 @@ function createTrackersRouter({ pool }) {
     }
     if (status) {
       params.push(status);
-      where.push(`(prod_status = $${params.length} OR si_status = $${params.length})`);
+      where.push(`COALESCE(row_state, 'legacy') = $${params.length}`);
     }
     if (store) {
       params.push(String(parseInt(store, 10)));
@@ -853,12 +889,18 @@ function createTrackersRouter({ pool }) {
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     );
+    const items = itemsResult.rows.map((item) => ({
+      ...item,
+      row_state: item.row_state || 'legacy',
+      reason: item.reason || item.notes || null,
+      comparisonStatus: item.row_state || 'legacy',
+    }));
     return res.json({
       ok: true,
       page,
       pageSize,
       total: countResult.rows[0].total,
-      items: itemsResult.rows,
+      items,
     });
   });
 
@@ -922,7 +964,12 @@ function createTrackersRouter({ pool }) {
         prod_photo_count,
         si_photo_count,
         confidence,
-        notes
+        notes,
+        COALESCE(expectation, 'in_project_scope') AS expectation,
+        COALESCE(prod_presence_state, prod_status, 'absent') AS prod_presence_state,
+        COALESCE(si_presence_state, si_status, 'absent') AS si_presence_state,
+        COALESCE(row_state, 'legacy') AS row_state,
+        COALESCE(reason, notes) AS reason
        FROM tracker_run_items
        WHERE run_id = $1
        ORDER BY store_number, work_date, dbkey`,
@@ -954,7 +1001,12 @@ function createTrackersRouter({ pool }) {
         prod_photo_count,
         si_photo_count,
         confidence,
-        notes
+        notes,
+        COALESCE(expectation, 'in_project_scope') AS expectation,
+        COALESCE(prod_presence_state, prod_status, 'absent') AS prod_presence_state,
+        COALESCE(si_presence_state, si_status, 'absent') AS si_presence_state,
+        COALESCE(row_state, 'legacy') AS row_state,
+        COALESCE(reason, notes) AS reason
        FROM tracker_run_items
        WHERE run_id = $1
        ORDER BY store_number, work_date, dbkey`,

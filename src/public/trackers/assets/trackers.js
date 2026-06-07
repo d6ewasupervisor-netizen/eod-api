@@ -336,13 +336,15 @@
     const stores = estimateStores();
     const dates = estimateDates();
     const projects = selectedProjects().length;
-    const workUnits = stores * dates * projects;
+    const effectiveProjects = projects || (state.bootstrap?.projects || []).length;
+    const workUnits = stores * dates * effectiveProjects;
     const max = state.bootstrap.trackerDefaults?.maxRunWorkUnits || 3000;
-    const detail = !projects
-      ? 'Choose at least one project.'
-      : stores || selectedDistricts().length
-      ? `${stores} stores, ${dates || '?'} days, ${projects} projects${selectedFiscalWeek() ? ` (${selectedFiscalWeek().short}: ${selectedFiscalWeek().start} to ${selectedFiscalWeek().end})` : ''}.`
-      : 'Choose at least one store or district.';
+    const hasStores = stores || selectedDistricts().length;
+    const detail = !hasStores
+      ? 'Choose at least one store or district.'
+      : !projects
+        ? `Full reconciliation: ${stores || 0} stores, ${dates || '?'} days, ${effectiveProjects} known projects.`
+        : `${stores} stores, ${dates || '?'} days, ${projects} projects${selectedFiscalWeek() ? ` (${selectedFiscalWeek().short}: ${selectedFiscalWeek().start} to ${selectedFiscalWeek().end})` : ''}.`;
     const warning = workUnits > max
       ? ` Over the ${max} check limit. Split the run.`
       : workUnits > max * 0.75
@@ -359,7 +361,6 @@
     const period = document.getElementById('period').value;
     const week = document.getElementById('week').value;
     const projects = selectedProjects();
-    if (!projects.length) throw new Error('Choose at least one project.');
     const body = {
       stores: parseStores(stores),
       districts: selectedDistricts(),
@@ -423,8 +424,12 @@
       <div class="summary-card"><strong>${filteredTotal}</strong><span>Filtered rows</span></div>
       <div class="summary-card"><strong>${runSummary.needsReview || 0}</strong><span>Needs review</span></div>
       <div class="summary-card"><strong>${runSummary.prodRows || 0}/${runSummary.siRows || 0}</strong><span>Source rows PROD/SI</span></div>
-      <div class="summary-card"><strong>${byStatus.prod_only || 0}</strong><span>PROD only</span></div>
-      <div class="summary-card"><strong>${byStatus.si_only || 0}</strong><span>SI only</span></div>
+      <div class="summary-card"><strong>${byStatus.matched_done || 0}</strong><span>Matched done</span></div>
+      <div class="summary-card"><strong>${byStatus.done_photo_mismatch || 0}</strong><span>Done, photo mismatch</span></div>
+      <div class="summary-card"><strong>${byStatus.si_incomplete || 0}</strong><span>SI incomplete</span></div>
+      <div class="summary-card"><strong>${byStatus.missing_in_si || 0}</strong><span>Missing in SI</span></div>
+      <div class="summary-card"><strong>${byStatus.missing_in_prod || 0}</strong><span>Missing in PROD</span></div>
+      <div class="summary-card"><strong>${byStatus.off_scope_si || 0}</strong><span>Off-scope SI</span></div>
     `;
   }
 

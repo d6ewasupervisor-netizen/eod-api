@@ -39,6 +39,7 @@ const DEFAULTS = {
   maxRunStores: parseIntEnv('TRACKER_MAX_RUN_STORES', 120),
   maxRunDates: parseIntEnv('TRACKER_MAX_RUN_DATES', 14),
   maxRunWorkUnits: parseIntEnv('TRACKER_MAX_RUN_WORK_UNITS', 3000),
+  includeOffScope: parseBoolEnv('TRACKER_INCLUDE_OFF_SCOPE', false),
   trackerAllowSupervisors: parseBoolEnv('TRACKER_ALLOW_SUPERVISORS', true),
   trackerAllowAdmins: parseBoolEnv('TRACKER_ALLOW_ADMINS', true),
   trackerAllowedEmails: parseCsvEnv('TRACKER_ALLOWED_EMAILS', []).map((e) => e.toLowerCase()),
@@ -70,6 +71,9 @@ function sanitize(input = {}) {
   out.maxRunStores = Math.min(500, Math.max(1, parseInt(input.maxRunStores, 10) || DEFAULTS.maxRunStores));
   out.maxRunDates = Math.min(60, Math.max(1, parseInt(input.maxRunDates, 10) || DEFAULTS.maxRunDates));
   out.maxRunWorkUnits = Math.min(25000, Math.max(1, parseInt(input.maxRunWorkUnits, 10) || DEFAULTS.maxRunWorkUnits));
+  out.includeOffScope = Boolean(
+    input.includeOffScope != null ? input.includeOffScope : DEFAULTS.includeOffScope
+  );
   out.trackerAllowSupervisors = Boolean(
     input.trackerAllowSupervisors != null ? input.trackerAllowSupervisors : DEFAULTS.trackerAllowSupervisors
   );

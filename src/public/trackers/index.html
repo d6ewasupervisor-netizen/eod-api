@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Trackers</title>
-  <link rel="stylesheet" href="/trackers/assets/trackers.css?v=20260606-1" />
+  <link rel="stylesheet" href="/trackers/assets/trackers.css?v=20260607-1" />
   <script src="/auth-gate.js"></script>
 </head>
 <body>
@@ -80,10 +80,13 @@
         <label>Status
           <select id="status">
             <option value="">All</option>
-            <option value="prod_only">PROD only</option>
-            <option value="si_only">SI only</option>
-            <option value="complete_in_prod_not_si">Complete in PROD not SI</option>
-            <option value="complete_in_si_not_prod">Complete in SI not PROD</option>
+            <option value="matched_done">Matched done</option>
+            <option value="done_photo_mismatch">Done, photo mismatch</option>
+            <option value="si_incomplete">SI incomplete</option>
+            <option value="missing_in_si">Missing in SI</option>
+            <option value="missing_in_prod">Missing in PROD</option>
+            <option value="off_scope_si">Off-scope SI</option>
+            <option value="legacy">Legacy</option>
           </select>
         </label>
         <label>Sort
@@ -137,6 +140,6 @@
     </dialog>
   </main>
 
-  <script src="/trackers/assets/trackers.js?v=20260606-1"></script>
+  <script src="/trackers/assets/trackers.js?v=20260607-1"></script>
 </body>
 </html>
