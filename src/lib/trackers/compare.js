@@ -68,9 +68,9 @@ function reasonFor(rowState, { prodPhotoCount = 0, siPhotoCount = 0 } = {}) {
     case 'missing_in_si':
       return 'In project scope; PROD shows it complete but SI has no task for it.';
     case 'missing_in_prod':
-      return 'SI shows this complete but PROD has no completed row for it.';
+      return 'In project scope; SI shows complete but PROD has no completed row in this run.';
     case 'off_scope_si':
-      return 'Outside the selected project scope; SI has a task for it.';
+      return "SI captured this; dbkey not in the selected project's scope.";
     case 'missing_in_both':
       return 'Expected by the project roster, but neither system shows completion.';
     default:
@@ -87,30 +87,32 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
   const prodRows = attachPeriodWeek(prodRowsIn || []);
   const siRows = attachPeriodWeek(siRowsIn || []);
   const expectedRows = attachPeriodWeek(expectedProdRows || []);
-  const scopeDbkeys = new Set([...prodRows, ...expectedRows].map((row) => normDbkey(row.dbkey)).filter(Boolean));
+  const comparableProdRows = prodRows.filter((row) => normDbkey(row.dbkey));
+  const comparableSiRows = siRows.filter((row) => normDbkey(row.dbkey));
+  const nonPlanogramProdRows = prodRows.filter((row) => !normDbkey(row.dbkey));
+  const nonPlanogramSiRows = siRows.filter((row) => !normDbkey(row.dbkey));
+  const scopeDbkeys = new Set([...comparableProdRows, ...expectedRows].map((row) => normDbkey(row.dbkey)).filter(Boolean));
   const grouped = new Map();
-  const offScope = new Map();
 
-  for (const row of prodRows) {
+  for (const row of comparableProdRows) {
     const key = buildKey(row);
     if (!grouped.has(key)) grouped.set(key, { prod: [], si: [], key });
     grouped.get(key).prod.push(row);
   }
-  for (const row of siRows) {
+  for (const row of comparableSiRows) {
     const key = buildKey(row);
-    const dbkey = normDbkey(row.dbkey);
-    const isOffScope = projectMode && dbkey && !scopeDbkeys.has(dbkey);
-    const siState = normalizeSiStatus(row.status);
-    // In project mode, completed SI work outside the PROD project dbkey set is
-    // actionable as missing_in_prod. Only incomplete off-scope SI tasks are gated.
-    const target = isOffScope && siState !== 'done' ? offScope : grouped;
-    if (!target.has(key)) target.set(key, { prod: [], si: [], key });
-    target.get(key).si.push(row);
+    if (!grouped.has(key)) grouped.set(key, { prod: [], si: [], key });
+    grouped.get(key).si.push(row);
   }
 
   const items = [];
   const images = [];
-  function addBucket(bucket, expectation = 'in_project_scope') {
+  let offScopeHidden = 0;
+  function expectationForDbkey(dbkey) {
+    if (!projectMode) return 'in_project_scope';
+    return dbkey && scopeDbkeys.has(dbkey) ? 'in_project_scope' : 'off_scope';
+  }
+  function addBucket(bucket) {
     const allRows = [...bucket.prod, ...bucket.si];
     const prodSample = pickMostComplete(bucket.prod, normalizeProdStatus);
     const siSample = pickMostComplete(bucket.si, normalizeSiStatus);
@@ -121,18 +123,19 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
     const siPhotoCount = bucket.si.reduce((acc, r) => acc + (r.photoCount || 0), 0);
     const prodPresenceState = prodSample && normalizeProdStatus(prodSample.status) === 'done' ? 'done' : 'absent';
     const siPresenceState = siSample ? normalizeSiStatus(siSample.status) : 'absent';
+    const expectation = expectationForDbkey(dbkey);
     const notes = [];
     if (!dbkey) notes.push('Missing dbkey');
     if (!bucket.prod.length || !bucket.si.length) notes.push(bucket.prod.length ? 'Missing SI match' : 'Missing PROD match');
     if (bucket.prod.length > 1 || bucket.si.length > 1) notes.push('Multiple rows merged for same key');
     if (Math.abs(prodPhotoCount - siPhotoCount) > 0) notes.push('Photo count mismatch');
     let rowState = 'missing_in_both';
-    if (expectation === 'off_scope') rowState = 'off_scope_si';
+    if (expectation === 'off_scope' && siSample) rowState = 'off_scope_si';
     else if (siPresenceState === 'not_done') rowState = 'si_incomplete';
     else if (prodPresenceState === 'done' && siPresenceState === 'done' && prodPhotoCount !== siPhotoCount) rowState = 'done_photo_mismatch';
     else if (prodPresenceState === 'done' && siPresenceState === 'done') rowState = 'matched_done';
     else if (prodPresenceState === 'done' && siPresenceState === 'absent') rowState = 'missing_in_si';
-    else if (prodPresenceState === 'absent' && siPresenceState === 'done') rowState = 'missing_in_prod';
+    else if (expectation === 'in_project_scope' && prodPresenceState === 'absent' && siPresenceState === 'done') rowState = 'missing_in_prod';
     // TODO(phase2): missing_in_both requires expectedProdRows from the PROD roster.
     // With Phase 1's completed-only PROD rows, this state should not be emitted.
     if (rowState === 'missing_in_both' && !expectedRows.length) rowState = bucket.si.length ? 'missing_in_prod' : 'missing_in_si';
@@ -167,6 +170,10 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
         si: bucket.si.map((r) => r.raw).slice(0, 5),
       },
     };
+    if (expectation === 'off_scope' && !includeOffScope) {
+      offScopeHidden += 1;
+      return;
+    }
     items.push(item);
 
     for (const row of bucket.prod) {
@@ -180,10 +187,7 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
       }
     }
   }
-  for (const bucket of grouped.values()) addBucket(bucket, 'in_project_scope');
-  if (includeOffScope) {
-    for (const bucket of offScope.values()) addBucket(bucket, 'off_scope');
-  }
+  for (const bucket of grouped.values()) addBucket(bucket);
 
   items.sort((a, b) => {
     const byStore = String(a.storeNumber).localeCompare(String(b.storeNumber), undefined, { numeric: true });
@@ -193,6 +197,14 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
     return String(a.dbkey || '').localeCompare(String(b.dbkey || ''));
   });
 
+  const notes = [PHASE2_ROSTER_NOTE];
+  if (nonPlanogramProdRows.length) {
+    notes.push(`${nonPlanogramProdRows.length} non-planogram PROD row${nonPlanogramProdRows.length === 1 ? '' : 's'} excluded from planogram comparison.`);
+  }
+  if (nonPlanogramSiRows.length) {
+    notes.push(`${nonPlanogramSiRows.length} non-planogram SI row${nonPlanogramSiRows.length === 1 ? '' : 's'} excluded from planogram comparison.`);
+  }
+
   const summary = {
     total: items.length,
     byStatus: items.reduce((acc, item) => {
@@ -201,8 +213,10 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
       return acc;
     }, {}),
     needsReview: items.filter((i) => i.confidence !== 'high').length,
-    notes: [PHASE2_ROSTER_NOTE],
-    offScopeHidden: includeOffScope ? 0 : offScope.size,
+    notes,
+    offScopeHidden,
+    nonPlanogramProdRows: nonPlanogramProdRows.length,
+    nonPlanogramSiRows: nonPlanogramSiRows.length,
   };
 
   return { items, images, summary };

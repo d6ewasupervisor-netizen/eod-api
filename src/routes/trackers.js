@@ -576,7 +576,9 @@ async function processRun(pool, run, options = {}) {
       projectMode,
       includeOffScope,
     });
-    if (!warnings.includes(PHASE2_ROSTER_NOTE)) warnings.push(PHASE2_ROSTER_NOTE);
+    for (const note of compared.summary.notes || [PHASE2_ROSTER_NOTE]) {
+      if (!warnings.includes(note)) warnings.push(note);
+    }
     throwIfAborted(cancelSignal);
     await insertRunResults(pool, run.id, compared);
     throwIfAborted(cancelSignal);

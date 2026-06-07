@@ -43,10 +43,11 @@ test('compareRows marks matched done when both systems complete with equal photo
   assert.equal(result.summary.needsReview, 0);
 });
 
-test('compareRows marks missing dbkey as needs_review', () => {
+test('compareRows excludes blank-dbkey PROD rows from planogram comparison', () => {
   const result = compareRows([prod({ dbkey: '' })], []);
-  assert.equal(result.items[0].confidence, 'needs_review');
-  assert.match(result.items[0].notes, /Missing dbkey/);
+  assert.equal(result.items.length, 0);
+  assert.equal(result.summary.nonPlanogramProdRows, 1);
+  assert.match(result.summary.notes.join(' '), /non-planogram PROD row excluded/);
 });
 
 test('compareRows marks PROD done with no SI task as missing_in_si with reason', () => {
@@ -65,25 +66,32 @@ test('compareRows treats completed photo-count mismatches as done_photo_mismatch
   assert.match(result.items[0].notes, /Photo count mismatch/);
 });
 
-test('compareRows filters incomplete off-scope SI rows by default and can surface them', () => {
+test('compareRows filters off-scope SI rows by default and can surface them', () => {
   const prodRows = [prod({ dbkey: '1111111' })];
   const siRows = [
     si({ dbkey: '1111111' }),
     si({ dbkey: '2222222', status: 'started' }),
+    si({ dbkey: '3333333', status: 'completed' }),
   ];
   const hidden = compareRows(prodRows, siRows, { projectMode: true });
   assert.equal(hidden.items.length, 1);
-  assert.equal(hidden.summary.offScopeHidden, 1);
+  assert.equal(hidden.summary.offScopeHidden, 2);
   const visible = compareRows(prodRows, siRows, { projectMode: true, includeOffScope: true });
-  assert.equal(visible.items.length, 2);
+  assert.equal(visible.items.length, 3);
   assert.equal(visible.items.find((item) => item.dbkey === '2222222').rowState, 'off_scope_si');
+  assert.equal(visible.items.find((item) => item.dbkey === '3333333').rowState, 'off_scope_si');
+  assert.equal(visible.items.find((item) => item.dbkey === '3333333').expectation, 'off_scope');
 });
 
-test('compareRows treats completed SI outside project scope as missing_in_prod', () => {
-  const result = compareRows([prod({ dbkey: '1111111' })], [si({ dbkey: '2222222' })], { projectMode: true });
-  const item = result.items.find((row) => row.dbkey === '2222222');
+test('compareRows emits missing_in_prod only for in-scope expected dbkeys', () => {
+  const result = compareRows([], [si({ dbkey: '2222222' })], {
+    projectMode: true,
+    expectedProdRows: [prod({ dbkey: '2222222', status: 'scheduled', photoCount: 0, images: [] })],
+  });
+  const item = result.items[0];
   assert.equal(item.rowState, 'missing_in_prod');
   assert.equal(item.expectation, 'in_project_scope');
+  assert.match(item.reason, /In project scope/);
 });
 
 test('compareRows performs full outer reconciliation without project filtering', () => {
@@ -114,4 +122,48 @@ test('compareRows does not emit missing_in_both in Phase 1 and returns roster no
   const result = compareRows([prod()], [], { expectedProdRows: [] });
   assert.equal(result.summary.byStatus.missing_in_both || 0, 0);
   assert.ok(result.summary.notes.includes(PHASE2_ROSTER_NOTE));
+});
+
+test('compareRows counts and excludes blank-dbkey SI rows', () => {
+  const result = compareRows([prod()], [si({ dbkey: '' })], { projectMode: true, includeOffScope: true });
+  assert.equal(result.items.length, 1);
+  assert.equal(result.summary.nonPlanogramSiRows, 1);
+  assert.match(result.summary.notes.join(' '), /non-planogram SI row excluded/);
+});
+
+test('compareRows matches run-19 project-mode shape with hidden off-scope SI', () => {
+  const prodRows = [];
+  const siRows = [];
+  for (let i = 1; i <= 9; i += 1) {
+    const dbkey = `100000${i}`;
+    prodRows.push(prod({ dbkey, photoCount: 2 }));
+    siRows.push(si({ dbkey, photoCount: 2 }));
+  }
+  for (let i = 10; i <= 12; i += 1) {
+    const dbkey = `10000${i}`;
+    prodRows.push(prod({ dbkey, photoCount: 2 }));
+    siRows.push(si({ dbkey, photoCount: 1 }));
+  }
+  for (let i = 13; i <= 15; i += 1) {
+    const dbkey = `10000${i}`;
+    prodRows.push(prod({ dbkey, photoCount: 0 }));
+    siRows.push(si({ dbkey, status: 'started', photoCount: 0, images: [] }));
+  }
+  for (let i = 1; i <= 13; i += 1) {
+    siRows.push(si({ dbkey: `20000${String(i).padStart(2, '0')}`, status: 'completed' }));
+  }
+  const result = compareRows(prodRows, siRows, { projectMode: true });
+  assert.equal(result.items.length, 15);
+  assert.deepEqual(result.summary.byStatus, {
+    matched_done: 9,
+    done_photo_mismatch: 3,
+    si_incomplete: 3,
+  });
+  assert.equal(result.summary.offScopeHidden, 13);
+  assert.equal(result.summary.byStatus.missing_in_prod || 0, 0);
+  assert.equal(result.summary.byStatus.missing_in_si || 0, 0);
+
+  const visible = compareRows(prodRows, siRows, { projectMode: true, includeOffScope: true });
+  assert.equal(visible.items.length, 28);
+  assert.equal(visible.summary.byStatus.off_scope_si, 13);
 });
