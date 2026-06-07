@@ -96,6 +96,6 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /Rebotics tasks skipped/);
   assert.match(warnings[0], /2026-05-31/);
-  assert.equal(storeLookups, 1);
+  assert.equal(storeLookups, 0);
   assert.equal(actionScans, 1);
 });

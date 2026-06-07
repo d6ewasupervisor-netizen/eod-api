@@ -33,6 +33,7 @@ const RUN_HEARTBEAT_MS = 15000;
 const TERMINAL_RUN_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 const STALE_THRESHOLD_MS = RUN_HEARTBEAT_MS * 6;
 const INTERRUPTED_RUN_ERROR = 'Run interrupted by a server restart. Please re-run.';
+const PROCESS_STARTED_AT = new Date().toISOString();
 
 function requireTrackerAdmin(req, res, next) {
   const email = String(req.user?.email || '').trim().toLowerCase();
@@ -666,6 +667,10 @@ function createTrackersRouter({ pool }) {
         projects: DEFAULT_PROJECT_IDS,
       },
       trackerDefaults: settings || TRACKER_DEFAULTS,
+      version: {
+        commit: process.env.RAILWAY_GIT_COMMIT_SHA || null,
+        startedAt: PROCESS_STARTED_AT,
+      },
       sas: {
         active: sasBridge.isSessionAlive(),
       },

@@ -2,13 +2,16 @@
 
 const reboticsBridge = require('../../rebotics-bridge');
 const { mapLimit, normalizeConcurrency, throwIfAborted } = require('./concurrency');
+const { REBOTICS_STORE_IDS, seededMissingCustomIds } = require('./rebotics-store-id-cache');
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 const DEFAULT_ACTIONS_PAGE_LIMIT = 200;
 const DEFAULT_MAX_ACTION_PAGES = 40;
 const DEFAULT_MAX_TASK_PAGES = 20;
 const DEFAULT_MAX_ATTEMPTS = 3;
-const storeIdCache = new Map();
+const storeIdCache = new Map(Object.entries(REBOTICS_STORE_IDS));
+const warnedCommittedCacheMisses = new Set();
+let loggedSeedCoverage = false;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -31,6 +34,17 @@ function isAuthError(err) {
 
 function warn(options, message) {
   if (typeof options?.onWarning === 'function') options.onWarning(message);
+}
+
+function logSi(level, event, fields = {}) {
+  const line = JSON.stringify({
+    component: 'trackers.si',
+    event,
+    ...fields,
+    at: new Date().toISOString(),
+  });
+  const writer = level === 'warn' ? console.warn : console.info;
+  writer(`[trackers.si] ${line}`);
 }
 
 function toCustomId(storeNumber) {
@@ -110,7 +124,10 @@ async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, attempt
       return await fetchJsonOnce(path, { timeoutMs, signal });
     } catch (err) {
       lastErr = err;
-      if (err?.code === 'TRACKER_CANCELLED') throw err;
+      if (err?.code === 'TRACKER_CANCELLED') {
+        logSi('warn', 'request_abort_or_timeout', { path, timeoutMs, message: err.message || 'cancelled' });
+        throw err;
+      }
       if (!refreshedAuth && isAuthError(err)) {
         refreshedAuth = true;
         await reboticsBridge.validateCurrentToken({ force: true });
@@ -119,7 +136,10 @@ async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, attempt
           return await fetchJsonOnce(path, { timeoutMs, signal });
         } catch (retryErr) {
           lastErr = retryErr;
-          if (retryErr?.code === 'TRACKER_CANCELLED') throw retryErr;
+          if (retryErr?.code === 'TRACKER_CANCELLED') {
+            logSi('warn', 'request_abort_or_timeout', { path, timeoutMs, message: retryErr.message || 'cancelled' });
+            throw retryErr;
+          }
           if (attempt >= attempts || !isRetriableError(retryErr)) break;
           await sleep(500 * attempt);
           continue;
@@ -130,6 +150,7 @@ async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, attempt
     }
   }
   if (lastErr?.name === 'AbortError') {
+    logSi('warn', 'request_abort_or_timeout', { path, timeoutMs, message: lastErr.message || 'AbortError' });
     throw new Error(`Rebotics request timed out after ${timeoutMs}ms: ${path}`);
   }
   throw lastErr;
@@ -138,7 +159,12 @@ async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, attempt
 function cacheStoreFromTask(task) {
   const customId = String(task?.store?.custom_id || '').trim();
   const internalId = task?.store?.id;
-  if (customId && internalId != null) storeIdCache.set(customId, internalId);
+  if (!customId || internalId == null) return;
+  storeIdCache.set(customId, internalId);
+  if (REBOTICS_STORE_IDS[customId] == null && !warnedCommittedCacheMisses.has(customId)) {
+    warnedCommittedCacheMisses.add(customId);
+    console.warn(`[trackers.si] add ${customId} -> ${internalId} to committed cache`);
+  }
 }
 
 async function resolveStoreInternalIds(customIds, options = {}) {
@@ -149,19 +175,41 @@ async function resolveStoreInternalIds(customIds, options = {}) {
   const attempts = options.reboticsMaxAttempts || DEFAULT_MAX_ATTEMPTS;
   const signal = options.cancelSignal || null;
   throwIfAborted(signal);
+  const startedAt = Date.now();
+  let pagesScanned = 0;
+  let lastDate = null;
 
   const out = new Map();
   for (const customId of wanted) {
     if (storeIdCache.has(customId)) out.set(customId, storeIdCache.get(customId));
   }
   const unresolved = () => [...wanted].filter((customId) => !out.has(customId));
-  if (!unresolved().length) return out;
+  logSi('info', 'resolver_start', {
+    requested: wanted.size,
+    requestedStores: [...wanted],
+    resolvedFromCache: out.size,
+    unresolved: unresolved(),
+    maxTaskPages,
+    dates,
+  });
+  if (!unresolved().length) {
+    logSi('info', 'resolver_finish', {
+      pagesScanned,
+      resolved: out.size,
+      unresolved: [],
+      ms: Date.now() - startedAt,
+    });
+    return out;
+  }
 
   for (const date of dates) {
+    lastDate = date;
     let offset = 0;
+    let hitPageCap = false;
     for (let page = 0; page < maxTaskPages; page += 1) {
       throwIfAborted(signal);
       const data = await fetchJson(`/api/v1/tasks/?from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}`, { timeoutMs, attempts, signal });
+      pagesScanned += 1;
       const rows = Array.isArray(data) ? data : (data?.results || []);
       if (!rows.length) break;
       for (const row of rows) {
@@ -170,12 +218,51 @@ async function resolveStoreInternalIds(customIds, options = {}) {
       for (const customId of unresolved()) {
         if (storeIdCache.has(customId)) out.set(customId, storeIdCache.get(customId));
       }
-      if (!unresolved().length) return out;
+      if (!unresolved().length) {
+        logSi('info', 'resolver_finish', {
+          pagesScanned,
+          resolved: out.size,
+          unresolved: [],
+          ms: Date.now() - startedAt,
+        });
+        return out;
+      }
       const hasMore = data && typeof data === 'object' && data.next != null;
       if (!hasMore) break;
       offset += 200;
+      hitPageCap = page === maxTaskPages - 1;
+    }
+    if (unresolved().length && hitPageCap) {
+      const missing = unresolved();
+      logSi('warn', 'resolver_unresolved', {
+        date,
+        pagesScanned,
+        maxTaskPages,
+        resolved: out.size,
+        unresolved: missing,
+        ms: Date.now() - startedAt,
+      });
+      throw new Error(`Could not resolve Rebotics store ${missing.join(', ')} for ${date} within ${maxTaskPages} task pages.`);
     }
   }
+  if (unresolved().length) {
+    const missing = unresolved();
+    logSi('warn', 'resolver_unresolved', {
+      date: lastDate,
+      pagesScanned,
+      maxTaskPages,
+      resolved: out.size,
+      unresolved: missing,
+      ms: Date.now() - startedAt,
+    });
+    throw new Error(`Could not resolve Rebotics store ${missing.join(', ')} for ${lastDate || 'selected dates'} within ${maxTaskPages} task pages.`);
+  }
+  logSi('info', 'resolver_finish', {
+    pagesScanned,
+    resolved: out.size,
+    unresolved: [],
+    ms: Date.now() - startedAt,
+  });
   return out;
 }
 
@@ -282,6 +369,15 @@ function actionToImage(action, { dbkey = '', storePlanogramId = null } = {}) {
 async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }) {
   const cancelSignal = settings.cancelSignal || null;
   throwIfAborted(cancelSignal);
+  if (!loggedSeedCoverage) {
+    loggedSeedCoverage = true;
+    const missing = seededMissingCustomIds();
+    logSi(missing.length ? 'warn' : 'info', 'committed_cache_coverage', {
+      seeded: Object.keys(REBOTICS_STORE_IDS).length,
+      missingDistrictStores: missing.length,
+      missingCustomIds: missing,
+    });
+  }
   const rows = [];
   const totalLookups = Math.max(1, dates.length * stores.length);
   const reboticsRequestTimeoutMs = parseInt(settings.reboticsRequestTimeoutMs, 10) || DEFAULT_REQUEST_TIMEOUT_MS;
@@ -312,6 +408,7 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
   await mapLimit(units, reboticsConcurrency, async (unit) => {
     throwIfAborted(cancelSignal);
     const { storeNumber, customId, date } = unit;
+    const unitStartedAt = Date.now();
     const progressContext = {
         completedLookups,
         totalLookups,
@@ -320,6 +417,7 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
         storeNumber,
         date,
     };
+    logSi('info', 'unit_start', { storeNumber, customId, date, completedLookups, totalLookups, rows: rows.length });
     if (onProgress) await onProgress({ ...progressContext, status: 'pulling' });
     const storeIds = await storeIdsPromise;
     throwIfAborted(cancelSignal);
@@ -360,6 +458,7 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
       throwIfAborted(cancelSignal);
 
       const out = [];
+      let actionCount = 0;
       for (const task of tasks || []) {
         const dbkey = dbkeyFromTask(task);
         const storePlanogramId = task?.planograms?.[0]?.store_planogram_id || null;
@@ -367,6 +466,7 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
           dbkey,
           storePlanogramId,
         })).filter((image) => image.actionId != null);
+        actionCount += actionsByTaskId.get(task.id)?.length || 0;
         out.push({
           source: 'si',
           storeNumber: String(parseInt(String(storeNumber), 10)),
@@ -388,12 +488,37 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
       }
       rows.push(...out);
       completedLookups += 1;
+      logSi('info', 'unit_finish', {
+        storeNumber,
+        customId,
+        date,
+        taskCount: (tasks || []).length,
+        actionCount,
+        rowCount: out.length,
+        cumulativeRows: rows.length,
+        completedLookups,
+        totalLookups,
+        ms: Date.now() - unitStartedAt,
+      });
       if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
       return;
     } catch (err) {
       throwIfAborted(cancelSignal);
       if (isAuthError(err)) throw err;
       completedLookups += 1;
+      logSi('warn', 'unit_finish', {
+        storeNumber,
+        customId,
+        date,
+        taskCount: null,
+        actionCount: null,
+        rowCount: 0,
+        cumulativeRows: rows.length,
+        completedLookups,
+        totalLookups,
+        ms: Date.now() - unitStartedAt,
+        error: err.message,
+      });
       if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
       warn({ onWarning }, `Rebotics tasks skipped for store ${storeNumber} on ${date}: ${err.message}`);
     }
