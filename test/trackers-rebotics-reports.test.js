@@ -2,15 +2,28 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { EventEmitter } = require('node:events');
+const https = require('node:https');
 
 const reboticsBridge = require('../src/rebotics-bridge');
 const reboticsReports = require('../src/lib/trackers/rebotics-reports');
 
-function jsonResponse(body) {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { 'content-type': 'application/json' },
-  });
+function mockJsonRequest(body) {
+  const req = new EventEmitter();
+  req.end = () => {
+    process.nextTick(() => {
+      const res = new EventEmitter();
+      res.statusCode = 200;
+      res.setEncoding = () => {};
+      req._callback(res);
+      res.emit('data', JSON.stringify(body));
+      res.emit('end');
+    });
+  };
+  req.destroy = (err) => {
+    process.nextTick(() => req.emit('error', err));
+  };
+  return req;
 }
 
 test('fetchRows keeps partial SI rows when one task page times out', async (t) => {
@@ -18,9 +31,9 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
   t.mock.method(reboticsBridge, 'getApiBase', () => 'https://krcs.rebotics.net');
   let storeLookups = 0;
   let actionScans = 0;
-  t.mock.method(global, 'fetch', async (url) => {
-    const path = new URL(url).pathname;
-    const params = new URL(url).searchParams;
+  t.mock.method(https, 'request', (url, _options, callback) => {
+    const path = url.pathname;
+    const params = url.searchParams;
     const date = params.get('from_date');
     const store = params.get('store');
 
@@ -30,22 +43,33 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
 
     if (path === '/api/v1/tasks/' && !store && date === '2026-06-01') {
       storeLookups += 1;
-      return jsonResponse({
+      const req = mockJsonRequest({
         results: [{
           store: { custom_id: '701-00019', id: 3837 },
         }],
         next: null,
       });
+      req._callback = callback;
+      return req;
     }
 
     if (path === '/api/v1/tasks/' && store === '3837' && date === '2026-05-31') {
-      const err = new Error('timed out');
-      err.name = 'AbortError';
-      throw err;
+      const req = new EventEmitter();
+      req.end = () => {
+        process.nextTick(() => {
+          const err = new Error('timed out');
+          err.name = 'AbortError';
+          req.emit('error', err);
+        });
+      };
+      req.destroy = (err) => {
+        process.nextTick(() => req.emit('error', err));
+      };
+      return req;
     }
 
     if (path === '/api/v1/tasks/' && store === '3837') {
-      return jsonResponse({
+      const req = mockJsonRequest({
         results: [{
           id: 99,
           store: { custom_id: '701-00019', id: 3837 },
@@ -56,12 +80,14 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
         }],
         next: null,
       });
+      req._callback = callback;
+      return req;
     }
 
-    if (path === '/api/v4/processing/actions/') {
+    if (path === '/api/v1/tasks/99/processing/actions/') {
       actionScans += 1;
-      assert.equal(params.get('task_id'), '99');
-      return jsonResponse({
+      assert.equal(params.get('show_actions'), 'below');
+      const req = mockJsonRequest({
         results: [{
           id: 500,
           captured_at: '2026-06-01T15:00:00Z',
@@ -75,6 +101,8 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
         }],
         next: null,
       });
+      req._callback = callback;
+      return req;
     }
 
     throw new Error(`Unexpected Rebotics URL: ${url}`);

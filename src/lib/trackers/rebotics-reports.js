@@ -1,11 +1,14 @@
 'use strict';
 
+const http = require('node:http');
+const https = require('node:https');
 const reboticsBridge = require('../../rebotics-bridge');
 const { mapLimit, normalizeConcurrency, throwIfAborted } = require('./concurrency');
 const { REBOTICS_STORE_IDS, seededMissingCustomIds } = require('./rebotics-store-id-cache');
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 const DEFAULT_ACTIONS_PAGE_LIMIT = 200;
+const DEFAULT_TASKS_PAGE_LIMIT = 50;
 const DEFAULT_MAX_ACTION_PAGES = 40;
 const DEFAULT_MAX_TASK_PAGES = 20;
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -79,40 +82,67 @@ async function fetchJsonOnce(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, sig
     err.code = 'REBOTICS_NO_TOKEN';
     throw err;
   }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  const onAbort = () => controller.abort(signal.reason);
-  if (signal?.aborted) controller.abort(signal.reason);
-  else if (signal) signal.addEventListener('abort', onAbort, { once: true });
-  try {
-    const res = await fetch(`${base}${path}`, {
+  throwIfAborted(signal);
+  const url = new URL(path, base);
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (err, value) => {
+      if (settled) return;
+      settled = true;
+      if (signal) signal.removeEventListener('abort', onAbort);
+      if (err) reject(err);
+      else resolve(value);
+    };
+    const timeoutErr = () => {
+      const err = new Error('timed out');
+      err.name = 'AbortError';
+      err.code = 'REBOTICS_REQUEST_TIMEOUT';
+      return err;
+    };
+    const onAbort = () => {
+      const reason = signal?.reason || new Error('Tracker run cancelled');
+      req.destroy(reason);
+    };
+    const transport = url.protocol === 'http:' ? http : https;
+    const req = transport.request(url, {
       method: 'GET',
-      signal: controller.signal,
+      timeout: timeoutMs,
       headers: {
         Authorization: `Token ${token}`,
         'Accept-Language': 'en',
         'X-Timezone': 'America/Los_Angeles',
         'User-Agent': 'KOMPASS-Tracker/1.0',
       },
+    }, (res) => {
+      const chunks = [];
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('error', done);
+      res.on('end', () => {
+        const text = chunks.join('');
+        let body = null;
+        try {
+          body = text ? JSON.parse(text) : null;
+        } catch {
+          body = text;
+        }
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          const detail = body && typeof body === 'object' ? (body.detail || body.message) : null;
+          const err = new Error(detail || `Rebotics HTTP ${res.statusCode} for ${path}`);
+          err.status = res.statusCode;
+          done(err);
+          return;
+        }
+        done(null, body);
+      });
     });
-    const text = await res.text();
-    let body = null;
-    try {
-      body = text ? JSON.parse(text) : null;
-    } catch {
-      body = text;
-    }
-    if (!res.ok) {
-      const detail = body && typeof body === 'object' ? (body.detail || body.message) : null;
-      const err = new Error(detail || `Rebotics HTTP ${res.status} for ${path}`);
-      err.status = res.status;
-      throw err;
-    }
-    return body;
-  } finally {
-    clearTimeout(timer);
-    if (signal) signal.removeEventListener('abort', onAbort);
-  }
+    req.on('timeout', () => {
+      req.destroy(timeoutErr());
+    });
+    req.on('error', done);
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+    req.end();
+  });
 }
 
 async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, attempts = DEFAULT_MAX_ATTEMPTS, signal = null } = {}) {
@@ -275,19 +305,20 @@ async function listTasksForStoreAndDate(storeId, date, options = {}) {
   const maxTaskPages = options.maxTaskPages || DEFAULT_MAX_TASK_PAGES;
   const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
   const attempts = options.reboticsMaxAttempts || DEFAULT_MAX_ATTEMPTS;
+  const taskPageLimit = options.taskPageLimit || DEFAULT_TASKS_PAGE_LIMIT;
   const signal = options.cancelSignal || null;
   let offset = 0;
   const out = [];
   for (let page = 0; page < maxTaskPages; page += 1) {
     throwIfAborted(signal);
     const data = await fetchJson(
-      `/api/v1/tasks/?store=${storeId}&from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}&ordering=task_def__title`,
+      `/api/v1/tasks/?store=${storeId}&from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=${taskPageLimit}&offset=${offset}&ordering=task_def__title`,
       { timeoutMs, attempts, signal }
     );
     const rows = Array.isArray(data) ? data : (data?.results || []);
     out.push(...rows);
-    if (rows.length < 200) break;
-    offset += 200;
+    if (rows.length < taskPageLimit) break;
+    offset += taskPageLimit;
   }
   return out;
 }
@@ -302,7 +333,7 @@ async function listActionsForTask(taskId, options = {}) {
   const out = [];
   for (let page = 0; page < maxActionPages; page += 1) {
     throwIfAborted(signal);
-    const data = await fetchJson(`/api/v4/processing/actions/?task_id=${encodeURIComponent(taskId)}&limit=${actionsPageLimit}&offset=${offset}`, { timeoutMs, attempts, signal });
+    const data = await fetchJson(`/api/v1/tasks/${encodeURIComponent(taskId)}/processing/actions/?show_actions=below&limit=${actionsPageLimit}&offset=${offset}`, { timeoutMs, attempts, signal });
     const rows = Array.isArray(data) ? data : (data?.results || []);
     if (!rows.length) break;
     out.push(...rows);
