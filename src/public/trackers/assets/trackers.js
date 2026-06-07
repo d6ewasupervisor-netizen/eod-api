@@ -105,6 +105,55 @@
     return !to || to === from ? from : `${from}-${to}`;
   }
 
+  function formatFileDate(value) {
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return '';
+    const [, year, month, day] = match;
+    return `${month}_${day}_${year}`;
+  }
+
+  function formatFileDatePart(params = {}) {
+    const period = Number(params.period);
+    const week = Number(params.week);
+    if (Number.isFinite(period) && Number.isFinite(week)) {
+      return `P${String(period).padStart(2, '0')}W${week}`;
+    }
+    const from = formatFileDate(params.dateFrom);
+    const to = formatFileDate(params.dateTo || params.dateFrom);
+    if (!from) return 'SelectedDates';
+    return !to || to === from ? from : `${from}_to_${to}`;
+  }
+
+  function formatStorePart(params = {}) {
+    const districts = (params.districts || []).map((district) => String(district).trim()).filter(Boolean);
+    if (districts.length === 1) return `District${districts[0]}`;
+    if (districts.length > 1) return `Districts${districts.join('_')}`;
+    const stores = (params.stores || []).map((store) => parseInt(store, 10)).filter((store) => Number.isFinite(store));
+    if (stores.length === 1) return `FM${String(stores[0]).padStart(3, '0')}`;
+    if (stores.length > 1 && stores.length <= 4) {
+      return stores.map((store) => `FM${String(store).padStart(3, '0')}`).join('_');
+    }
+    if (stores.length > 4) return `Stores${stores.length}`;
+    return 'Tracker';
+  }
+
+  function safeFilePart(value) {
+    return String(value || '')
+      .replace(/[^A-Za-z0-9_-]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  }
+
+  function manifestFilename(extension) {
+    const params = state.lastRun?.params || {};
+    const base = [
+      safeFilePart(formatStorePart(params)),
+      safeFilePart(formatFileDatePart(params)),
+      'COMP',
+    ].filter(Boolean).join('_') || `tracker-run-${state.runId || 'manifest'}_COMP`;
+    return `${base}.${extension}`;
+  }
+
   function plural(count, singular, pluralText) {
     return `${count} ${count === 1 ? singular : pluralText || `${singular}s`}`;
   }
@@ -642,13 +691,13 @@
     document.getElementById('manifestJson').addEventListener('click', (event) => {
       event.preventDefault();
       if (!state.runId) return;
-      downloadAuthenticated(`/api/trackers/runs/${state.runId}/manifest.json`, `tracker-run-${state.runId}.json`)
+      downloadAuthenticated(`/api/trackers/runs/${state.runId}/manifest.json`, manifestFilename('json'))
         .catch((err) => showRunError(err, 'Manifest download failed'));
     });
     document.getElementById('manifestCsv').addEventListener('click', (event) => {
       event.preventDefault();
       if (!state.runId) return;
-      downloadAuthenticated(`/api/trackers/runs/${state.runId}/manifest.csv`, `tracker-run-${state.runId}.csv`)
+      downloadAuthenticated(`/api/trackers/runs/${state.runId}/manifest.csv`, manifestFilename('csv'))
         .catch((err) => showRunError(err, 'Manifest download failed'));
     });
     ['stores', 'districts', 'dateFrom', 'dateTo', 'fiscalYear', 'period', 'week'].forEach((id) => {
