@@ -89,6 +89,11 @@ button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
+.danger-button {
+  background: #7f1d1d;
+  border-color: #ef4444;
+  color: #fee2e2;
+}
 fieldset {
   border: 1px solid #334155;
   border-radius: 8px;
@@ -133,6 +138,7 @@ legend {
 }
 .run-state-completed { color: #86efac; }
 .run-state-failed { color: #fecaca; }
+.run-state-cancelled { color: #fde68a; }
 .run-meta {
   color: #94a3b8;
   font-size: 12px;
@@ -149,6 +155,11 @@ legend {
 .run-inline-error {
   color: #fecaca;
   margin-top: 8px;
+}
+.run-control-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
 }
 .run-actions { display: flex; gap: 14px; margin-top: 8px; }
 .run-actions a { color: #7dd3fc; }

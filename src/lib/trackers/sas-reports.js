@@ -2,7 +2,7 @@
 
 const sasBridge = require('../../sas-bridge');
 const { DEFAULT_PROJECT_IDS, projectLabel, knownProjectOptions } = require('./metadata');
-const { mapLimit, normalizeConcurrency } = require('./concurrency');
+const { mapLimit, normalizeConcurrency, throwIfAborted } = require('./concurrency');
 
 const CUSTOMER_ID = 2;
 const OFFSET_MIN = 420;
@@ -19,6 +19,7 @@ function unwrapAxiosData(response) {
 }
 
 function isRetriableError(err) {
+  if (err?.code === 'TRACKER_CANCELLED') return false;
   if (err?.name === 'AbortError') return true;
   const status = err?.response?.status || err?.status;
   if (status === 429) return true;
@@ -41,13 +42,17 @@ async function withRetry(fn, { attempts = DEFAULT_MAX_ATTEMPTS, label = 'SAS req
   throw lastErr;
 }
 
-async function fetchWithTimeout(url, timeoutMs) {
+async function fetchWithTimeout(url, timeoutMs, signal) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onAbort = () => controller.abort(signal.reason);
+  if (signal?.aborted) controller.abort(signal.reason);
+  else if (signal) signal.addEventListener('abort', onAbort, { once: true });
   try {
     return await fetch(url, { signal: controller.signal });
   } finally {
     clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', onAbort);
   }
 }
 
@@ -210,6 +215,8 @@ function toSasReportedRange(dateFrom, dateTo) {
 }
 
 async function pullCategoryReportCsv({ projectId, projectStoreId, dateFrom, dateTo, settings = {} }) {
+  const signal = settings.cancelSignal || null;
+  throwIfAborted(signal);
   const range = toSasReportedRange(dateFrom, dateTo);
   const params = new URLSearchParams({
     customer_id: String(CUSTOMER_ID),
@@ -229,11 +236,12 @@ async function pullCategoryReportCsv({ projectId, projectStoreId, dateFrom, date
     ),
     { attempts: settings.sasMaxAttempts || DEFAULT_MAX_ATTEMPTS, label: `SAS category report ${projectId}/${projectStoreId}` }
   );
+  throwIfAborted(signal);
   const body = unwrapAxiosData(response);
   if (!body?.file_url) return '';
   const timeoutMs = settings.sasRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
   const res = await withRetry(
-    () => fetchWithTimeout(body.file_url, timeoutMs),
+    () => fetchWithTimeout(body.file_url, timeoutMs, signal),
     { attempts: settings.sasMaxAttempts || DEFAULT_MAX_ATTEMPTS, label: 'SAS CSV download' }
   );
   if (!res.ok) throw new Error(`Failed to download SAS CSV (HTTP ${res.status})`);
@@ -241,6 +249,8 @@ async function pullCategoryReportCsv({ projectId, projectStoreId, dateFrom, date
 }
 
 async function fetchRows({ stores, projects, dateFrom, dateTo, settings = {}, onProgress }) {
+  const cancelSignal = settings.cancelSignal || null;
+  throwIfAborted(cancelSignal);
   if (!sasBridge.isSessionAlive()) {
     throw new Error('SAS session is not active. Use /api/trigger-auth first.');
   }
@@ -254,12 +264,13 @@ async function fetchRows({ stores, projects, dateFrom, dateTo, settings = {}, on
   let completedLookups = 0;
 
   const projectContexts = await mapLimit(normalizedProjects, sasConcurrency, async (projectId) => {
+    throwIfAborted(cancelSignal);
     const projectStores = await fetchProjectStores(projectId, { settings });
     return {
       projectId,
       byStoreNumber: new Map(projectStores.map((ps) => [String(ps?.store?.number), ps])),
     };
-  });
+  }, { signal: cancelSignal });
 
   const units = [];
   for (const context of projectContexts) {
@@ -269,6 +280,7 @@ async function fetchRows({ stores, projects, dateFrom, dateTo, settings = {}, on
   }
 
   await mapLimit(units, sasConcurrency, async (unit) => {
+    throwIfAborted(cancelSignal);
     const { projectId, byStoreNumber, storeNumber } = unit;
     const progressContext = {
       completedLookups,
@@ -295,6 +307,7 @@ async function fetchRows({ stores, projects, dateFrom, dateTo, settings = {}, on
       dateTo,
       settings,
     });
+    throwIfAborted(cancelSignal);
     completedLookups += 1;
     if (!csvText) {
       if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: allRows.length, status: 'complete' });
@@ -329,7 +342,7 @@ async function fetchRows({ stores, projects, dateFrom, dateTo, settings = {}, on
       });
     }
     if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: allRows.length, status: 'complete' });
-  });
+  }, { signal: cancelSignal });
   return allRows;
 }
 

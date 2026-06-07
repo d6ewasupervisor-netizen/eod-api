@@ -11,6 +11,7 @@ const { resolveRange } = require('../lib/trackers/date-range');
 const sasReports = require('../lib/trackers/sas-reports');
 const reboticsReports = require('../lib/trackers/rebotics-reports');
 const { compareRows } = require('../lib/trackers/compare');
+const { cancelledError, throwIfAborted } = require('../lib/trackers/concurrency');
 const {
   DEFAULT_PROJECT_IDS,
   districtOptions,
@@ -29,6 +30,7 @@ const {
 const inFlightRuns = new Map();
 const TRACKER_ADMIN_EMAILS = trackerAdminEmails();
 const RUN_HEARTBEAT_MS = 15000;
+const TERMINAL_RUN_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
 function requireTrackerAdmin(req, res, next) {
   const email = String(req.user?.email || '').trim().toLowerCase();
@@ -153,11 +155,16 @@ function validateRunShape({ params, range, settings }) {
 }
 
 function classifySourceError(err) {
+  if (isCancelError(err)) return 'cancelled';
   const message = String(err?.message || err || '');
   if (/sign in|required|session|token|auth/i.test(message)) return 'auth';
   if (/timeout|timed out|abort/i.test(message)) return 'source_timeout';
   if (/limit|too large|split/i.test(message)) return 'request_too_large';
   return 'source_error';
+}
+
+function isCancelError(err) {
+  return err?.code === 'TRACKER_CANCELLED' || /cancelled|canceled/i.test(String(err?.message || ''));
 }
 
 function formatShortDate(value) {
@@ -345,11 +352,14 @@ async function insertRunResults(pool, runId, compared) {
   }
 }
 
-async function processRun(pool, run) {
+async function processRun(pool, run, options = {}) {
+  const cancelSignal = options.signal || null;
   const warnings = [];
   try {
+    throwIfAborted(cancelSignal);
     const params = normalizeRunParams(run.params_json || {});
     const settings = await loadTrackerSettings(pool);
+    const runSettings = { ...settings, cancelSignal };
     const range = resolveRange(params);
     const guard = validateRunShape({ params, range, settings });
     if (!guard.ok) throw new Error(guard.error);
@@ -388,12 +398,15 @@ async function processRun(pool, run) {
       prod: { done: false, info: null },
       si: { done: false, info: null, startedAt: 0 },
     };
-    const writeProgress = (progress) => updateRun(pool, run.id, {
-      progress_json: JSON.stringify({
-        ...progress,
-        updatedAt: new Date().toISOString(),
-      }),
-    });
+    const writeProgress = (progress) => {
+      throwIfAborted(cancelSignal);
+      return updateRun(pool, run.id, {
+        progress_json: JSON.stringify({
+          ...progress,
+          updatedAt: new Date().toISOString(),
+        }),
+      });
+    };
     const writeProdProgress = async (info) => {
       sourceState.prod.info = { ...info };
       await writeProgress(buildProdProgress(info, range, params));
@@ -404,6 +417,7 @@ async function processRun(pool, run) {
       await writeProgress(buildSiProgress(info, range, params, { prodDone: sourceState.prod.done }));
     };
     const heartbeat = setInterval(() => {
+      if (cancelSignal?.aborted) return;
       if (sourceState.si.done) return;
       const info = sourceState.si.info || (sourceState.prod.done ? {
         source: 'si',
@@ -431,7 +445,7 @@ async function processRun(pool, run) {
           projects: params.projects,
           dateFrom: range.dateFrom,
           dateTo: range.dateTo,
-          settings,
+          settings: runSettings,
           onProgress: (info) => writeProdProgress(info).catch(() => {}),
         }).finally(() => {
           sourceState.prod.done = true;
@@ -439,7 +453,7 @@ async function processRun(pool, run) {
         reboticsReports.fetchRows({
           stores: params.stores,
           dates: range.dates,
-          settings,
+          settings: runSettings,
           onWarning: (message) => warnings.push(message),
           onProgress: (info) => writeSiProgress(info).catch(() => {}),
         }).finally(() => {
@@ -449,6 +463,7 @@ async function processRun(pool, run) {
     } finally {
       clearInterval(heartbeat);
     }
+    throwIfAborted(cancelSignal);
 
     let prodRows = [];
     let siRows = [];
@@ -473,7 +488,9 @@ async function processRun(pool, run) {
     });
 
     const compared = compareRows(prodRows, siRows);
+    throwIfAborted(cancelSignal);
     await insertRunResults(pool, run.id, compared);
+    throwIfAborted(cancelSignal);
 
     await updateRun(pool, run.id, {
       status: 'completed',
@@ -496,6 +513,21 @@ async function processRun(pool, run) {
       }),
     });
   } catch (err) {
+    if (isCancelError(err)) {
+      await updateRun(pool, run.id, {
+        status: 'cancelled',
+        completed_at: new Date().toISOString(),
+        warnings_json: JSON.stringify(warnings),
+        error_text: null,
+        progress_json: JSON.stringify({
+          stage: 'cancelled',
+          progress: 100,
+          message: 'Run cancelled.',
+          errorType: 'cancelled',
+        }),
+      });
+      return;
+    }
     await updateRun(pool, run.id, {
       status: 'failed',
       completed_at: new Date().toISOString(),
@@ -623,9 +655,48 @@ function createTrackersRouter({ pool }) {
       ],
     );
     const run = rows[0];
-    const p = processRun(pool, run);
-    inFlightRuns.set(run.id, p);
+    const controller = new AbortController();
+    const p = processRun(pool, run, { signal: controller.signal });
+    inFlightRuns.set(run.id, { promise: p, controller });
     return res.status(202).json({ ok: true, runId: run.id, runKey: run.run_key, warnings: guard.warnings });
+  });
+
+  router.post('/runs/:id/cancel', async (req, res) => {
+    const run = await loadRun(pool, req.params.id);
+    if (!run) return res.status(404).json({ ok: false, error: 'Run not found' });
+
+    const email = String(req.user?.email || '').trim().toLowerCase();
+    const createdBy = String(run.created_by_email || '').trim().toLowerCase();
+    const isAdmin = email && TRACKER_ADMIN_EMAILS.includes(email);
+    if (!isAdmin && email !== createdBy) {
+      return res.status(403).json({ ok: false, error: 'Only the run creator or a tracker admin can cancel this run.' });
+    }
+
+    if (TERMINAL_RUN_STATUSES.has(run.status)) {
+      return res.json({ ok: true, cancelled: run.status === 'cancelled', status: run.status });
+    }
+
+    const active = inFlightRuns.get(run.id);
+    if (active?.controller && !active.controller.signal.aborted) {
+      active.controller.abort(cancelledError(`Run cancelled by ${email || 'user'}`));
+    }
+
+    const currentProgress = run.progress_json || {};
+    await updateRun(pool, run.id, {
+      status: 'cancelled',
+      completed_at: new Date().toISOString(),
+      error_text: null,
+      progress_json: JSON.stringify({
+        ...currentProgress,
+        stage: 'cancelled',
+        progress: Math.max(Number(currentProgress.progress || 0), 100),
+        message: 'Run cancelled.',
+        errorType: 'cancelled',
+        cancelledAt: new Date().toISOString(),
+        cancelledBy: email || null,
+      }),
+    });
+    return res.json({ ok: true, cancelled: true, status: 'cancelled' });
   });
 
   router.get('/runs/:id', async (req, res) => {

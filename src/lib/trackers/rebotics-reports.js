@@ -1,7 +1,7 @@
 'use strict';
 
 const reboticsBridge = require('../../rebotics-bridge');
-const { mapLimit, normalizeConcurrency } = require('./concurrency');
+const { mapLimit, normalizeConcurrency, throwIfAborted } = require('./concurrency');
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 const DEFAULT_ACTIONS_PAGE_LIMIT = 200;
@@ -14,6 +14,7 @@ function sleep(ms) {
 }
 
 function isRetriableError(err) {
+  if (err?.code === 'TRACKER_CANCELLED') return false;
   if (err?.name === 'AbortError') return true;
   const status = err?.status;
   if (status === 429) return true;
@@ -55,7 +56,7 @@ function taskStatus(task) {
   return String(task?.status?.id || task?.status || 'unknown').toLowerCase();
 }
 
-async function fetchJsonOnce(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS } = {}) {
+async function fetchJsonOnce(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, signal = null } = {}) {
   const token = reboticsBridge.getTokenForServer();
   const base = reboticsBridge.getApiBase();
   if (!token) {
@@ -65,6 +66,9 @@ async function fetchJsonOnce(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS } = 
   }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onAbort = () => controller.abort(signal.reason);
+  if (signal?.aborted) controller.abort(signal.reason);
+  else if (signal) signal.addEventListener('abort', onAbort, { once: true });
   try {
     const res = await fetch(`${base}${path}`, {
       method: 'GET',
@@ -92,16 +96,19 @@ async function fetchJsonOnce(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS } = 
     return body;
   } finally {
     clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', onAbort);
   }
 }
 
-async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, attempts = DEFAULT_MAX_ATTEMPTS } = {}) {
+async function fetchJson(path, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, attempts = DEFAULT_MAX_ATTEMPTS, signal = null } = {}) {
   let lastErr = null;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    throwIfAborted(signal);
     try {
-      return await fetchJsonOnce(path, { timeoutMs });
+      return await fetchJsonOnce(path, { timeoutMs, signal });
     } catch (err) {
       lastErr = err;
+      if (err?.code === 'TRACKER_CANCELLED') throw err;
       if (attempt >= attempts || !isRetriableError(err)) break;
       await sleep(500 * attempt);
     }
@@ -117,8 +124,10 @@ async function resolveStoreInternalId(customId, options = {}) {
   const maxTaskPages = options.maxTaskPages || DEFAULT_MAX_TASK_PAGES;
   const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
   const attempts = options.reboticsMaxAttempts || DEFAULT_MAX_ATTEMPTS;
+  const signal = options.cancelSignal || null;
+  throwIfAborted(signal);
   try {
-    const data = await fetchJson(`/api/v1/stores/?custom_id=${encodeURIComponent(customId)}`, { timeoutMs, attempts });
+    const data = await fetchJson(`/api/v1/stores/?custom_id=${encodeURIComponent(customId)}`, { timeoutMs, attempts, signal });
     const rows = Array.isArray(data) ? data : (data?.results || []);
     if (rows[0]?.id != null) return rows[0].id;
   } catch (_err) {
@@ -128,7 +137,7 @@ async function resolveStoreInternalId(customId, options = {}) {
   for (const date of dates) {
     let offset = 0;
     for (let page = 0; page < maxTaskPages; page += 1) {
-      const data = await fetchJson(`/api/v1/tasks/?from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}`, { timeoutMs, attempts });
+      const data = await fetchJson(`/api/v1/tasks/?from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}`, { timeoutMs, attempts, signal });
       const rows = Array.isArray(data) ? data : (data?.results || []);
       if (!rows.length) break;
       for (const row of rows) {
@@ -148,12 +157,14 @@ async function listTasksForStoreAndDate(storeId, date, options = {}) {
   const maxTaskPages = options.maxTaskPages || DEFAULT_MAX_TASK_PAGES;
   const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
   const attempts = options.reboticsMaxAttempts || DEFAULT_MAX_ATTEMPTS;
+  const signal = options.cancelSignal || null;
   let offset = 0;
   const out = [];
   for (let page = 0; page < maxTaskPages; page += 1) {
+    throwIfAborted(signal);
     const data = await fetchJson(
       `/api/v1/tasks/?store=${storeId}&from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(date)}&limit=200&offset=${offset}&ordering=task_def__title`,
-      { timeoutMs, attempts }
+      { timeoutMs, attempts, signal }
     );
     const rows = Array.isArray(data) ? data : (data?.results || []);
     out.push(...rows);
@@ -168,6 +179,7 @@ async function listPrePhotoActionsForStoreDateRange(storeId, dates, options = {}
   const actionsPageLimit = options.actionsPageLimit || DEFAULT_ACTIONS_PAGE_LIMIT;
   const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
   const attempts = options.reboticsMaxAttempts || DEFAULT_MAX_ATTEMPTS;
+  const signal = options.cancelSignal || null;
   const dateSet = new Set((dates || []).map((d) => String(d)));
   const sortedDates = [...dateSet].sort();
   const earliest = sortedDates[0] || '';
@@ -175,7 +187,8 @@ async function listPrePhotoActionsForStoreDateRange(storeId, dates, options = {}
   let offset = 0;
   const out = [];
   for (let page = 0; page < maxActionPages; page += 1) {
-    const data = await fetchJson(`/api/v4/processing/actions/?store=${storeId}&limit=${actionsPageLimit}&offset=${offset}`, { timeoutMs, attempts });
+    throwIfAborted(signal);
+    const data = await fetchJson(`/api/v4/processing/actions/?store=${storeId}&limit=${actionsPageLimit}&offset=${offset}`, { timeoutMs, attempts, signal });
     const rows = Array.isArray(data) ? data : (data?.results || []);
     if (!rows.length) break;
     for (const row of rows) {
@@ -225,6 +238,8 @@ function actionToImage(action) {
 }
 
 async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }) {
+  const cancelSignal = settings.cancelSignal || null;
+  throwIfAborted(cancelSignal);
   const rows = [];
   const storeCustomToInternal = new Map();
   const totalLookups = Math.max(1, dates.length * stores.length);
@@ -234,6 +249,7 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
   const storeContexts = new Map();
 
   await mapLimit(stores || [], reboticsConcurrency, async (storeNumber) => {
+    throwIfAborted(cancelSignal);
     const customId = toCustomId(storeNumber);
     if (!customId) return;
     if (onProgress) {
@@ -255,6 +271,7 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
           maxTaskPages: settings.reboticsMaxTaskPages,
           reboticsRequestTimeoutMs,
           reboticsMaxAttempts: settings.reboticsMaxAttempts,
+          cancelSignal,
         });
         if (internalId) storeCustomToInternal.set(customId, internalId);
       }
@@ -269,8 +286,10 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
           actionsPageLimit: settings.reboticsActionsPageLimit,
           reboticsRequestTimeoutMs,
           reboticsMaxAttempts: settings.reboticsMaxAttempts,
+          cancelSignal,
         });
       } catch (err) {
+        throwIfAborted(cancelSignal);
         if (isAuthError(err)) throw err;
         warn({ onWarning }, `Rebotics photos skipped for store ${storeNumber}: ${err.message}`);
       }
@@ -279,10 +298,11 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
         actionsByDateDbkey: bucketActionsByDateAndDbkey(actions),
       });
     } catch (err) {
+      throwIfAborted(cancelSignal);
       if (isAuthError(err)) throw err;
       warn({ onWarning }, `Rebotics store setup skipped for ${customId}: ${err.message}`);
     }
-  });
+  }, { signal: cancelSignal });
 
   const units = [];
   for (const date of dates || []) {
@@ -298,6 +318,7 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
   }
 
   await mapLimit(units, reboticsConcurrency, async (unit) => {
+    throwIfAborted(cancelSignal);
     const { storeNumber, customId, date } = unit;
     const progressContext = {
         completedLookups,
@@ -320,7 +341,9 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
           maxTaskPages: settings.reboticsMaxTaskPages,
           reboticsRequestTimeoutMs,
           reboticsMaxAttempts: settings.reboticsMaxAttempts,
+          cancelSignal,
       });
+      throwIfAborted(cancelSignal);
       completedLookups += 1;
       const out = [];
       for (const task of tasks || []) {
@@ -363,12 +386,13 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
       if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
       return;
     } catch (err) {
+      throwIfAborted(cancelSignal);
       if (isAuthError(err)) throw err;
       completedLookups += 1;
       if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
       warn({ onWarning }, `Rebotics tasks skipped for store ${storeNumber} on ${date}: ${err.message}`);
     }
-  });
+  }, { signal: cancelSignal });
   return rows;
 }
 

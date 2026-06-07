@@ -7,6 +7,7 @@
     pageSize: 200,
     total: 0,
     runLog: [],
+    canceling: false,
   };
 
   class ApiError extends Error {
@@ -121,6 +122,7 @@
 
   function friendlyRunMessage(run) {
     const progress = run.progress || {};
+    if (run.status === 'cancelled' || progress.stage === 'cancelled') return 'Run cancelled.';
     if (run.error || progress.stage === 'failed') return 'Run failed before the comparison finished.';
     if (run.status === 'completed' || progress.stage === 'done') {
       const total = Number(progress.total ?? run.summary?.total ?? 0);
@@ -148,8 +150,22 @@
   function statusLabel(status) {
     if (status === 'completed') return 'Complete';
     if (status === 'failed') return 'Failed';
+    if (status === 'cancelled') return 'Cancelled';
     if (status === 'queued') return 'Queued';
     return 'Running';
+  }
+
+  function isActiveRun(run) {
+    return run && (run.status === 'queued' || run.status === 'running');
+  }
+
+  function updateCancelButton(run) {
+    const button = document.getElementById('cancelRun');
+    if (!button) return;
+    const active = isActiveRun(run);
+    button.classList.toggle('hidden', !active);
+    button.disabled = !active || state.canceling;
+    button.textContent = state.canceling ? 'Cancelling...' : 'Cancel Run';
   }
 
   function renderRunStatus(run) {
@@ -175,6 +191,7 @@
       <ol class="run-log">${logItems}</ol>
       ${run.error ? `<div class="run-inline-error">Error: ${escapeHtml(run.error)}</div>` : ''}
     `;
+    updateCancelButton(run);
   }
 
   function setProgress(progress) {
@@ -469,14 +486,20 @@
       state.lastRun = run;
       setProgress(run.progress.progress || 0);
       renderRunStatus(run);
-      if (run.error) showRunError({ message: run.error, errorType: run.progress.errorType }, 'Run failed');
-      if (run.status === 'completed' || run.status === 'failed') {
+      if (run.error && run.status !== 'cancelled') showRunError({ message: run.error, errorType: run.progress.errorType }, 'Run failed');
+      if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
         clearInterval(state.pollTimer);
         state.pollTimer = null;
-        document.getElementById('runActions').classList.remove('hidden');
-        document.getElementById('manifestJson').href = `/api/trackers/runs/${state.runId}/manifest.json`;
-        document.getElementById('manifestCsv').href = `/api/trackers/runs/${state.runId}/manifest.csv`;
-        await refreshResults();
+        state.canceling = false;
+        updateCancelButton(run);
+        if (run.status === 'completed') {
+          document.getElementById('runActions').classList.remove('hidden');
+          document.getElementById('manifestJson').href = `/api/trackers/runs/${state.runId}/manifest.json`;
+          document.getElementById('manifestCsv').href = `/api/trackers/runs/${state.runId}/manifest.csv`;
+          await refreshResults();
+        } else {
+          document.getElementById('runActions').classList.add('hidden');
+        }
       }
     } catch (err) {
       setRunStatus(`Polling error: ${err.message}`);
@@ -488,6 +511,9 @@
     clearRunError();
     setProgress(2);
     state.runLog = [];
+    state.canceling = false;
+    document.getElementById('runActions').classList.add('hidden');
+    updateCancelButton(null);
     setRunStatus('Submitting run...');
     try {
       const created = await api('/api/trackers/runs', {
@@ -496,6 +522,7 @@
       });
       state.runId = created.runId;
       state.page = 1;
+      updateCancelButton({ status: 'queued' });
       appendRunLog('Run submitted. Waiting for source checks to begin.');
       if (created.warnings?.length) {
         created.warnings.forEach((warning) => appendRunLog(`Heads up: ${warning}`));
@@ -508,6 +535,23 @@
       setProgress(0);
       setRunStatus('Run start failed.');
       showRunError(err, 'Run start failed');
+    }
+  }
+
+  async function cancelRun() {
+    if (!state.runId || state.canceling) return;
+    clearRunError();
+    state.canceling = true;
+    updateCancelButton({ status: 'running' });
+    appendRunLog('Cancelling this run. Any source request already in progress may take a moment to stop.');
+    setRunStatus(state.runLog.join('\n'));
+    try {
+      await api(`/api/trackers/runs/${state.runId}/cancel`, { method: 'POST' });
+      await pollRun();
+    } catch (err) {
+      state.canceling = false;
+      updateCancelButton(state.lastRun);
+      showRunError(err, 'Cancel failed');
     }
   }
 
@@ -527,6 +571,9 @@
 
   function bindEvents() {
     document.getElementById('runForm').addEventListener('submit', startRun);
+    document.getElementById('cancelRun').addEventListener('click', () => {
+      cancelRun().catch((err) => showRunError(err, 'Cancel failed'));
+    });
     document.getElementById('refreshResults').addEventListener('click', () => {
       state.page = 1;
       refreshResults().catch((err) => showRunError(err, 'Refresh failed'));
