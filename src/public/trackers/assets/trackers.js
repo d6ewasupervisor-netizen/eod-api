@@ -54,6 +54,30 @@
     return body;
   }
 
+  async function downloadAuthenticated(path, filename) {
+    const res = await fetch(path, {
+      credentials: 'include',
+      headers: {
+        ...tokenHeader(),
+      },
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      let body = {};
+      try { body = text ? JSON.parse(text) : {}; } catch { body = { raw: text }; }
+      throw new ApiError(body.error || body.message || `HTTP ${res.status}`, res.status, body);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   function escapeHtml(value) {
     return String(value == null ? '' : value)
       .replace(/&/g, '&amp;')
@@ -499,8 +523,8 @@
         updateCancelButton(run);
         if (run.status === 'completed') {
           document.getElementById('runActions').classList.remove('hidden');
-          document.getElementById('manifestJson').href = `/api/trackers/runs/${state.runId}/manifest.json`;
-          document.getElementById('manifestCsv').href = `/api/trackers/runs/${state.runId}/manifest.csv`;
+          document.getElementById('manifestJson').href = '#';
+          document.getElementById('manifestCsv').href = '#';
           await refreshResults();
         } else {
           document.getElementById('runActions').classList.add('hidden');
@@ -582,6 +606,18 @@
     document.getElementById('refreshResults').addEventListener('click', () => {
       state.page = 1;
       refreshResults().catch((err) => showRunError(err, 'Refresh failed'));
+    });
+    document.getElementById('manifestJson').addEventListener('click', (event) => {
+      event.preventDefault();
+      if (!state.runId) return;
+      downloadAuthenticated(`/api/trackers/runs/${state.runId}/manifest.json`, `tracker-run-${state.runId}.json`)
+        .catch((err) => showRunError(err, 'Manifest download failed'));
+    });
+    document.getElementById('manifestCsv').addEventListener('click', (event) => {
+      event.preventDefault();
+      if (!state.runId) return;
+      downloadAuthenticated(`/api/trackers/runs/${state.runId}/manifest.csv`, `tracker-run-${state.runId}.csv`)
+        .catch((err) => showRunError(err, 'Manifest download failed'));
     });
     ['stores', 'districts', 'dateFrom', 'dateTo', 'fiscalYear', 'period', 'week'].forEach((id) => {
       document.getElementById(id).addEventListener('change', updateRunEstimate);
