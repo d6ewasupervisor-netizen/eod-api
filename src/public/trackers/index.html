@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Trackers</title>
-  <link rel="stylesheet" href="/trackers/assets/trackers.css?v=20260607-2" />
+  <link rel="stylesheet" href="/trackers/assets/trackers.css?v=20260607-3" />
   <script src="/auth-gate.js"></script>
 </head>
 <body>
@@ -138,8 +138,18 @@
       <div id="imagesGrid" class="images-grid"></div>
       <button id="closeImages" type="button">Close</button>
     </dialog>
+
+    <dialog id="fullImageDialog" class="full-image-dialog">
+      <div class="full-image-toolbar">
+        <strong id="fullImageTitle">Source image</strong>
+        <button id="closeFullImage" type="button">Close</button>
+      </div>
+      <div class="full-image-frame">
+        <img id="fullImage" alt="Full-size tracker source" />
+      </div>
+    </dialog>
   </main>
 
-  <script src="/trackers/assets/trackers.js?v=20260607-2"></script>
+  <script src="/trackers/assets/trackers.js?v=20260607-3"></script>
 </body>
 </html>

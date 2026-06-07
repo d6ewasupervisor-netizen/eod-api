@@ -8,6 +8,7 @@
     total: 0,
     runLog: [],
     canceling: false,
+    imageObjectUrls: [],
   };
 
   class ApiError extends Error {
@@ -243,6 +244,13 @@
     el.classList.add('hidden');
   }
 
+  function revokeImageObjectUrls() {
+    for (const url of state.imageObjectUrls) URL.revokeObjectURL(url);
+    state.imageObjectUrls = [];
+    const fullImage = document.getElementById('fullImage');
+    if (fullImage) fullImage.removeAttribute('src');
+  }
+
   function populateFiscal(weeks) {
     const years = [...new Set(weeks.map((w) => w.fiscalYear))].sort((a, b) => a - b);
     const fiscalYear = document.getElementById('fiscalYear');
@@ -416,22 +424,22 @@
     const body = document.getElementById('resultsBody');
     body.innerHTML = '';
     if (!data.items.length) {
-      body.innerHTML = '<tr><td colspan="10">No matching rows.</td></tr>';
+      body.innerHTML = '<tr><td class="results-empty" colspan="10">No matching rows.</td></tr>';
       return;
     }
     for (const item of data.items) {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${escapeHtml(item.store_number || '')}</td>
-        <td>${escapeHtml(item.work_date || '')}</td>
-        <td>${escapeHtml(item.period_week || '')}</td>
-        <td>${escapeHtml(item.dbkey || '')}</td>
-        <td>${escapeHtml(item.category_set_label || '')}</td>
-        <td><span class="badge">${escapeHtml(item.prod_status || '')}</span></td>
-        <td><span class="badge">${escapeHtml(item.si_status || '')}</span></td>
-        <td>${item.prod_photo_count || 0}/${item.si_photo_count || 0}</td>
-        <td>${escapeHtml(item.confidence || '')}</td>
-        <td><button data-item-id="${item.id}" class="view-images-btn">Images</button></td>
+        <td data-label="Store">${escapeHtml(item.store_number || '')}</td>
+        <td data-label="Date">${escapeHtml(item.work_date || '')}</td>
+        <td data-label="Period">${escapeHtml(item.period_week || '')}</td>
+        <td data-label="DBKey">${escapeHtml(item.dbkey || '')}</td>
+        <td data-label="Category">${escapeHtml(item.category_set_label || '')}</td>
+        <td data-label="PROD"><span class="badge">${escapeHtml(item.prod_status || '')}</span></td>
+        <td data-label="SI"><span class="badge">${escapeHtml(item.si_status || '')}</span></td>
+        <td data-label="Photos">${item.prod_photo_count || 0}/${item.si_photo_count || 0}</td>
+        <td data-label="Confidence">${escapeHtml(item.confidence || '')}</td>
+        <td data-label="Actions"><button data-item-id="${item.id}" class="view-images-btn">Images</button></td>
       `;
       body.appendChild(tr);
     }
@@ -465,6 +473,7 @@
   }
 
   async function openImages(itemId) {
+    revokeImageObjectUrls();
     const data = await api(`/api/trackers/runs/${state.runId}/images?itemId=${itemId}`);
     const grid = document.getElementById('imagesGrid');
     grid.innerHTML = '';
@@ -475,18 +484,20 @@
     }
     for (const image of data.images) {
       const card = document.createElement('div');
+      card.className = 'image-card';
+      const label = `${image.source_system || 'Source'} ${image.source_ref || ''}`.trim();
       card.innerHTML = `
         <div><strong>${escapeHtml(image.source_system)}</strong> ${escapeHtml(image.source_ref || '')}</div>
         <div>Bay ${escapeHtml(image.bay_index || '-')}</div>
         <div class="image-placeholder">Loading...</div>
       `;
       grid.appendChild(card);
-      loadImageIntoCard(card, image.stream_url);
+      loadImageIntoCard(card, image.stream_url, label);
     }
     document.getElementById('imagesDialog').showModal();
   }
 
-  async function loadImageIntoCard(card, url) {
+  async function loadImageIntoCard(card, url, label) {
     const placeholder = card.querySelector('.image-placeholder');
     try {
       const res = await fetch(url, {
@@ -496,15 +507,36 @@
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);
+      state.imageObjectUrls.push(objectUrl);
       const img = document.createElement('img');
       img.src = objectUrl;
-      img.alt = 'tracker source image';
-      img.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
-      placeholder.replaceWith(img);
+      img.alt = label || 'tracker source image';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'image-thumb-button';
+      button.setAttribute('aria-label', `Open ${label || 'source image'} full size`);
+      button.appendChild(img);
+      button.addEventListener('click', () => openFullImage(objectUrl, label));
+      placeholder.replaceWith(button);
     } catch (err) {
       placeholder.textContent = `Could not load image: ${err.message}`;
       placeholder.classList.add('image-error');
     }
+  }
+
+  function openFullImage(objectUrl, label) {
+    const dialog = document.getElementById('fullImageDialog');
+    const img = document.getElementById('fullImage');
+    document.getElementById('fullImageTitle').textContent = label || 'Source image';
+    img.src = objectUrl;
+    if (!dialog.open) dialog.showModal();
+  }
+
+  function closeImagesDialog() {
+    const fullDialog = document.getElementById('fullImageDialog');
+    if (fullDialog.open) fullDialog.close();
+    document.getElementById('imagesDialog').close();
+    revokeImageObjectUrls();
   }
 
   async function pollRun() {
@@ -640,8 +672,10 @@
       state.page += 1;
       refreshResults().catch((err) => showRunError(err, 'Refresh failed'));
     });
-    document.getElementById('closeImages').addEventListener('click', () => {
-      document.getElementById('imagesDialog').close();
+    document.getElementById('closeImages').addEventListener('click', closeImagesDialog);
+    document.getElementById('imagesDialog').addEventListener('close', revokeImageObjectUrls);
+    document.getElementById('closeFullImage').addEventListener('click', () => {
+      document.getElementById('fullImageDialog').close();
     });
   }
 
