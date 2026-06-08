@@ -41,10 +41,15 @@ const TAG_LOOKUP_SQL = `select tag_id, tag_name
    and substr(tag_name, 1, 3) in ('P04','P05')
  order by substr(tag_name, 1, 5)`;
 
-const P04_P05_REPORTED_RANGE = {
-  dateFrom: '2026-04-26T07:00:00.000Z',
-  dateTo: '2026-06-14T12:00:00.000Z',
-};
+const PROD_WEEK_RANGES = [
+  { periodWeek: 'P04W1', dateFrom: '2026-04-26T07:00:00.000Z', dateTo: '2026-05-03T12:00:00.000Z' },
+  { periodWeek: 'P04W2', dateFrom: '2026-05-03T07:00:00.000Z', dateTo: '2026-05-10T12:00:00.000Z' },
+  { periodWeek: 'P04W3', dateFrom: '2026-05-10T07:00:00.000Z', dateTo: '2026-05-17T12:00:00.000Z' },
+  { periodWeek: 'P04W4', dateFrom: '2026-05-17T07:00:00.000Z', dateTo: '2026-05-24T12:00:00.000Z' },
+  { periodWeek: 'P05W1', dateFrom: '2026-05-24T07:00:00.000Z', dateTo: '2026-05-31T12:00:00.000Z' },
+  { periodWeek: 'P05W2', dateFrom: '2026-05-31T07:00:00.000Z', dateTo: '2026-06-07T12:00:00.000Z' },
+  { periodWeek: 'P05W3', dateFrom: '2026-06-07T07:00:00.000Z', dateTo: '2026-06-14T12:00:00.000Z' },
+];
 
 const PREFERRED_KEYS = {
   matchedBoth: ['P05W3|50|55|9014777'],
@@ -223,7 +228,10 @@ function reportTokenOnlyRejection(err) {
     console.error(`PROD report rejected Token-only (status=${err.status || 'unknown'}); CSRF/session may be required`);
     return;
   }
-  console.error(`PROD report request failed (status=${err.status || 'unknown'})`);
+  console.error(`PROD report request failed (status=${err.status || 'unknown'}): ${err.message || 'unknown error'}`);
+  if (err.cause?.message) {
+    console.error(`PROD report fetch cause: ${err.cause.message}`);
+  }
 }
 
 async function fetchCsv(fileUrl) {
@@ -790,11 +798,11 @@ function buildFixture({ prodByKey, siByKey }) {
   return cases;
 }
 
-async function pullProdRows(sasToken) {
+async function pullProdWeek(sasToken, range) {
   const params = new URLSearchParams({
     customer_id: String(CUSTOMER_ID),
-    date_from: P04_P05_REPORTED_RANGE.dateFrom,
-    date_to: P04_P05_REPORTED_RANGE.dateTo,
+    date_from: range.dateFrom,
+    date_to: range.dateTo,
     date_type: 'reported',
     offset: String(OFFSET_MIN),
     project_id: String(PROJECT_ID),
@@ -805,32 +813,56 @@ async function pullProdRows(sasToken) {
   try {
     body = await sasGetJsonTokenOnly(sasToken, `/reports/category-reset-report/?${params.toString()}`);
   } catch (err) {
+    console.error(`PROD week ${range.periodWeek} failed (${range.dateFrom} -> ${range.dateTo})`);
     reportTokenOnlyRejection(err);
     process.exit(1);
   }
 
   const fileUrl = clean(body?.file_url);
   if (!fileUrl) {
-    console.error(`PROD report did not return file_url: ${JSON.stringify(body).slice(0, 300)}`);
+    console.error(`PROD report for ${range.periodWeek} did not return file_url: ${JSON.stringify(body).slice(0, 300)}`);
     process.exit(1);
   }
 
   const csvText = await fetchCsv(fileUrl);
   const parsed = parseCsv(csvText);
+  return {
+    periodWeek: range.periodWeek,
+    message: body?.message || '',
+    csvBytes: Buffer.byteLength(csvText, 'utf8'),
+    headers: parsed.headers,
+    rows: parsed.rows,
+  };
+}
+
+async function pullProdRows(sasToken) {
+  const weeks = [];
+  for (const range of PROD_WEEK_RANGES) {
+    weeks.push(await pullProdWeek(sasToken, range));
+  }
+
   const prodRows = [];
   const shiftSignoffs = [];
-  for (const csvRow of parsed.rows) {
-    const mapped = prodRowToEngine(csvRow);
-    if (mapped.joinable) prodRows.push(mapped.row);
-    else shiftSignoffs.push(mapped.shiftSignoff);
+  for (const week of weeks) {
+    for (const csvRow of week.rows) {
+      const mapped = prodRowToEngine(csvRow);
+      if (mapped.joinable) prodRows.push(mapped.row);
+      else shiftSignoffs.push({ ...mapped.shiftSignoff, sourceWeek: week.periodWeek });
+    }
   }
+
   return {
-    headers: parsed.headers,
-    rawRows: parsed.rows,
+    headers: weeks[0]?.headers || [],
+    rawRows: weeks.flatMap((week) => week.rows),
     prodRows,
     shiftSignoffs,
-    csvBytes: Buffer.byteLength(csvText, 'utf8'),
-    message: body?.message || '',
+    csvBytes: weeks.reduce((sum, week) => sum + week.csvBytes, 0),
+    weeks: weeks.map((week) => ({
+      periodWeek: week.periodWeek,
+      rows: week.rows.length,
+      csvBytes: week.csvBytes,
+      message: week.message,
+    })),
   };
 }
 
@@ -868,8 +900,9 @@ function casePasses(fixtureCase, actual) {
 function printSourceSummary({ prod, si, prodByKey, siByKey }) {
   console.log('Three-way join proof');
   console.log(`- PROD project: ${PROJECT_LABEL} (project_id=${PROJECT_ID})`);
-  console.log(`- PROD window: ${P04_P05_REPORTED_RANGE.dateFrom} -> ${P04_P05_REPORTED_RANGE.dateTo}`);
-  console.log(`- PROD report message=${JSON.stringify(prod.message)}, raw rows=${prod.rawRows.length}, keyed rows=${prod.prodRows.length}, csv bytes=${prod.csvBytes}`);
+  console.log(`- PROD weeks: ${PROD_WEEK_RANGES.map((range) => range.periodWeek).join(', ')}`);
+  console.log(`- PROD raw rows=${prod.rawRows.length}, keyed rows=${prod.prodRows.length}, csv bytes=${prod.csvBytes}`);
+  console.log(`- PROD weekly calls: ${prod.weeks.map((week) => `${week.periodWeek}:${week.rows} rows/${week.message || 'no message'}`).join(' | ')}`);
   console.log(`- SI tags: ${si.tagPairs.map((pair) => `${pair.tag_id}:${pair.tag_name}`).join(' | ')}`);
   console.log(`- SI raw rows=${si.rawRows.length}, keyed rows=${si.siRows.length}`);
   console.log(`- PROD distinct keyed periods: ${formatList(distinct([...prodByKey.keys()].map((key) => key.split('|')[0])))}`);
