@@ -5,6 +5,7 @@ const https = require('node:https');
 const reboticsBridge = require('../../rebotics-bridge');
 const { mapLimit, normalizeConcurrency, throwIfAborted } = require('./concurrency');
 const { REBOTICS_STORE_IDS, seededMissingCustomIds } = require('./rebotics-store-id-cache');
+const { normalizeCategoryId } = require('./prod-row-fields');
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 const DEFAULT_ACTIONS_PAGE_LIMIT = 200;
@@ -68,6 +69,15 @@ function dbkeyFromTask(task) {
 
 function categoryLabelFromTask(task) {
   return String(task?.category?.name || task?.commodity || '').trim();
+}
+
+function categoryIdFromTask(task) {
+  const title = String(task?.title || task?.task_def?.title || '');
+  const fromTitle = title.match(/P\d{2}W\d[-\s]+\d{4}\s+\d{6,10}\s+(\d{2,3})\s*-/i);
+  if (fromTitle) return normalizeCategoryId(fromTitle[1]);
+  const label = categoryLabelFromTask(task);
+  const fromLabel = label.match(/^(\d{2,3})\s*-/);
+  return fromLabel ? normalizeCategoryId(fromLabel[1]) : '';
 }
 
 function taskStatus(task) {
@@ -504,6 +514,7 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
           workDate: date,
           projectId: null,
           projectName: 'Store Intelligence',
+          categoryId: categoryIdFromTask(task),
           dbkey,
           pog: dbkey,
           categorySetLabel: categoryLabelFromTask(task),
@@ -562,5 +573,6 @@ module.exports = {
   fetchJson,
   toCustomId,
   dbkeyFromTask,
+  categoryIdFromTask,
   listActionsForTask,
 };

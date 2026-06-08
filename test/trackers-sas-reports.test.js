@@ -18,8 +18,8 @@ test('fetchRows reads work date from SAS headers with trailing spaces', async (t
     throw new Error(`Unexpected SAS URL: ${path}`);
   });
   t.mock.method(global, 'fetch', async () => new Response([
-    'Store #,Shift Reported Date ,Planogram ID,After Pictures Link,Project,Category,Shift Status,Visit ID',
-    '23,2026-06-04T15:00:00Z,P05W2_8732361_FIRST_AID,"[\'https://example.test/after.jpg\']",Kompass ISE,FIRST AID PRODUCTS,Completed,9001',
+    'Store #,Shift Reported Date ,Category ID,Planogram ID,Category Completion Status,Category Exception Reason,Comment,After Photo Required,After Pictures Link,Project,Category,Shift Status,Visit ID',
+    '23,2026-06-04T15:00:00Z,055,P05W2_8732361_FIRST_AID,False,Not an Executable KOMPASS event,"line one\nline two",True,"[\'https://example.test/after.jpg\']",Kompass ISE,FIRST AID PRODUCTS,Completed,9001',
   ].join('\n'), { status: 200 }));
 
   const rows = await sasReports.fetchRows({
@@ -33,6 +33,12 @@ test('fetchRows reads work date from SAS headers with trailing spaces', async (t
   assert.equal(rows.length, 1);
   assert.equal(rows[0].workDate, '2026-06-04');
   assert.equal(rows[0].dbkey, '8732361');
+  assert.equal(rows[0].categoryId, '55');
+  assert.equal(rows[0].categoryCompletionStatus, 'not_done');
+  assert.equal(rows[0].categoryExceptionReason, 'Not an Executable KOMPASS event');
+  assert.equal(rows[0].comment, 'line one\nline two');
+  assert.equal(rows[0].afterPhotoRequired, true);
+  assert.deepEqual(rows[0].afterPictureUrls, ['https://example.test/after.jpg']);
   assert.equal(rows[0].photoCount, 1);
   assert.equal(rows[0].sourceRef, undefined);
   assert.equal(rows[0].images[0].sourceRef, 'visit:9001');

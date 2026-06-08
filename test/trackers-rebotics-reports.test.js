@@ -73,7 +73,7 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
         results: [{
           id: 99,
           store: { custom_id: '701-00019', id: 3837 },
-          title: 'P05W2 - 2026 8732361',
+          title: 'P05W2-2026 8732361 082-SINGLE SERVE BEVERAGE 861 NII',
           status: { id: 'COMPLETED' },
           category: { name: 'FIRST AID PRODUCTS' },
           planograms: [{ custom_id: '8732361', store_planogram_id: 444, name: 'FIRST AID PRODUCTS' }],
@@ -118,6 +118,7 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].dbkey, '8732361');
+  assert.equal(rows[0].categoryId, '82');
   assert.equal(rows[0].source, 'si');
   assert.equal(rows[0].photoCount, 1);
   assert.equal(rows[0].images.length, 1);
@@ -126,4 +127,19 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
   assert.match(warnings[0], /2026-05-31/);
   assert.equal(storeLookups, 0);
   assert.equal(actionScans, 1);
+});
+
+test('categoryIdFromTask normalizes title and label category ids', () => {
+  assert.equal(
+    reboticsReports.categoryIdFromTask({ title: 'P05W3-2026 9014910 055-BAG SNACKS D701 S02 NII' }),
+    '55',
+  );
+  assert.equal(
+    reboticsReports.categoryIdFromTask({ title: 'P05W3-2026 9088146 201-CANDY - CHECKLANE 417 Reset' }),
+    '201',
+  );
+  assert.equal(
+    reboticsReports.categoryIdFromTask({ title: 'unexpected title', category: { name: '082-SINGLE SERVE BEVERAGE' } }),
+    '82',
+  );
 });

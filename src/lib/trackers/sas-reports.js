@@ -3,6 +3,7 @@
 const sasBridge = require('../../sas-bridge');
 const { DEFAULT_PROJECT_IDS, projectLabel, knownProjectOptions } = require('./metadata');
 const { mapLimit, normalizeConcurrency, throwIfAborted } = require('./concurrency');
+const { extractProdFields, parseAfterPictureUrls, rowValue } = require('./prod-row-fields');
 
 const CUSTOMER_ID = 2;
 const OFFSET_MIN = 420;
@@ -82,32 +83,52 @@ function parseCsvLine(line) {
   return out;
 }
 
+function parseCsvRecords(text) {
+  const records = [];
+  let record = [];
+  let cur = '';
+  let quoted = false;
+  const input = String(text || '').replace(/^\uFEFF/, '');
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+    if (ch === '"') {
+      if (quoted && input[i + 1] === '"') {
+        cur += '"';
+        i += 1;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
+    }
+    if (ch === ',' && !quoted) {
+      record.push(cur);
+      cur = '';
+      continue;
+    }
+    if ((ch === '\n' || ch === '\r') && !quoted) {
+      if (ch === '\r' && input[i + 1] === '\n') i += 1;
+      record.push(cur);
+      cur = '';
+      if (record.some((value) => String(value).trim())) records.push(record);
+      record = [];
+      continue;
+    }
+    cur += ch;
+  }
+  record.push(cur);
+  if (record.some((value) => String(value).trim())) records.push(record);
+  return records;
+}
+
 function parseCsv(text) {
-  const lines = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) return [];
-  const header = parseCsvLine(lines[0]);
-  return lines.slice(1).map((line) => {
-    const cols = parseCsvLine(line);
+  const records = parseCsvRecords(text);
+  if (records.length < 2) return [];
+  const header = records[0];
+  return records.slice(1).map((cols) => {
     const row = {};
     for (let i = 0; i < header.length; i += 1) row[header[i]] = cols[i] || '';
     return row;
   });
-}
-
-function normalizeHeaderKey(value) {
-  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-function rowValue(row, names) {
-  for (const name of names) {
-    if (row[name] != null && String(row[name]).trim()) return row[name];
-  }
-  const normalized = new Map(Object.entries(row || {}).map(([k, v]) => [normalizeHeaderKey(k), v]));
-  for (const name of names) {
-    const value = normalized.get(normalizeHeaderKey(name));
-    if (value != null && String(value).trim()) return value;
-  }
-  return '';
 }
 
 function extractWorkDate(row, fallbackDate = '') {
@@ -122,15 +143,6 @@ function extractWorkDate(row, fallbackDate = '') {
   const match = String(value || '').match(/\d{4}-\d{2}-\d{2}/);
   if (match) return match[0];
   return fallbackDate || '';
-}
-
-function parseAfterUrls(raw) {
-  const urls = [];
-  const re = /https?:\/\/[^'\s,\]]+/g;
-  let m = null;
-  const s = String(raw || '');
-  while ((m = re.exec(s)) != null) urls.push(m[0]);
-  return urls;
 }
 
 function extractDbkey(planogramId) {
@@ -318,18 +330,25 @@ async function fetchRows({ stores, projects, dateFrom, dateTo, settings = {}, on
       const workDate = extractWorkDate(row, dateFrom === dateTo ? dateFrom : '');
       const planogramId = rowValue(row, ['Planogram ID']);
       const dbkey = extractDbkey(planogramId);
-      const afterUrls = parseAfterUrls(rowValue(row, ['After Pictures Link']));
+      const prodFields = extractProdFields(row);
+      const afterUrls = prodFields.afterPictureUrls;
       allRows.push({
         source: 'prod',
         storeNumber: String(rowValue(row, ['Store #', 'Store']) || storeNumber),
         workDate,
         projectId,
         projectName: projectLabel(projectId, String(rowValue(row, ['Project', 'Project Name']) || '')),
+        categoryId: prodFields.categoryId,
         dbkey,
         pog: dbkey,
         categorySetLabel: String(rowValue(row, ['Category', 'Category Name', 'Department Name']) || ''),
         planogramId,
         status: String(rowValue(row, ['Shift Status', 'Status']) || 'unknown').toLowerCase(),
+        categoryCompletionStatus: prodFields.categoryCompletionStatus,
+        categoryExceptionReason: prodFields.categoryExceptionReason,
+        comment: prodFields.comment,
+        afterPhotoRequired: prodFields.afterPhotoRequired,
+        afterPictureUrls: prodFields.afterPictureUrls,
         photoCount: afterUrls.length,
         images: afterUrls.map((url, idx) => ({
           sourceSystem: 'prod',
@@ -352,5 +371,5 @@ module.exports = {
   fetchProjectStores,
   fetchRows,
   extractDbkey,
-  parseAfterUrls,
+  parseAfterUrls: parseAfterPictureUrls,
 };
