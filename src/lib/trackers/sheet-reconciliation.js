@@ -118,6 +118,8 @@ function makeProposal({ key, tracker = null, prod = null, si = null, bucket, rea
   const proposal = {
     key,
     periodWeek,
+    rowIndex: tracker?.rowIndex ?? null,
+    workbookKind: tracker?.workbookKind ?? tracker?.routedWorkbookKind ?? '',
     store,
     categoryId,
     dbkey,
