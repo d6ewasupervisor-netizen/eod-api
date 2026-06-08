@@ -9,6 +9,7 @@ const {
   normalizePeriodWeek,
 } = require('../src/lib/trackers/sheet-reconciliation');
 const {
+  DEFAULT_NOT_IN_STORE_PATTERNS,
   isBacklogException,
   matchNotInStore,
 } = require('../src/lib/trackers/not-in-store-patterns');
@@ -63,8 +64,24 @@ test('pattern helpers normalize backlog and not-in-store phrases safely', () => 
   assert.equal(isBacklogException('Backlog – Revisit'), true);
   assert.equal(matchNotInStore('not in store'), 'confirmed');
   assert.equal(matchNotInStore('store does not have'), 'confirmed');
+  assert.equal(matchNotInStore('Do Not Have In Store'), 'confirmed');
+  assert.equal(matchNotInStore(' do not have rack '), 'confirmed');
+  assert.equal(matchNotInStore(" store doesn't have "), 'confirmed');
+  assert.equal(matchNotInStore('not inn store'), 'confirmed');
   assert.equal(matchNotInStore("store doesn't carry it"), 'candidate');
+  assert.equal(matchNotInStore('stre dosnt hav it'), 'candidate');
   assert.equal(matchNotInStore('not in SI'), 'none');
+});
+
+test('approved not-in-store seed list includes Tyson review phrases', () => {
+  assert.deepEqual(DEFAULT_NOT_IN_STORE_PATTERNS, [
+    'not in store',
+    'store does not have',
+    'do not have in store',
+    'do not have rack',
+    "store doesn't have",
+    'not inn store',
+  ]);
 });
 
 test('period normalization isolates blank period and normalizes P#W#', () => {

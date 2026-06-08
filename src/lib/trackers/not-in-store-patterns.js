@@ -3,6 +3,10 @@
 const DEFAULT_NOT_IN_STORE_PATTERNS = [
   'not in store',
   'store does not have',
+  'do not have in store',
+  'do not have rack',
+  "store doesn't have",
+  'not inn store',
 ];
 
 function normalizePhrase(value) {
@@ -38,8 +42,8 @@ function describeNotInStoreMatch(comment, patterns = DEFAULT_NOT_IN_STORE_PATTER
   }
 
   const isShort = normalized.length <= 80;
-  const hasAbsenceToken = /\b(store|have|has|carry|carries|carried|stock|stocked|discontinu|n\/a|not applicable)\b/.test(normalized);
-  const hasNegativeCue = /\b(no|not|doesn'?t|dont|don't|cannot|can't|cant|n\/a|not applicable)\b|n't\b|discontinu/.test(normalized);
+  const hasAbsenceToken = /\b(store|stre|have|hav|has|carry|carries|carried|stock|stocked|discontinu|n\/a|not applicable)\b/.test(normalized);
+  const hasNegativeCue = /\b(no|not|doesn'?t|doesnt|dosnt|dont|don't|cannot|can't|cant|n\/a|not applicable)\b|n't\b|discontinu/.test(normalized);
   if (isShort && hasAbsenceToken && hasNegativeCue) {
     return { state: 'candidate', phrase: normalized };
   }
