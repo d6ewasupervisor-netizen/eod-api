@@ -226,6 +226,40 @@ test('matched_both is the only normal compare bucket with a write proposal', () 
   assert.deepEqual(proposal.proposed, { K: 'Yes', L: '' });
 });
 
+test('SI row collapse is order-independent and done wins over earlier incomplete rows', () => {
+  const siRows = [
+    si({ workDate: '2026-06-03', status: 'incomplete' }),
+    si({ workDate: '2026-06-01', status: 'incomplete' }),
+    si({ workDate: '2026-06-04', status: 'completed' }),
+    si({ workDate: '2026-05-31', status: 'incomplete' }),
+    si({ workDate: '2026-06-02', status: 'incomplete' }),
+  ];
+  const result = classifyReconciliation({
+    trackerRows: [tracker({ K: '', L: '' })],
+    prodRows: [prod({ workDate: '2026-06-04', categoryCompletionStatus: 'done' })],
+    siRows,
+  });
+  const proposal = result.proposals[0];
+  assert.equal(proposal.bucket, 'matched_both');
+  assert.equal(proposal.si.status, 'done');
+  assert.deepEqual(proposal.proposed, { K: 'Yes', L: '' });
+});
+
+test('PROD row collapse is order-independent and done wins over earlier not_done rows', () => {
+  const result = classifyReconciliation({
+    trackerRows: [tracker({ K: '', L: '' })],
+    prodRows: [
+      prod({ workDate: '2026-06-04', categoryCompletionStatus: 'done' }),
+      prod({ workDate: '2026-05-31', categoryCompletionStatus: 'not_done', comment: 'training' }),
+      prod({ workDate: '2026-06-02', categoryCompletionStatus: 'not_done', comment: 'lots of movement' }),
+    ],
+    siRows: [si({ workDate: '2026-06-04', status: 'completed' })],
+  });
+  const proposal = result.proposals[0];
+  assert.equal(proposal.bucket, 'matched_both');
+  assert.equal(proposal.prod.completionStatus, 'done');
+});
+
 test('mirror buckets are proposal-only and never write', () => {
   const result = classifyReconciliation({
     trackerRows: [

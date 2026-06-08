@@ -79,6 +79,40 @@ function firstByKey(rows = []) {
   return out;
 }
 
+function rowTime(row = {}) {
+  const raw = firstPresent(row.workDate, row.work_date, row.date, row.scheduledDate, row.scheduled_date, row.completedAt, row.completed_at, row.raw?.work_date, row.raw?.date);
+  if (!raw) return 0;
+  const parsed = Date.parse(String(raw));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isProdDone(row = {}) {
+  return row?.categoryCompletionStatus === 'done';
+}
+
+function isSiDone(row = {}) {
+  return normalizeSiStatus(row?.status) === 'done';
+}
+
+function shouldReplaceCollapsedRow(current, candidate, isDone) {
+  if (!current) return true;
+  const currentDone = isDone(current);
+  const candidateDone = isDone(candidate);
+  if (candidateDone !== currentDone) return candidateDone;
+  return rowTime(candidate) >= rowTime(current);
+}
+
+function collapseRowsByKey(rows = [], isDone = () => false) {
+  const out = new Map();
+  for (const row of rows || []) {
+    const key = buildReconciliationKey(row);
+    const [, store, categoryId, dbkey] = key.split('|');
+    if (!store || !categoryId || !dbkey) continue;
+    if (shouldReplaceCollapsedRow(out.get(key), row, isDone)) out.set(key, row);
+  }
+  return out;
+}
+
 function currentFromTracker(tracker) {
   return {
     K: tracker?.K ?? tracker?.k ?? tracker?.completeVerified ?? tracker?.currentK ?? '',
@@ -217,8 +251,8 @@ function classifyReconciliation({
   projectMode = true,
   ignoredKeys = [],
 } = {}) {
-  const prodByKey = firstByKey(prodRows);
-  const siByKey = firstByKey(siRows);
+  const prodByKey = collapseRowsByKey(prodRows, isProdDone);
+  const siByKey = collapseRowsByKey(siRows, isSiDone);
   const trackerByKey = firstByKey(trackerRows);
   const ignoredKeySet = new Set((ignoredKeys || []).filter(Boolean));
   const proposals = [];
