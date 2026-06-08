@@ -144,6 +144,11 @@ function siSummary(si) {
   return {
     present: Boolean(si),
     status: si ? normalizeSiStatus(si.status) : 'absent',
+    currentTask: Boolean(si?.currentTask || si?.isCurrentTask),
+    taskId: si?.taskId ?? si?.raw?.taskId ?? null,
+    scanStatus: si?.scanStatus ?? si?.scan_status ?? null,
+    actionsCount: si?.actionsCount ?? si?.actions_count ?? null,
+    hasPrePhoto: Boolean(si?.hasPrePhoto || si?.has_pre_photo),
   };
 }
 
@@ -175,6 +180,33 @@ function writeProposal(bucket, reason, proposed) {
 
 function noWrite(bucket, reason, extra = {}) {
   return { bucket, reason, proposed: null, ...extra };
+}
+
+function actionsCountTotal(si = {}) {
+  const actionsCount = si.actionsCount || si.actions_count || {};
+  if (!actionsCount || typeof actionsCount !== 'object') return 0;
+  return Object.values(actionsCount).reduce((sum, value) => {
+    const parsed = parseInt(value, 10);
+    return sum + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
+}
+
+function hasSiCaptureActivity(si = {}) {
+  return actionsCountTotal(si) > 0
+    || Boolean(si.hasPrePhoto || si.has_pre_photo)
+    || (Array.isArray(si.images) && si.images.length > 0)
+    || (parseInt(si.photoCount, 10) || 0) > 0
+    || !['', 'NO_CAPTURE', 'no_capture'].includes(String(si.scanStatus || si.scan_status || '').trim());
+}
+
+function prodToSiMirrorBucket(si) {
+  if (!si || !(si.currentTask || si.isCurrentTask)) {
+    return noWrite('mirror_si_stale_or_absent', 'PROD is complete; no current-date SI task was resolved.');
+  }
+  if (hasSiCaptureActivity(si)) {
+    return noWrite('mirror_si_simple_close', 'PROD is complete; current SI task has scan/photo/action activity and may only need close.');
+  }
+  return noWrite('mirror_si_photo_push', 'PROD is complete; current SI task is empty and would need PROD photos before close.');
 }
 
 function resolveBucket({ prod = null, si = null, notInStorePatterns = DEFAULT_NOT_IN_STORE_PATTERNS }) {
@@ -229,7 +261,11 @@ function resolveBucket({ prod = null, si = null, notInStorePatterns = DEFAULT_NO
   }
 
   if (prodStatus === 'done' && !siDone) {
-    return noWrite('mirror_prod_to_si', reclassificationNote || 'PROD is complete; SI would need Phase 2 push.');
+    if (reclassificationNote) {
+      const bucket = prodToSiMirrorBucket(si);
+      return noWrite(bucket.bucket, reclassificationNote);
+    }
+    return prodToSiMirrorBucket(si);
   }
 
   if (siDone && prodStatus !== 'done') {

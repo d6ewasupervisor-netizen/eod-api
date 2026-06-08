@@ -265,21 +265,31 @@ test('mirror buckets are proposal-only and never write', () => {
     trackerRows: [
       tracker({ dbkey: '1111111' }),
       tracker({ dbkey: '2222222' }),
+      tracker({ dbkey: '3333333' }),
+      tracker({ dbkey: '4444444' }),
     ],
     prodRows: [
       prod({ dbkey: '1111111', categoryCompletionStatus: 'done' }),
       prod({ dbkey: '2222222', categoryCompletionStatus: 'not_done' }),
+      prod({ dbkey: '3333333', categoryCompletionStatus: 'done' }),
+      prod({ dbkey: '4444444', categoryCompletionStatus: 'done' }),
     ],
     siRows: [
-      si({ dbkey: '1111111', status: 'created' }),
+      si({ dbkey: '1111111', status: 'created', currentTask: true, scanStatus: 'NO_CAPTURE', actionsCount: { identify: 0, move: 0, remove: 0, add: 0 }, hasPrePhoto: false }),
       si({ dbkey: '2222222', status: 'completed' }),
+      si({ dbkey: '3333333', status: 'incomplete', currentTask: true, scanStatus: 'IN_PROGRESS', actionsCount: { identify: 1, move: 0, remove: 0, add: 0 }, hasPrePhoto: true }),
+      si({ dbkey: '4444444', status: 'incomplete', currentTask: false, scanStatus: 'NO_CAPTURE', actionsCount: { identify: 0, move: 0, remove: 0, add: 0 }, hasPrePhoto: false }),
     ],
   });
   const proposals = byKey(result);
-  assert.equal(proposals.get('P05W2|19|201|1111111').bucket, 'mirror_prod_to_si');
+  assert.equal(proposals.get('P05W2|19|201|1111111').bucket, 'mirror_si_photo_push');
   assert.equal(proposals.get('P05W2|19|201|1111111').proposed, null);
   assert.equal(proposals.get('P05W2|19|201|2222222').bucket, 'mirror_si_to_prod');
   assert.equal(proposals.get('P05W2|19|201|2222222').proposed, null);
+  assert.equal(proposals.get('P05W2|19|201|3333333').bucket, 'mirror_si_simple_close');
+  assert.equal(proposals.get('P05W2|19|201|3333333').proposed, null);
+  assert.equal(proposals.get('P05W2|19|201|4444444').bucket, 'mirror_si_stale_or_absent');
+  assert.equal(proposals.get('P05W2|19|201|4444444').proposed, null);
 });
 
 test('sub-100 category 082 joins tracker, PROD, and SI by normalized key', () => {

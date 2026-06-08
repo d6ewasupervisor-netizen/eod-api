@@ -521,6 +521,10 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
           planogramId: task?.planograms?.[0]?.name || null,
           status: taskStatus(task),
           photoCount: images.length,
+          scanStatus: task?.scan_status || null,
+          actionsCount: task?.actions_count || null,
+          hasPrePhoto: images.length > 0 || embeddedPrePhotoActions(task).some(isUsablePrePhotoAction),
+          taskId: task?.id || null,
           images,
           raw: {
             taskId: task?.id,
