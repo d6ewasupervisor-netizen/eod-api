@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const {
   buildReconciliationKey,
   classifyReconciliation,
+  normalizePeriodWeek,
 } = require('../src/lib/trackers/sheet-reconciliation');
 const {
   isBacklogException,
@@ -15,6 +16,7 @@ const {
 function tracker(overrides = {}) {
   return {
     store: '19',
+    periodWeek: 'P05W2',
     categoryId: '201',
     dbkey: '9009204',
     setType: 'Blitz',
@@ -28,6 +30,7 @@ function prod(overrides = {}) {
   return {
     source: 'prod',
     storeNumber: '19',
+    planogramId: 'P05W2_9009204_D701_L00000_D03_C201_V340_I024_MX',
     categoryId: '201',
     dbkey: '9009204',
     categoryCompletionStatus: 'done',
@@ -43,6 +46,7 @@ function si(overrides = {}) {
   return {
     source: 'si',
     storeNumber: '19',
+    raw: { title: 'P05W2-2026 9009204 201-CANDY - CHECKLANE 417 Reset' },
     categoryId: '201',
     dbkey: '9009204',
     status: 'completed',
@@ -61,6 +65,25 @@ test('pattern helpers normalize backlog and not-in-store phrases safely', () => 
   assert.equal(matchNotInStore('store does not have'), 'confirmed');
   assert.equal(matchNotInStore("store doesn't carry it"), 'candidate');
   assert.equal(matchNotInStore('not in SI'), 'none');
+});
+
+test('period normalization isolates blank period and normalizes P#W#', () => {
+  assert.equal(normalizePeriodWeek('P05W2'), 'P05W2');
+  assert.equal(normalizePeriodWeek('p5w2'), 'P05W2');
+  assert.equal(normalizePeriodWeek('P05W2_9009204_D701_L00000_D03_C201_V340_I024_MX'), 'P05W2');
+  assert.equal(normalizePeriodWeek(''), '');
+  assert.equal(buildReconciliationKey({ store: '19', categoryId: '201', dbkey: '9009204' }), '|19|201|9009204');
+});
+
+test('period parsing falls through non-period planogram labels to SI task title', () => {
+  const key = buildReconciliationKey({
+    storeNumber: '19',
+    categoryId: '201',
+    dbkey: '9009204',
+    planogramId: '201-CANDY - CHECKLANE 340',
+    raw: { title: 'P05W2-2026 9009204 201-CANDY - CHECKLANE 340 Reset' },
+  });
+  assert.equal(key, 'P05W2|19|201|9009204');
 });
 
 test('backlog wins even with whitespace and not-in-store comment', () => {
@@ -142,7 +165,7 @@ test('not-in-store candidate surfaces without proposed write', () => {
   assert.equal(proposal.proposed, null);
   assert.equal(proposal.candidatePhrase, "store doesn't carry it");
   assert.deepEqual(result.pendingPatternCandidates, [{
-    key: '19|201|9009204',
+    key: 'P05W2|19|201|9009204',
     phrase: "store doesn't carry it",
   }]);
 });
@@ -159,7 +182,7 @@ test('Not an Executable KOMPASS event without qualifying comment is judgment_cal
     siRows: [],
   });
   const proposal = result.proposals[0];
-  assert.equal(proposal.key, '19|201|8885976');
+  assert.equal(proposal.key, 'P05W2|19|201|8885976');
   assert.equal(proposal.bucket, 'judgment_call');
   assert.equal(proposal.proposed, null);
 });
@@ -202,10 +225,10 @@ test('mirror buckets are proposal-only and never write', () => {
     ],
   });
   const proposals = byKey(result);
-  assert.equal(proposals.get('19|201|1111111').bucket, 'mirror_prod_to_si');
-  assert.equal(proposals.get('19|201|1111111').proposed, null);
-  assert.equal(proposals.get('19|201|2222222').bucket, 'mirror_si_to_prod');
-  assert.equal(proposals.get('19|201|2222222').proposed, null);
+  assert.equal(proposals.get('P05W2|19|201|1111111').bucket, 'mirror_prod_to_si');
+  assert.equal(proposals.get('P05W2|19|201|1111111').proposed, null);
+  assert.equal(proposals.get('P05W2|19|201|2222222').bucket, 'mirror_si_to_prod');
+  assert.equal(proposals.get('P05W2|19|201|2222222').proposed, null);
 });
 
 test('sub-100 category 082 joins tracker, PROD, and SI by normalized key', () => {
@@ -215,9 +238,19 @@ test('sub-100 category 082 joins tracker, PROD, and SI by normalized key', () =>
     siRows: [si({ categoryId: '082', dbkey: '8509659', status: 'completed' })],
   });
   const proposal = result.proposals[0];
-  assert.equal(buildReconciliationKey({ store: '19', categoryId: '082', dbkey: '8509659' }), '19|82|8509659');
-  assert.equal(proposal.key, '19|82|8509659');
+  assert.equal(buildReconciliationKey({ periodWeek: 'p5w2', store: '19', categoryId: '082', dbkey: '8509659' }), 'P05W2|19|82|8509659');
+  assert.equal(proposal.key, 'P05W2|19|82|8509659');
   assert.equal(proposal.bucket, 'matched_both');
+});
+
+test('same store/category/dbkey from a different period does not match', () => {
+  const result = classifyReconciliation({
+    trackerRows: [tracker({ periodWeek: 'P04W4', dbkey: '8509659' })],
+    prodRows: [prod({ periodWeek: 'P05W2', planogramId: 'P05W2_8509659_D701_L00000_D01_C082_V856_F002_MX', categoryId: '82', dbkey: '8509659', categoryCompletionStatus: 'done' })],
+    siRows: [si({ raw: { title: 'P05W2-2026 8509659 082-SINGLE SERVE BEVERAGE 861 NII' }, categoryId: '082', dbkey: '8509659', status: 'completed' })],
+  });
+  assert.equal(result.byBucket.no_match, 2);
+  assert.equal(result.byBucket.matched_both || 0, 0);
 });
 
 test('no_match distinguishes tracker-only and system-only rows', () => {
@@ -227,13 +260,35 @@ test('no_match distinguishes tracker-only and system-only rows', () => {
     siRows: [si({ dbkey: '3000003', status: 'completed' })],
   });
   const proposals = byKey(result);
-  assert.equal(proposals.get('19|201|1000001').bucket, 'no_match');
-  assert.match(proposals.get('19|201|1000001').reason, /Tracker row has no matching PROD or SI row/);
-  assert.equal(proposals.get('19|201|2000002').bucket, 'no_match');
-  assert.match(proposals.get('19|201|2000002').reason, /PROD row has no matching tracker row/);
-  assert.equal(proposals.get('19|201|3000003').bucket, 'no_match');
-  assert.match(proposals.get('19|201|3000003').reason, /SI row has no matching tracker row/);
+  assert.equal(proposals.get('P05W2|19|201|1000001').bucket, 'no_match');
+  assert.match(proposals.get('P05W2|19|201|1000001').reason, /Tracker row has no matching PROD or SI row/);
+  assert.equal(proposals.get('P05W2|19|201|2000002').bucket, 'no_match');
+  assert.match(proposals.get('P05W2|19|201|2000002').reason, /PROD row has no matching tracker row/);
+  assert.equal(proposals.get('P05W2|19|201|3000003').bucket, 'no_match');
+  assert.match(proposals.get('P05W2|19|201|3000003').reason, /SI row has no matching tracker row/);
   assert.equal(result.byBucket.no_match, 3);
+});
+
+test('no-op suppression drops already satisfied write proposals and counts them', () => {
+  const result = classifyReconciliation({
+    trackerRows: [tracker({ K: 'Yes', L: '' })],
+    prodRows: [prod({ categoryCompletionStatus: 'done' })],
+    siRows: [si({ status: 'completed' })],
+  });
+  assert.equal(result.proposals.length, 0);
+  assert.equal(result.alreadySatisfied, 1);
+});
+
+test('ignored keys suppress system-only no_match rows for already done tracker rows', () => {
+  const ignoredKey = 'P05W2|19|201|9009204';
+  const result = classifyReconciliation({
+    trackerRows: [],
+    prodRows: [prod({ categoryCompletionStatus: 'done' })],
+    siRows: [si({ status: 'completed' })],
+    ignoredKeys: [ignoredKey],
+  });
+  assert.equal(result.proposals.length, 0);
+  assert.deepEqual(result.byBucket, {});
 });
 
 test('only safe buckets carry write proposals', () => {
