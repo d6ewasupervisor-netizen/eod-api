@@ -346,6 +346,9 @@ async function start() {
     '/api/verify-token',
     // Dump bin file GET: session Bearer OR short-lived ?t= JWT (typ dump_dl).
     '/api/download',
+    // Local tracker agent authenticates with its own ingest bearer before the
+    // tracker router's normal user/session gate.
+    '/api/trackers/snapshot/ingest',
     '/trackers',
     '/trackers/',
     '/trackers/admin',

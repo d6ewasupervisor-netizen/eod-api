@@ -26,6 +26,10 @@ const {
   saveTrackerSettings,
   isTrackerUserAllowed,
 } = require('../lib/trackers/settings');
+const {
+  ingestTrackerSnapshot,
+  validateSnapshotPayload,
+} = require('../lib/trackers/snapshot-ingest');
 
 const inFlightRuns = new Map();
 const TRACKER_ADMIN_EMAILS = trackerAdminEmails();
@@ -34,6 +38,19 @@ const TERMINAL_RUN_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 const STALE_THRESHOLD_MS = RUN_HEARTBEAT_MS * 6;
 const INTERRUPTED_RUN_ERROR = 'Run interrupted by a server restart. Please re-run.';
 const PROCESS_STARTED_AT = new Date().toISOString();
+
+function bearerToken(req) {
+  const auth = String(req.headers.authorization || '');
+  if (!auth.toLowerCase().startsWith('bearer ')) return '';
+  return auth.slice(7).trim();
+}
+
+function safeTokenEquals(actual, expected) {
+  const actualBuffer = Buffer.from(String(actual || ''));
+  const expectedBuffer = Buffer.from(String(expected || ''));
+  if (actualBuffer.length !== expectedBuffer.length) return false;
+  return crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+}
 
 function requireTrackerAdmin(req, res, next) {
   const email = String(req.user?.email || '').trim().toLowerCase();
@@ -663,7 +680,7 @@ function jsonToCsv(rows) {
   return `${header.join(',')}\n${body.join('\n')}`;
 }
 
-function createTrackersRouter({ pool }) {
+function createTrackersRouter({ pool, snapshotIngest = {} }) {
   const router = express.Router();
   sweepInterruptedRuns(pool).catch((err) => {
     console.error('[trackers] failed to mark interrupted startup runs:', err.message);
@@ -673,6 +690,41 @@ function createTrackersRouter({ pool }) {
     req.trackerPool = pool;
     next();
   });
+
+  router.post('/snapshot/ingest', async (req, res) => {
+    const expectedToken = String(process.env.TRACKER_INGEST_TOKEN || '').trim();
+    if (!expectedToken) {
+      return res.status(503).json({ ok: false, error: 'Tracker ingest token is not configured' });
+    }
+    if (!safeTokenEquals(bearerToken(req), expectedToken)) {
+      return res.status(401).json({ ok: false, error: 'Invalid tracker ingest token' });
+    }
+
+    let payload;
+    try {
+      payload = validateSnapshotPayload(req.body || {});
+    } catch (err) {
+      return res.status(err.statusCode || 400).json({ ok: false, error: err.message });
+    }
+
+    try {
+      const result = await ingestTrackerSnapshot({
+        pool,
+        workbookKind: payload.workbookKind,
+        rows: payload.rows,
+        force: payload.force,
+        settingsLoader: () => loadTrackerSettings(pool),
+        ...snapshotIngest,
+      });
+      return res.json({ ok: true, ...result });
+    } catch (err) {
+      if (err.snapshotReject) {
+        return res.status(409).json({ ok: false, ...err.snapshotReject });
+      }
+      return res.status(err.statusCode || 502).json({ ok: false, error: err.message });
+    }
+  });
+
   router.use(requireAuth);
   router.use(requireTrackerAccess);
 

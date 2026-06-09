@@ -286,6 +286,7 @@ function classifyReconciliation({
   notInStorePatterns = DEFAULT_NOT_IN_STORE_PATTERNS,
   projectMode = true,
   ignoredKeys = [],
+  suppressAlreadySatisfied = true,
 } = {}) {
   const prodByKey = collapseRowsByKey(prodRows, isProdDone);
   const siByKey = collapseRowsByKey(siRows, isSiDone);
@@ -297,7 +298,7 @@ function classifyReconciliation({
   let alreadySatisfied = 0;
 
   function add(proposal) {
-    if (proposedEqualsCurrent(proposal.proposed, proposal.current)) {
+    if (suppressAlreadySatisfied && proposedEqualsCurrent(proposal.proposed, proposal.current)) {
       alreadySatisfied += 1;
       return;
     }
