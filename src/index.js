@@ -8,6 +8,8 @@ const { pool, runMigrations } = require('./lib/db');
 const sasBridge = require('./sas-bridge');
 const sasAutoRefresh = require('./sas-auto-refresh');
 const reboticsBridge = require('./rebotics-bridge');
+const { createGrafanaBridge } = require('./grafana-bridge');
+const grafanaCookieAccessor = require('./lib/trackers/grafana-cookie-accessor');
 const shiftManagement = require('./shift-management');
 const storeConfirmation = require('./store-confirmation');
 const extensionBridge = require('./extension-bridge');
@@ -428,6 +430,46 @@ async function start() {
   await sasBridge.init(app, pool);
 
   await reboticsBridge.init(app, pool, { resend });
+
+  // Initialize Grafana keep-alive bridge (Rebotics reporting cookie).
+  // Pure auth/heartbeat engine — no routes of its own; init() self-gates on
+  // shouldAutoStart() (production + not-disabled + auto-start not 'false'),
+  // seeds once, and starts the 5-min rotation heartbeat. The single live
+  // instance is published to the in-process accessor so same-process readers
+  // (server-side reconciliation) can pull the current cookie. Locally /
+  // off-production, init() no-ops the autostart and getGrafanaCookie() stays
+  // null, which downstream readers MUST treat as a hard not-ready condition.
+  const grafanaBridge = createGrafanaBridge({ resend });
+  grafanaCookieAccessor.setGrafanaBridge(grafanaBridge);
+  await grafanaBridge.init(app, pool, { resend });
+
+  // Status (pure read — never triggers a rotate, never exposes the cookie value).
+  app.get('/grafana-auth-status', requireAuth, (req, res) => {
+    res.json(grafanaBridge.getStatus());
+  });
+
+  // User-initiated refresh: forces one rotate(). On a stale session the bridge
+  // falls through internally to a single cold-recover (cooldown-guarded). Any
+  // non-ok outcome (disabled / cooldown-deferred / hard recovery failure) is
+  // surfaced as 502 — never silently reported as success.
+  app.post('/grafana-trigger-auth', requireAuth, async (req, res) => {
+    try {
+      const result = await grafanaBridge.rotate();
+      if (result?.ok === false) {
+        return res.status(502).json({
+          success: false,
+          error: result.error
+            || result.reason
+            || (result.disabled ? 'grafana_auth_disabled' : 'grafana_auth_not_ok'),
+          grafana: result.status,
+        });
+      }
+      return res.json({ success: true, grafana: result.status });
+    } catch (e) {
+      logger.error('grafana-trigger-auth failed:', e.message);
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
 
   // Extension distribution endpoints (publish from personal computer,
   // download onto the office USB stick).
