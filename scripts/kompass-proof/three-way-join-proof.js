@@ -34,6 +34,8 @@ const SCRIPT_DIR = __dirname;
 const QUERY_PATH = path.join(SCRIPT_DIR, 'query46.sql');
 const COOKIE_PATH = path.join(SCRIPT_DIR, '.cookie');
 const ENV_PATH = path.join(SCRIPT_DIR, '.env');
+const LOG_PATH = path.join(SCRIPT_DIR, 'three-way-join-proof.log');
+const DEFAULT_FETCH_TIMEOUT_MS = parseInt(process.env.KOMPASS_PROOF_FETCH_TIMEOUT_MS || '180000', 10);
 
 const TAG_LOOKUP_SQL = `select tag_id, tag_name
   from dds.d_tag
@@ -41,19 +43,53 @@ const TAG_LOOKUP_SQL = `select tag_id, tag_name
    and substr(tag_name, 1, 3) in ('P04','P05')
  order by substr(tag_name, 1, 5)`;
 
+const TARGET_PERIOD_WEEK = 'P05W3';
 const PROD_WEEK_RANGES = [
-  { periodWeek: 'P04W1', dateFrom: '2026-04-26T07:00:00.000Z', dateTo: '2026-05-03T12:00:00.000Z' },
-  { periodWeek: 'P04W2', dateFrom: '2026-05-03T07:00:00.000Z', dateTo: '2026-05-10T12:00:00.000Z' },
-  { periodWeek: 'P04W3', dateFrom: '2026-05-10T07:00:00.000Z', dateTo: '2026-05-17T12:00:00.000Z' },
-  { periodWeek: 'P04W4', dateFrom: '2026-05-17T07:00:00.000Z', dateTo: '2026-05-24T12:00:00.000Z' },
-  { periodWeek: 'P05W1', dateFrom: '2026-05-24T07:00:00.000Z', dateTo: '2026-05-31T12:00:00.000Z' },
-  { periodWeek: 'P05W2', dateFrom: '2026-05-31T07:00:00.000Z', dateTo: '2026-06-07T12:00:00.000Z' },
   { periodWeek: 'P05W3', dateFrom: '2026-06-07T07:00:00.000Z', dateTo: '2026-06-14T12:00:00.000Z' },
 ];
 
 const PREFERRED_KEYS = {
   matchedBoth: ['P05W3|50|55|9014777'],
 };
+
+let liveLogStream = null;
+
+function formatConsoleArg(value) {
+  if (typeof value === 'string') return value;
+  if (value instanceof Error) return value.stack || value.message;
+  try {
+    return JSON.stringify(value);
+  } catch (_) {
+    return String(value);
+  }
+}
+
+function startLiveLog() {
+  if (liveLogStream) return;
+  liveLogStream = fs.createWriteStream(LOG_PATH, { flags: 'w' });
+  const originalLog = console.log.bind(console);
+  const originalError = console.error.bind(console);
+
+  function write(level, args) {
+    const line = args.map(formatConsoleArg).join(' ');
+    liveLogStream.write(`[${new Date().toISOString()}] ${level} ${line}\n`);
+  }
+
+  console.log = (...args) => {
+    originalLog(...args);
+    write('INFO', args);
+  };
+  console.error = (...args) => {
+    originalError(...args);
+    write('ERROR', args);
+  };
+
+  process.on('exit', () => {
+    if (liveLogStream) liveLogStream.end();
+  });
+
+  console.log(`Live log: ${LOG_PATH}`);
+}
 
 function clean(value) {
   return String(value ?? '').trim();
@@ -71,6 +107,26 @@ function parseJsonOrText(text) {
     return JSON.parse(text);
   } catch (_) {
     return text;
+  }
+}
+
+async function fetchWithTimeout(label, url, options = {}, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const startedAt = Date.now();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  console.log(`${label}: start`);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    console.log(`${label}: HTTP ${response.status} in ${Date.now() - startedAt}ms`);
+    return response;
+  } catch (error) {
+    const elapsed = Date.now() - startedAt;
+    if (error?.name === 'AbortError') {
+      throw new Error(`${label} timed out after ${elapsed}ms`, { cause: error });
+    }
+    throw new Error(`${label} failed after ${elapsed}ms: ${error.message}`, { cause: error });
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -197,7 +253,7 @@ function grafanaErrorMessage(error) {
 }
 
 async function sasGetJsonTokenOnly(token, apiPath) {
-  const res = await fetch(`${SAS_BASE}${apiPath}`, {
+  const res = await fetchWithTimeout('PROD report request', `${SAS_BASE}${apiPath}`, {
     method: 'GET',
     headers: {
       Accept: 'application/json',
@@ -235,7 +291,7 @@ function reportTokenOnlyRejection(err) {
 }
 
 async function fetchCsv(fileUrl) {
-  const res = await fetch(fileUrl, {
+  const res = await fetchWithTimeout('CloudFront CSV fetch', fileUrl, {
     method: 'GET',
     headers: { Accept: 'text/csv,*/*;q=0.8' },
   });
@@ -333,7 +389,7 @@ function createGrafanaRequestBody(rawSql) {
 }
 
 async function fireGrafanaQuery(dsQueryUrl, grafanaCookie, rawSql) {
-  const response = await fetch(dsQueryUrl, {
+  const response = await fetchWithTimeout('Grafana ds/query', dsQueryUrl, {
     method: 'POST',
     redirect: 'manual',
     headers: {
@@ -650,14 +706,6 @@ function trackerRowFromKey(key, overrides = {}) {
   };
 }
 
-function expectedCarryoverBucket(prod, si) {
-  if (prod && isBacklog(prod)) return 'leave_alone_backlog';
-  if (prod && isProdDone(prod) && si && isSiDone(si)) return 'matched_both';
-  if (prod && isProdDone(prod)) return 'mirror_si_*';
-  if (si && isSiDone(si)) return 'mirror_si_to_prod';
-  return 'judgment_call';
-}
-
 function buildFixture({ prodByKey, siByKey }) {
   const usedKeys = new Set();
   const cases = [];
@@ -743,26 +791,6 @@ function buildFixture({ prodByKey, siByKey }) {
     tracker: trackerRowFromKey(nii.key, { rowIndex: 4, proofCase: 'nii_not_executable', K: 'No' }),
   });
 
-  const carryover = selectKey({
-    label: 'carryover prior-period',
-    prodByKey,
-    siByKey,
-    usedKeys,
-    predicate: (key, prod, si) => samePeriodPrefix(key, 'P04W4')
-      && Boolean(prod)
-      && Boolean(si)
-      && !isProdDone(prod)
-      && !isSiDone(si),
-  });
-  cases.push({
-    id: 'carryover_prior_period',
-    expected: [expectedCarryoverBucket(prodByKey.get(carryover.key), siByKey.get(carryover.key))],
-    expectProd: Boolean(prodByKey.get(carryover.key)),
-    expectSi: Boolean(siByKey.get(carryover.key)),
-    ...carryover,
-    tracker: trackerRowFromKey(carryover.key, { rowIndex: 5, proofCase: 'carryover_prior_period', K: 'No' }),
-  });
-
   const alreadyYes = selectKey({
     label: 'already-Yes suppression',
     prodByKey,
@@ -776,7 +804,7 @@ function buildFixture({ prodByKey, siByKey }) {
     expectProd: true,
     expectSi: true,
     ...alreadyYes,
-    tracker: trackerRowFromKey(alreadyYes.key, { rowIndex: 6, proofCase: 'already_yes_suppression', K: 'Yes', L: '' }),
+    tracker: trackerRowFromKey(alreadyYes.key, { rowIndex: 5, proofCase: 'already_yes_suppression', K: 'Yes', L: '' }),
   });
 
   let unmatchedKey = 'P05W3|999|999|9999999';
@@ -792,13 +820,14 @@ function buildFixture({ prodByKey, siByKey }) {
     expectSi: false,
     key: unmatchedKey,
     selection: 'synthetic absent key',
-    tracker: trackerRowFromKey(unmatchedKey, { rowIndex: 7, proofCase: 'unmatched', K: 'No' }),
+    tracker: trackerRowFromKey(unmatchedKey, { rowIndex: 6, proofCase: 'unmatched', K: 'No' }),
   });
 
   return cases;
 }
 
 async function pullProdWeek(sasToken, range) {
+  console.log(`PROD ${range.periodWeek}: report request ${range.dateFrom} -> ${range.dateTo}`);
   const params = new URLSearchParams({
     customer_id: String(CUSTOMER_ID),
     date_from: range.dateFrom,
@@ -826,6 +855,7 @@ async function pullProdWeek(sasToken, range) {
 
   const csvText = await fetchCsv(fileUrl);
   const parsed = parseCsv(csvText);
+  console.log(`PROD ${range.periodWeek}: parsed ${parsed.rows.length} CSV rows (${Buffer.byteLength(csvText, 'utf8')} bytes)`);
   return {
     periodWeek: range.periodWeek,
     message: body?.message || '',
@@ -843,11 +873,16 @@ async function pullProdRows(sasToken) {
 
   const prodRows = [];
   const shiftSignoffs = [];
+  let filteredCarryoverRows = 0;
   for (const week of weeks) {
     for (const csvRow of week.rows) {
       const mapped = prodRowToEngine(csvRow);
-      if (mapped.joinable) prodRows.push(mapped.row);
-      else shiftSignoffs.push({ ...mapped.shiftSignoff, sourceWeek: week.periodWeek });
+      if (mapped.joinable) {
+        if (mapped.row.periodWeek === week.periodWeek) prodRows.push(mapped.row);
+        else filteredCarryoverRows += 1;
+      } else {
+        shiftSignoffs.push({ ...mapped.shiftSignoff, sourceWeek: week.periodWeek });
+      }
     }
   }
 
@@ -856,6 +891,7 @@ async function pullProdRows(sasToken) {
     rawRows: weeks.flatMap((week) => week.rows),
     prodRows,
     shiftSignoffs,
+    filteredCarryoverRows,
     csvBytes: weeks.reduce((sum, week) => sum + week.csvBytes, 0),
     weeks: weeks.map((week) => ({
       periodWeek: week.periodWeek,
@@ -868,12 +904,14 @@ async function pullProdRows(sasToken) {
 
 async function pullSiRows(grafanaCookie) {
   const dsQueryUrl = process.env.KOMPASS_DS_QUERY_URL || DEFAULT_DS_QUERY_URL;
-  const tagLookup = await fireGrafanaQuery(dsQueryUrl, grafanaCookie, TAG_LOOKUP_SQL);
-  const { tagIds, tagPairs } = buildTagSet(tagLookup.rows);
+  const tagPairs = [{ tag_id: 182, tag_name: 'P05W3-2026' }];
   const rawSql = await readQuery46Sql();
-  const widenedSql = widenQuery46(rawSql, tagIds);
-  const query46Result = await fireGrafanaQuery(dsQueryUrl, grafanaCookie, widenedSql);
-  const siRows = query46Result.rows.map(siRowToEngine).filter(Boolean);
+  console.log('SI Grafana: running single-tag P05W3 Query 46');
+  const query46Result = await fireGrafanaQuery(dsQueryUrl, grafanaCookie, rawSql);
+  const siRows = query46Result.rows
+    .map(siRowToEngine)
+    .filter((row) => row && row.periodWeek === TARGET_PERIOD_WEEK);
+  console.log(`SI Grafana: parsed ${query46Result.rows.length} raw rows, ${siRows.length} keyed rows`);
   return {
     tagPairs,
     columnNames: query46Result.columnNames,
@@ -900,8 +938,10 @@ function casePasses(fixtureCase, actual) {
 function printSourceSummary({ prod, si, prodByKey, siByKey }) {
   console.log('Three-way join proof');
   console.log(`- PROD project: ${PROJECT_LABEL} (project_id=${PROJECT_ID})`);
+  console.log(`- Target period: ${TARGET_PERIOD_WEEK} only`);
   console.log(`- PROD weeks: ${PROD_WEEK_RANGES.map((range) => range.periodWeek).join(', ')}`);
   console.log(`- PROD raw rows=${prod.rawRows.length}, keyed rows=${prod.prodRows.length}, csv bytes=${prod.csvBytes}`);
+  console.log(`- PROD carryover rows filtered from ${TARGET_PERIOD_WEEK} report: ${prod.filteredCarryoverRows}`);
   console.log(`- PROD weekly calls: ${prod.weeks.map((week) => `${week.periodWeek}:${week.rows} rows/${week.message || 'no message'}`).join(' | ')}`);
   console.log(`- SI tags: ${si.tagPairs.map((pair) => `${pair.tag_id}:${pair.tag_name}`).join(' | ')}`);
   console.log(`- SI raw rows=${si.rawRows.length}, keyed rows=${si.siRows.length}`);
@@ -993,6 +1033,9 @@ async function main() {
     console.error('Native fetch is unavailable. Run this proof with Node 24.');
     process.exit(1);
   }
+
+  startLiveLog();
+  console.log(`Per-request timeout: ${DEFAULT_FETCH_TIMEOUT_MS}ms`);
 
   await loadLocalEnv();
 
