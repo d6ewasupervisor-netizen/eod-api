@@ -7,14 +7,12 @@ const path = require('node:path');
 const {
   buildReconciliationKey,
   classifyReconciliation,
-  normalizeDbkey,
   normalizePeriodWeek,
   normalizeSiStatus,
 } = require('../../src/lib/trackers/sheet-reconciliation');
 const {
-  normalizeCategoryId,
-  parseAfterPictureUrls,
-} = require('../../src/lib/trackers/prod-row-fields');
+  normalizeProdCsv,
+} = require('../../src/lib/trackers/prod-csv-adapter');
 const {
   normalizeQuery46Rows,
   rowsFromGrafanaFrame,
@@ -97,13 +95,6 @@ function startLiveLog() {
 
 function clean(value) {
   return String(value ?? '').trim();
-}
-
-function normalizeInteger(value) {
-  const match = clean(value).replace(/,/g, '').match(/\d+/);
-  if (!match) return '';
-  const parsed = parseInt(match[0], 10);
-  return Number.isFinite(parsed) ? String(parsed) : '';
 }
 
 function parseJsonOrText(text) {
@@ -303,59 +294,6 @@ async function fetchCsv(fileUrl) {
   return res.text();
 }
 
-function parseCsvRecords(text) {
-  const rows = [];
-  let row = [];
-  let field = '';
-  let quoted = false;
-  const input = String(text || '').replace(/^\uFEFF/, '');
-
-  for (let i = 0; i < input.length; i += 1) {
-    const ch = input[i];
-    if (ch === '"') {
-      if (quoted && input[i + 1] === '"') {
-        field += '"';
-        i += 1;
-      } else {
-        quoted = !quoted;
-      }
-      continue;
-    }
-    if (ch === ',' && !quoted) {
-      row.push(field);
-      field = '';
-      continue;
-    }
-    if ((ch === '\n' || ch === '\r') && !quoted) {
-      if (ch === '\r' && input[i + 1] === '\n') i += 1;
-      row.push(field);
-      if (row.some((value) => clean(value) !== '')) rows.push(row);
-      row = [];
-      field = '';
-      continue;
-    }
-    field += ch;
-  }
-
-  row.push(field);
-  if (row.some((value) => clean(value) !== '')) rows.push(row);
-  return rows;
-}
-
-function parseCsv(text) {
-  const records = parseCsvRecords(text);
-  if (!records.length) return { headers: [], rows: [] };
-  const headers = records[0].map((h) => clean(h));
-  const rows = records.slice(1).map((record) => {
-    const row = {};
-    headers.forEach((header, index) => {
-      row[header] = record[index] == null ? '' : record[index];
-    });
-    return row;
-  });
-  return { headers, rows };
-}
-
 function createGrafanaRequestBody(rawSql) {
   const now = Date.now();
   return JSON.stringify({
@@ -471,70 +409,6 @@ function buildTagSet(rows) {
   const tagIds = tagPairs.map((pair) => pair.tag_id);
   if (!tagIds.length) throw new Error('Tag lookup returned no P04/P05 tags for 2026.');
   return { tagIds, tagPairs };
-}
-
-function parseProdPlanogram(planogramId) {
-  const parts = clean(planogramId).split('_');
-  const periodWeek = normalizePeriodWeek(parts[0] || '');
-  const dbkey = normalizeDbkey(parts[1] || '');
-  return {
-    periodWeek,
-    dbkey,
-    complete: Boolean(periodWeek && dbkey),
-  };
-}
-
-function normalizeProdDone(value) {
-  const normalized = clean(value).toLowerCase();
-  if (normalized === 'true') return 'done';
-  if (normalized === 'false') return 'not_done';
-  return 'unknown';
-}
-
-function normalizeResetType(value) {
-  const normalized = clean(value).toUpperCase();
-  return normalized === 'UPDATE' ? 'UPDATE' : normalized;
-}
-
-function prodRowToEngine(row) {
-  const parsed = parseProdPlanogram(row['Planogram ID']);
-  const storeNumber = normalizeInteger(row['Store #']);
-  const categoryId = normalizeCategoryId(row['Category ID']);
-  if (!parsed.complete || !storeNumber || !categoryId) {
-    return {
-      joinable: false,
-      shiftSignoff: {
-        storeNumber,
-        shiftId: clean(row['Shift ID']),
-        visitId: clean(row['Visit ID']),
-        afterPictureLink: clean(row['After Pictures Link']),
-        planogramId: clean(row['Planogram ID']),
-      },
-    };
-  }
-
-  return {
-    joinable: true,
-    row: {
-      source: 'prod',
-      projectId: PROJECT_ID,
-      projectName: PROJECT_LABEL,
-      periodWeek: parsed.periodWeek,
-      storeNumber,
-      categoryId,
-      dbkey: parsed.dbkey,
-      planogramId: clean(row['Planogram ID']),
-      categoryCompletionStatus: normalizeProdDone(row['Category Completion Status']),
-      rawCategoryCompletionStatus: clean(row['Category Completion Status']),
-      categoryExceptionReason: clean(row['Category Exception Reason']),
-      comment: clean(row.Comment || row.Comments),
-      setType: normalizeResetType(row['Reset Type']),
-      cycleName: clean(row['Cycle Name']),
-      workDate: clean(row['Reported Date'] || row.Date || row['Scheduled Date']),
-      afterPictureUrls: parseAfterPictureUrls(row['After Pictures Link']),
-      raw: row,
-    },
-  };
 }
 
 function rowTime(row = {}) {
@@ -788,14 +662,17 @@ async function pullProdWeek(sasToken, range) {
   }
 
   const csvText = await fetchCsv(fileUrl);
-  const parsed = parseCsv(csvText);
-  console.log(`PROD ${range.periodWeek}: parsed ${parsed.rows.length} CSV rows (${Buffer.byteLength(csvText, 'utf8')} bytes)`);
+  const normalized = normalizeProdCsv(csvText, { periodWeek: range.periodWeek });
+  console.log(`PROD ${range.periodWeek}: parsed ${normalized.rawRows.length} CSV rows (${Buffer.byteLength(csvText, 'utf8')} bytes)`);
   return {
     periodWeek: range.periodWeek,
     message: body?.message || '',
     csvBytes: Buffer.byteLength(csvText, 'utf8'),
-    headers: parsed.headers,
-    rows: parsed.rows,
+    headers: normalized.headers,
+    rows: normalized.rawRows,
+    prodRows: normalized.prodRows,
+    shiftSignoffs: normalized.shiftSignoffs,
+    filteredCarryoverRows: normalized.filteredCarryoverRows,
   };
 }
 
@@ -805,27 +682,12 @@ async function pullProdRows(sasToken) {
     weeks.push(await pullProdWeek(sasToken, range));
   }
 
-  const prodRows = [];
-  const shiftSignoffs = [];
-  let filteredCarryoverRows = 0;
-  for (const week of weeks) {
-    for (const csvRow of week.rows) {
-      const mapped = prodRowToEngine(csvRow);
-      if (mapped.joinable) {
-        if (mapped.row.periodWeek === week.periodWeek) prodRows.push(mapped.row);
-        else filteredCarryoverRows += 1;
-      } else {
-        shiftSignoffs.push({ ...mapped.shiftSignoff, sourceWeek: week.periodWeek });
-      }
-    }
-  }
-
   return {
     headers: weeks[0]?.headers || [],
     rawRows: weeks.flatMap((week) => week.rows),
-    prodRows,
-    shiftSignoffs,
-    filteredCarryoverRows,
+    prodRows: weeks.flatMap((week) => week.prodRows),
+    shiftSignoffs: weeks.flatMap((week) => week.shiftSignoffs),
+    filteredCarryoverRows: weeks.reduce((sum, week) => sum + week.filteredCarryoverRows, 0),
     csvBytes: weeks.reduce((sum, week) => sum + week.csvBytes, 0),
     weeks: weeks.map((week) => ({
       periodWeek: week.periodWeek,

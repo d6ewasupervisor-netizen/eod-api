@@ -10,6 +10,9 @@ const { createRequire } = require('node:module');
 const {
   normalizeQuery46Rows,
 } = require('../src/lib/trackers/si-grafana-adapter');
+const {
+  normalizeProdCsv,
+} = require('../src/lib/trackers/prod-csv-adapter');
 
 const ROOT = path.resolve(__dirname, '..');
 const PROOF_PATH = path.join(ROOT, 'scripts', 'kompass-proof', 'three-way-join-proof.js');
@@ -37,8 +40,6 @@ function loadProofProdInlineFunctions() {
   const exportSource = `${withoutMain}
 
 module.exports = {
-  parseCsv,
-  prodRowToEngine,
   collapseRowsByKey,
   isProdDone,
   isSiDone,
@@ -75,15 +76,7 @@ function sortedRows(rows, buildReconciliationKey) {
 
 function buildFrozenProdRows(proofFns) {
   const prodCsv = fs.readFileSync(PROD_FIXTURE_PATH, 'utf8');
-  const parsed = proofFns.parseCsv(prodCsv);
-  const prodRows = [];
-  for (const csvRow of parsed.rows) {
-    const mapped = proofFns.prodRowToEngine(csvRow);
-    if (mapped.joinable && mapped.row.periodWeek === TARGET_PERIOD_WEEK) {
-      prodRows.push(mapped.row);
-    }
-  }
-  return prodRows;
+  return normalizeProdCsv(prodCsv, { periodWeek: TARGET_PERIOD_WEEK }).prodRows;
 }
 
 test('normalizes Query 46 fixture rows through the SI adapter', () => {
