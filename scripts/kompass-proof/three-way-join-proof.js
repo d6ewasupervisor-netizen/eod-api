@@ -555,7 +555,7 @@ function prodRowToEngine(row) {
 
 function parseStoreFromDisplay(value) {
   const text = clean(value);
-  const match = text.match(/\b(\d{1,4})\b/);
+  const match = text.match(/#701-(\d{1,5})\b/i) || text.match(/\b(\d{1,4})\b/);
   return match ? normalizeInteger(match[1]) : '';
 }
 
@@ -572,7 +572,7 @@ function normalizeSiTaskStatus(value) {
 
 function siRowToEngine(row) {
   const periodWeek = normalizePeriodWeek(row['Period/Week'] || row['Task Name']);
-  const storeNumber = normalizeInteger(row.store_id) || parseStoreFromDisplay(row.Store);
+  const storeNumber = parseStoreFromDisplay(row.Store) || normalizeInteger(row.store_id);
   const categoryId = normalizeCategoryId(row.category_id);
   const dbkey = normalizeDbkey(row.planogram_id || row['Task Name']);
   if (!periodWeek || !storeNumber || !categoryId || !dbkey) return null;
@@ -960,6 +960,34 @@ function printShiftSignoffReport(shiftSignoffs) {
   console.log(`- Visit IDs covered: ${visits.length}`);
 }
 
+function printJoinDiagnostics({ prodByKey, siByKey }) {
+  const sharedKeys = sortedKeys([...prodByKey.keys()].filter((key) => siByKey.has(key)));
+  const bothDone = sharedKeys.filter((key) => isProdDone(prodByKey.get(key)) && isSiDone(siByKey.get(key)));
+  const prodDoneSiNot = sharedKeys.filter((key) => isProdDone(prodByKey.get(key)) && !isSiDone(siByKey.get(key)));
+  const prodNotSiDone = sharedKeys.filter((key) => !isProdDone(prodByKey.get(key)) && isSiDone(siByKey.get(key)));
+  const backlogBothNot = sharedKeys.filter((key) => {
+    const prod = prodByKey.get(key);
+    const si = siByKey.get(key);
+    return prod && si && !isProdDone(prod) && isBacklog(prod) && !isSiDone(si);
+  });
+  const niiNotExecutable = sharedKeys.filter((key) => {
+    const prod = prodByKey.get(key);
+    const si = siByKey.get(key);
+    return prod && !isProdDone(prod) && isNotExecutable(prod) && !hasNotInStoreOrSiComment(prod) && !isSiDone(si);
+  });
+
+  console.log('\nJoin-key diagnostics:');
+  console.log(`- PROD keyed keys: ${prodByKey.size}`);
+  console.log(`- SI keyed keys: ${siByKey.size}`);
+  console.log(`- Shared keys: ${sharedKeys.length}`);
+  console.log(`- Shared both done: ${bothDone.length}`);
+  console.log(`- Shared PROD done / SI not done: ${prodDoneSiNot.length}`);
+  console.log(`- Shared PROD not done / SI done: ${prodNotSiDone.length}`);
+  console.log(`- Shared backlog both-not-done: ${backlogBothNot.length}`);
+  console.log(`- Shared NII not-executable candidates: ${niiNotExecutable.length}`);
+  console.log(`- First shared keys: ${formatList(sharedKeys.slice(0, 8))}`);
+}
+
 function printVocabularyReport({ prodRows, siRows, trackerRows }) {
   console.log('\nDone-vocabulary normalization:');
   console.log('- PROD: Category Completion Status "True" -> done, "False" -> not_done');
@@ -1069,6 +1097,7 @@ async function main() {
 
   printSourceSummary({ prod, si, prodByKey, siByKey });
   printShiftSignoffReport(prod.shiftSignoffs);
+  printJoinDiagnostics({ prodByKey, siByKey });
   printVocabularyReport({ prodRows: prod.prodRows, siRows: si.siRows, trackerRows });
   printFixtureReport({ fixtureCases, result, prodByKey, siByKey });
 }
