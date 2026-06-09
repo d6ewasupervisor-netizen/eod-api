@@ -962,6 +962,17 @@ function printShiftSignoffReport(shiftSignoffs) {
 
 function printJoinDiagnostics({ prodByKey, siByKey }) {
   const sharedKeys = sortedKeys([...prodByKey.keys()].filter((key) => siByKey.has(key)));
+  const prodKeys = [...prodByKey.keys()].map((key) => key.split('|'));
+  const siKeys = [...siByKey.keys()].map((key) => key.split('|'));
+  const prodStores = new Set(prodKeys.map((parts) => parts[1]));
+  const siStores = new Set(siKeys.map((parts) => parts[1]));
+  const prodCategories = new Set(prodKeys.map((parts) => parts[2]));
+  const siCategories = new Set(siKeys.map((parts) => parts[2]));
+  const prodDbkeys = new Set(prodKeys.map((parts) => parts[3]));
+  const siDbkeys = new Set(siKeys.map((parts) => parts[3]));
+  const sharedStores = [...prodStores].filter((value) => siStores.has(value));
+  const sharedCategories = [...prodCategories].filter((value) => siCategories.has(value));
+  const sharedDbkeys = [...prodDbkeys].filter((value) => siDbkeys.has(value));
   const bothDone = sharedKeys.filter((key) => isProdDone(prodByKey.get(key)) && isSiDone(siByKey.get(key)));
   const prodDoneSiNot = sharedKeys.filter((key) => isProdDone(prodByKey.get(key)) && !isSiDone(siByKey.get(key)));
   const prodNotSiDone = sharedKeys.filter((key) => !isProdDone(prodByKey.get(key)) && isSiDone(siByKey.get(key)));
@@ -980,12 +991,17 @@ function printJoinDiagnostics({ prodByKey, siByKey }) {
   console.log(`- PROD keyed keys: ${prodByKey.size}`);
   console.log(`- SI keyed keys: ${siByKey.size}`);
   console.log(`- Shared keys: ${sharedKeys.length}`);
+  console.log(`- Shared stores: ${sharedStores.length} (${formatList(distinct(sharedStores).slice(0, 20))})`);
+  console.log(`- Shared categories: ${sharedCategories.length} (${formatList(distinct(sharedCategories).slice(0, 20))})`);
+  console.log(`- Shared dbkeys: ${sharedDbkeys.length} (${formatList(distinct(sharedDbkeys).slice(0, 20))})`);
   console.log(`- Shared both done: ${bothDone.length}`);
   console.log(`- Shared PROD done / SI not done: ${prodDoneSiNot.length}`);
   console.log(`- Shared PROD not done / SI done: ${prodNotSiDone.length}`);
   console.log(`- Shared backlog both-not-done: ${backlogBothNot.length}`);
   console.log(`- Shared NII not-executable candidates: ${niiNotExecutable.length}`);
   console.log(`- First shared keys: ${formatList(sharedKeys.slice(0, 8))}`);
+  console.log(`- First PROD keys: ${formatList(sortedKeys(prodByKey.keys()).slice(0, 8))}`);
+  console.log(`- First SI keys: ${formatList(sortedKeys(siByKey.keys()).slice(0, 8))}`);
 }
 
 function printVocabularyReport({ prodRows, siRows, trackerRows }) {
