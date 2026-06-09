@@ -570,10 +570,19 @@ function normalizeSiTaskStatus(value) {
   return normalized || 'unknown';
 }
 
+function categoryFromSiDisplay(row) {
+  const commodity = clean(row.Commodity);
+  const match = commodity.match(/^(\d{1,4})\s*-/);
+  if (match) return normalizeCategoryId(match[1]);
+  const taskName = clean(row['Task Name']);
+  const taskMatch = taskName.match(/\b\d{6,10}\s+(\d{1,4})\s*-/);
+  return taskMatch ? normalizeCategoryId(taskMatch[1]) : '';
+}
+
 function siRowToEngine(row) {
   const periodWeek = normalizePeriodWeek(row['Period/Week'] || row['Task Name']);
   const storeNumber = parseStoreFromDisplay(row.Store) || normalizeInteger(row.store_id);
-  const categoryId = normalizeCategoryId(row.category_id);
+  const categoryId = categoryFromSiDisplay(row) || normalizeCategoryId(row.category_id);
   const dbkey = normalizeDbkey(row['Task Name']) || normalizeDbkey(row.planogram_id);
   if (!periodWeek || !storeNumber || !categoryId || !dbkey) return null;
 
