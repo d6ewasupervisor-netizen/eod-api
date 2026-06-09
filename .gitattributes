@@ -1,0 +1,6 @@
+# Frozen reconciliation fixtures: pin LF so the proof oracle is deterministic
+# across machines/checkouts regardless of core.autocrlf. Semantic (not byte-exact)
+# freeze -- the clean filter reconciles a mixed working tree to the existing LF
+# blob, so no restage is needed and existing blobs are left untouched.
+test/fixtures/*.json text eol=lf
+test/fixtures/*.csv  text eol=lf
