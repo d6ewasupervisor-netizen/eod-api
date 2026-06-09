@@ -574,7 +574,7 @@ function siRowToEngine(row) {
   const periodWeek = normalizePeriodWeek(row['Period/Week'] || row['Task Name']);
   const storeNumber = parseStoreFromDisplay(row.Store) || normalizeInteger(row.store_id);
   const categoryId = normalizeCategoryId(row.category_id);
-  const dbkey = normalizeDbkey(row.planogram_id || row['Task Name']);
+  const dbkey = normalizeDbkey(row['Task Name']) || normalizeDbkey(row.planogram_id);
   if (!periodWeek || !storeNumber || !categoryId || !dbkey) return null;
 
   return {
@@ -1086,6 +1086,11 @@ async function main() {
 
   const prodByKey = collapseRowsByKey(prod.prodRows, isProdDone);
   const siByKey = collapseRowsByKey(si.siRows, isSiDone);
+
+  printSourceSummary({ prod, si, prodByKey, siByKey });
+  printShiftSignoffReport(prod.shiftSignoffs);
+  printJoinDiagnostics({ prodByKey, siByKey });
+
   const fixtureCases = buildFixture({ prodByKey, siByKey });
   const trackerRows = fixtureCases.map((item) => item.tracker);
 
@@ -1095,9 +1100,6 @@ async function main() {
     siRows: si.siRows,
   });
 
-  printSourceSummary({ prod, si, prodByKey, siByKey });
-  printShiftSignoffReport(prod.shiftSignoffs);
-  printJoinDiagnostics({ prodByKey, siByKey });
   printVocabularyReport({ prodRows: prod.prodRows, siRows: si.siRows, trackerRows });
   printFixtureReport({ fixtureCases, result, prodByKey, siByKey });
 }
