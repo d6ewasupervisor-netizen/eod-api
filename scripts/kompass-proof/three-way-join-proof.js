@@ -793,7 +793,8 @@ function buildFixture({ prodByKey, siByKey }) {
   });
   cases.push({
     id: 'nii_not_executable',
-    expected: ['judgment_call'],
+    expected: ['judgment_call', 'not_in_store_candidate'],
+    displayExpected: 'judgment_call|not_in_store_candidate',
     expectProd: true,
     expectSi: false,
     ...nii,
