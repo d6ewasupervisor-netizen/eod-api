@@ -15,6 +15,10 @@ const {
   normalizeCategoryId,
   parseAfterPictureUrls,
 } = require('../../src/lib/trackers/prod-row-fields');
+const {
+  normalizeQuery46Rows,
+  rowsFromGrafanaFrame,
+} = require('../../src/lib/trackers/si-grafana-adapter');
 
 const SAS_BASE = 'https://prod.sasretail.com/api/v1';
 const CUSTOMER_ID = 2;
@@ -352,26 +356,6 @@ function parseCsv(text) {
   return { headers, rows };
 }
 
-function rowsFromGrafanaFrame(frame) {
-  const fields = frame?.schema?.fields;
-  const values = frame?.data?.values;
-  if (!Array.isArray(fields) || !Array.isArray(values)) {
-    throw new Error('No Grafana table frame found at results.A.frames[0].');
-  }
-  const columnNames = fields.map((field) => field?.name ?? '');
-  const rowCount = values.reduce((max, column) => Math.max(max, Array.isArray(column) ? column.length : 0), 0);
-  const rows = [];
-  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-    const row = {};
-    for (let columnIndex = 0; columnIndex < columnNames.length; columnIndex += 1) {
-      const column = values[columnIndex];
-      row[columnNames[columnIndex]] = Array.isArray(column) ? column[rowIndex] : undefined;
-    }
-    rows.push(row);
-  }
-  return { columnNames, rows };
-}
-
 function createGrafanaRequestBody(rawSql) {
   const now = Date.now();
   return JSON.stringify({
@@ -549,66 +533,6 @@ function prodRowToEngine(row) {
       workDate: clean(row['Reported Date'] || row.Date || row['Scheduled Date']),
       afterPictureUrls: parseAfterPictureUrls(row['After Pictures Link']),
       raw: row,
-    },
-  };
-}
-
-function parseStoreFromDisplay(value) {
-  const text = clean(value);
-  const match = text.match(/#701-(\d{1,5})\b/i) || text.match(/\b(\d{1,4})\b/);
-  return match ? normalizeInteger(match[1]) : '';
-}
-
-function normalizeSiTaskStatus(value) {
-  const normalized = clean(value).toLowerCase();
-  if (normalized === 'completed') return 'completed';
-  if (normalized === 'complete') return 'completed';
-  if (normalized === 'not started') return 'created';
-  if (normalized === 'not completed') return 'incomplete';
-  if (normalized === 'in progress') return 'in_progress';
-  if (normalized === 'cancelled') return 'cancelled';
-  return normalized || 'unknown';
-}
-
-function categoryFromSiDisplay(row) {
-  const commodity = clean(row.Commodity);
-  const match = commodity.match(/^(\d{1,4})\s*-/);
-  if (match) return normalizeCategoryId(match[1]);
-  const taskName = clean(row['Task Name']);
-  const taskMatch = taskName.match(/\b\d{6,10}\s+(\d{1,4})\s*-/);
-  return taskMatch ? normalizeCategoryId(taskMatch[1]) : '';
-}
-
-function siRowToEngine(row) {
-  const periodWeek = normalizePeriodWeek(row['Period/Week'] || row['Task Name']);
-  const storeNumber = parseStoreFromDisplay(row.Store) || normalizeInteger(row.store_id);
-  const categoryId = categoryFromSiDisplay(row) || normalizeCategoryId(row.category_id);
-  const dbkey = normalizeDbkey(row['Task Name']) || normalizeDbkey(row.planogram_id);
-  if (!periodWeek || !storeNumber || !categoryId || !dbkey) return null;
-
-  return {
-    source: 'si',
-    periodWeek,
-    storeNumber,
-    categoryId,
-    dbkey,
-    planogramId: clean(row.planogram_id),
-    status: normalizeSiTaskStatus(row['Task Status']),
-    rawTaskStatus: clean(row['Task Status']),
-    statusReason: clean(row['Task Exception Response']),
-    currentTask: true,
-    scanStatus: clean(row['Task Status']),
-    actionsCount: {
-      identify: parseInt(clean(row.Identify), 10) || 0,
-      remove: parseInt(clean(row.Remove), 10) || 0,
-      move: parseInt(clean(row.Move), 10) || 0,
-    },
-    hasPrePhoto: clean(row['Visit Date']) !== '',
-    workDate: clean(row['Visit Date'] || row.v_date),
-    raw: {
-      title: clean(row['Task Name']),
-      taskExceptionResponse: clean(row['Task Exception Response']),
-      grafana: row,
     },
   };
 }
@@ -918,8 +842,7 @@ async function pullSiRows(grafanaCookie) {
   const rawSql = await readQuery46Sql();
   console.log('SI Grafana: running single-tag P05W3 Query 46');
   const query46Result = await fireGrafanaQuery(dsQueryUrl, grafanaCookie, rawSql);
-  const siRows = query46Result.rows
-    .map(siRowToEngine)
+  const siRows = normalizeQuery46Rows(query46Result.rows)
     .filter((row) => row && row.periodWeek === TARGET_PERIOD_WEEK);
   console.log(`SI Grafana: parsed ${query46Result.rows.length} raw rows, ${siRows.length} keyed rows`);
   return {
