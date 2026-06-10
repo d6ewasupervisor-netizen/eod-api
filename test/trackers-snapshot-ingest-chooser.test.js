@@ -109,3 +109,68 @@ test('chooser: empty tracker rows - early return with inert si-api source info',
   assert.equal(calls.prod, 0);
   assert.deepEqual(result, { prodRows: [], siRows: [], siSourceInfo: { siSource: 'si-api', siFallbackReason: null } });
 });
+
+test('timing: grafana primary success records one siGrafanaMs and one prodRanges entry', async () => {
+  const { options } = makeSeams({
+    grafanaImpl: () => [{ periodWeek: 'P05W3', storeNumber: '70123' }],
+  });
+  const timingCollector = {};
+  await defaultFetchSourceRows(TRACKER_ROWS, {
+    ...options,
+    grafanaPrimary: true,
+    timingCollector,
+  });
+  assert.equal(typeof timingCollector.siGrafanaMs, 'number');
+  assert.ok(timingCollector.siGrafanaMs >= 0);
+  assert.equal(timingCollector.prodRanges.length, 1);
+  assert.equal(timingCollector.slowSiRanges.length, 0);
+  const entry = timingCollector.prodRanges[0];
+  assert.equal(entry.dateFrom !== undefined, true);
+  assert.equal(entry.dateTo !== undefined, true);
+  assert.equal(typeof entry.prodRows, 'number');
+  assert.equal(typeof entry.ms, 'number');
+  assert.equal(typeof timingCollector.sourceFetchMs, 'number');
+});
+
+test('timing: multi-period rows record one prodRanges entry per range, order preserved', async () => {
+  const multiPeriodRows = [
+    { store: '70123', periodWeek: 'P05W2' },
+    { store: '70456', periodWeek: 'P05W3' },
+  ];
+  const { options } = makeSeams({
+    grafanaImpl: () => [],
+  });
+  const timingCollector = {};
+  await defaultFetchSourceRows(multiPeriodRows, {
+    ...options,
+    grafanaPrimary: true,
+    timingCollector,
+  });
+  const expectedRanges = [...new Set(multiPeriodRows.map((r) => r.periodWeek))];
+  assert.equal(timingCollector.prodRanges.length, expectedRanges.length);
+  const seenFrom = timingCollector.prodRanges.map((e) => e.dateFrom);
+  assert.equal(new Set(seenFrom).size, expectedRanges.length);
+  assert.equal(timingCollector.slowSiRanges.length, 0);
+});
+
+test('timing: stale grafana fallback records siGrafanaMs plus per-range slowSiRanges', async () => {
+  const { options } = makeSeams({
+    grafanaImpl: () => {
+      throw new SiGrafanaSessionError('cookie expired timing test');
+    },
+  });
+  const timingCollector = {};
+  const result = await defaultFetchSourceRows(TRACKER_ROWS, {
+    ...options,
+    grafanaPrimary: true,
+    timingCollector,
+  });
+  assert.equal(result.siSourceInfo.siSource, 'si-api-fallback');
+  assert.equal(typeof timingCollector.siGrafanaMs, 'number');
+  assert.ok(timingCollector.siGrafanaMs >= 0);
+  assert.equal(timingCollector.prodRanges.length, 1);
+  assert.equal(timingCollector.slowSiRanges.length, 1);
+  const entry = timingCollector.slowSiRanges[0];
+  assert.equal(typeof entry.siRows, 'number');
+  assert.equal(typeof entry.ms, 'number');
+});

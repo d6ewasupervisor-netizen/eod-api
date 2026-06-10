@@ -383,6 +383,36 @@ test('snapshot ingest stores sample ISE rows and returns bucketCounts', async (t
   assert.equal(pool.meta.get('ise').last_error, null);
 });
 
+test('timing: ingest return carries outer-owned timings and threads collector through fake sourceFetcher', async () => {
+  const pool = new MemoryTrackerPool();
+  let receivedCollector = false;
+  const sourceFetcher = async (trackerRows, options = {}) => {
+    receivedCollector = Object.prototype.hasOwnProperty.call(options, 'timingCollector')
+      && options.timingCollector !== undefined;
+    return {
+      prodRows: trackerRows.map((row) => prodRow(row.dbkey, { periodWeek: row.periodWeek })),
+      siRows: trackerRows.map((row) => siRow(row.dbkey, { periodWeek: row.periodWeek })),
+    };
+  };
+  const result = await ingestTrackerSnapshot({
+    pool,
+    workbookKind: 'ise',
+    rows: [periodRow({ period: 5, week: 2, dbkey: '1000901' })],
+    sourceFetcher,
+    currentPeriodWeek: currentPeriod(5),
+    settings: {},
+    now: new Date('2026-06-08T12:00:00.000Z'),
+  });
+  assert.equal(receivedCollector, true, 'sourceFetcher must receive a timingCollector in options');
+  assert.ok(result.timing, 'ingest return must include a timing payload');
+  assert.equal(typeof result.timing.classifyMs, 'number');
+  assert.ok(result.timing.classifyMs >= 0);
+  assert.equal(typeof result.timing.writeSnapshotMs, 'number');
+  assert.ok(result.timing.writeSnapshotMs >= 0);
+  assert.equal(typeof result.timing.totalIngestMs, 'number');
+  assert.ok(result.timing.totalIngestMs >= 0);
+});
+
 test('claim: concurrent ingest for same kind is rejected with 409', async (t) => {
   const originalToken = process.env.TRACKER_INGEST_TOKEN;
   process.env.TRACKER_INGEST_TOKEN = 'secret';
