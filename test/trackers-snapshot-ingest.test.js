@@ -83,6 +83,18 @@ class MemoryTrackerPool {
       }
       return { rows: [] };
     }
+    if (normalized.startsWith('INSERT INTO TRACKER_SNAPSHOT_META') && params.length === 6) {
+      this.meta.set(params[0], {
+        workbook_kind: params[0],
+        refreshed_at: params[1],
+        row_count: params[2],
+        normalized_row_count: params[3],
+        last_error: null,
+        si_source: params[4],
+        si_fallback_reason: params[5],
+      });
+      return { rows: [] };
+    }
     if (normalized.startsWith('INSERT INTO TRACKER_SNAPSHOT_META') && params.length === 4) {
       this.meta.set(params[0], {
         workbook_kind: params[0],
@@ -90,6 +102,8 @@ class MemoryTrackerPool {
         row_count: params[2],
         normalized_row_count: params[3],
         last_error: null,
+        si_source: null,
+        si_fallback_reason: null,
       });
       return { rows: [] };
     }
@@ -100,6 +114,8 @@ class MemoryTrackerPool {
         row_count: params[2],
         normalized_row_count: null,
         last_error: null,
+        si_source: null,
+        si_fallback_reason: null,
       });
       return { rows: [] };
     }
@@ -111,6 +127,8 @@ class MemoryTrackerPool {
         row_count: existing?.row_count || 0,
         normalized_row_count: existing?.normalized_row_count ?? null,
         last_error: params[1],
+        si_source: existing?.si_source ?? null,
+        si_fallback_reason: existing?.si_fallback_reason ?? null,
       });
       return { rows: [] };
     }

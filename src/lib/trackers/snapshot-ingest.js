@@ -1,15 +1,19 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { getCurrentPeriodWeek } = require('../fiscal-calendar');
 const { resolveRange } = require('./date-range');
 const { DEFAULT_PROJECT_IDS } = require('./metadata');
 const reboticsReports = require('./rebotics-reports');
 const sasReports = require('./sas-reports');
 const { classifyReconciliation } = require('./sheet-reconciliation');
+const { fetchSiRowsViaGrafana } = require('./si-grafana-source');
 const { normalizeTrackerRow } = require('./tracker-sheet-reader');
 const { normalizeWorkbookKind } = require('./tracker-workbooks');
 
 const SHORT_PAYLOAD_FLOOR_RATIO = 0.6;
+const QUERY46_SQL = fs.readFileSync(path.join(__dirname, 'query46.sql'), 'utf8');
 
 function httpError(statusCode, message) {
   const err = new Error(message);
@@ -74,7 +78,7 @@ function periodWeekToRange(periodWeek) {
 }
 
 async function defaultFetchSourceRows(trackerRows, options = {}) {
-  if (!trackerRows.length) return { prodRows: [], siRows: [] };
+  if (!trackerRows.length) return { prodRows: [], siRows: [], siSourceInfo: { siSource: 'si-api', siFallbackReason: null } };
   const stores = [...new Set(trackerRows.map((row) => row.store).filter(Boolean))]
     .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
   const ranges = [...new Set(trackerRows.map((row) => row.periodWeek).filter(Boolean))]
@@ -84,27 +88,60 @@ async function defaultFetchSourceRows(trackerRows, options = {}) {
     ? options.projects
     : DEFAULT_PROJECT_IDS;
   const settings = options.settings || {};
+  const grafanaPrimary = options.grafanaPrimary !== undefined
+    ? Boolean(options.grafanaPrimary)
+    : process.env.SI_GRAFANA_PRIMARY === 'true';
+  const fetchSiGrafana = options.fetchSiGrafana || fetchSiRowsViaGrafana;
+  const fetchProdRows = options.fetchProdRows || sasReports.fetchRows;
+  const fetchSlowSiRows = options.fetchSlowSiRows || reboticsReports.fetchRows;
+
+  const siSourceInfo = { siSource: 'si-api', siFallbackReason: null };
+  let grafanaSiRows = null;
+
+  if (grafanaPrimary) {
+    try {
+      grafanaSiRows = await fetchSiGrafana({ rawSql: QUERY46_SQL });
+      siSourceInfo.siSource = 'grafana';
+    } catch (err) {
+      if (err && err.siGrafanaStale) {
+        siSourceInfo.siSource = 'si-api-fallback';
+        siSourceInfo.siFallbackReason = String(err.message || 'Grafana session stale').slice(0, 2000);
+        console.warn(
+          '[snapshot-ingest] SI Grafana session stale; falling back to slow Store Intelligence API path:',
+          siSourceInfo.siFallbackReason,
+        );
+      } else {
+        throw err;
+      }
+    }
+  }
+
   const prodRows = [];
   const siRows = [];
+  const useSlowSi = grafanaSiRows === null;
   for (const range of ranges) {
-    const [prod, si] = await Promise.all([
-      sasReports.fetchRows({
+    const fetches = [
+      fetchProdRows({
         stores,
         projects,
         dateFrom: range.dateFrom,
         dateTo: range.dateTo,
         settings,
       }),
-      reboticsReports.fetchRows({
+    ];
+    if (useSlowSi) {
+      fetches.push(fetchSlowSiRows({
         stores,
         dates: range.dates,
         settings,
-      }),
-    ]);
+      }));
+    }
+    const [prod, si] = await Promise.all(fetches);
     prodRows.push(...prod);
-    siRows.push(...si);
+    if (useSlowSi) siRows.push(...si);
   }
-  return { prodRows, siRows };
+  if (!useSlowSi) siRows.push(...grafanaSiRows);
+  return { prodRows, siRows, siSourceInfo };
 }
 
 async function resolveSettings(options = {}) {
@@ -118,10 +155,11 @@ async function reconcileSnapshotRows(trackerRows, options = {}) {
   const settings = await resolveSettings(options);
   const sourceFetcher = options.sourceFetcher || defaultFetchSourceRows;
   const classify = options.classify || classifyReconciliation;
-  const { prodRows = [], siRows = [] } = await sourceFetcher(trackerRows, {
+  const { prodRows = [], siRows = [], siSourceInfo } = await sourceFetcher(trackerRows, {
     settings,
     projects: options.projects,
   });
+  if (options.siSourceCollector && siSourceInfo) Object.assign(options.siSourceCollector, siSourceInfo);
   const result = classify({
     trackerRows,
     prodRows,
@@ -325,21 +363,23 @@ async function insertSnapshotRows(client, rows, refreshedAt) {
   }
 }
 
-async function replaceSnapshotRows(pool, workbookKind, rows, refreshedAt, normalizedRowCount) {
+async function replaceSnapshotRows(pool, workbookKind, rows, refreshedAt, normalizedRowCount, siSourceInfo = {}) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query('DELETE FROM tracker_snapshot_rows WHERE workbook_kind = $1', [workbookKind]);
     await insertSnapshotRows(client, rows, refreshedAt);
     await client.query(
-      `INSERT INTO tracker_snapshot_meta (workbook_kind, refreshed_at, row_count, normalized_row_count, last_error)
-       VALUES ($1, $2, $3, $4, NULL)
+      `INSERT INTO tracker_snapshot_meta (workbook_kind, refreshed_at, row_count, normalized_row_count, last_error, si_source, si_fallback_reason)
+       VALUES ($1, $2, $3, $4, NULL, $5, $6)
        ON CONFLICT (workbook_kind) DO UPDATE
          SET refreshed_at = EXCLUDED.refreshed_at,
              row_count = EXCLUDED.row_count,
              normalized_row_count = EXCLUDED.normalized_row_count,
-             last_error = NULL`,
-      [workbookKind, refreshedAt, rows.length, normalizedRowCount],
+             last_error = NULL,
+             si_source = EXCLUDED.si_source,
+             si_fallback_reason = EXCLUDED.si_fallback_reason`,
+      [workbookKind, refreshedAt, rows.length, normalizedRowCount, siSourceInfo.siSource || null, siSourceInfo.siFallbackReason || null],
     );
     await client.query('COMMIT');
   } catch (err) {
@@ -385,9 +425,10 @@ async function ingestTrackerSnapshot({
     });
     const activeWindow = buildActivePeriodWindow({ currentPeriodWeek: options.currentPeriodWeek });
     const { activeRows, staticRowsByKey } = classifyRowsForActiveWindow(normalizedRows, activeWindow);
-    const reconciledActiveRows = await reconcileSnapshotRows(activeRows, options);
+    const siSourceCollector = {};
+    const reconciledActiveRows = await reconcileSnapshotRows(activeRows, { ...options, siSourceCollector });
     const reconciledRows = mergeWindowedRows(normalizedRows, staticRowsByKey, reconciledActiveRows);
-    await replaceSnapshotRows(pool, workbookKind, reconciledRows, refreshedAt, normalizedCount);
+    await replaceSnapshotRows(pool, workbookKind, reconciledRows, refreshedAt, normalizedCount, siSourceCollector);
     return {
       kind: workbookKind,
       rowsReceived: rows.length,
@@ -396,6 +437,8 @@ async function ingestTrackerSnapshot({
       bucketCounts: bucketCounts(reconciledRows),
       refreshedAt,
       forced: Boolean(force),
+      siSource: siSourceCollector.siSource || null,
+      siFallbackReason: siSourceCollector.siFallbackReason || null,
     };
   } catch (err) {
     await recordSnapshotError(pool, workbookKind, err).catch(() => {});
