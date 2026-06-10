@@ -511,7 +511,7 @@ async function ingestTrackerSnapshot({
   }
 }
 
-async function loadSnapshotRows(pool, { workbookKind, setType, store, periodWeek, staleAfterMinutes = 20 } = {}) {
+async function loadSnapshotMetaSummary(pool, { workbookKind, staleAfterMinutes = 20 } = {}) {
   if (!workbookKind) {
     const err = new Error('workbookKind is required');
     err.statusCode = 400;
@@ -523,6 +523,40 @@ async function loadSnapshotRows(pool, { workbookKind, setType, store, periodWeek
     [workbookKind],
   );
   const sourceMeta = metaSourceRows[0] || {};
+  const refreshedAt = meta?.refreshed_at || null;
+  // Freshness anchor: most recent of refreshed_at and ingest_completed_at.
+  // ingest_completed_at only counts when last_error is null - error completions
+  // also stamp it, and a fresh error timestamp over old rows must never read fresh.
+  const completedAt = (!meta?.last_error && sourceMeta.ingest_completed_at) || null;
+  const freshnessAnchor = [refreshedAt, completedAt]
+    .filter(Boolean)
+    .map((t) => new Date(t).getTime())
+    .sort((a, b) => b - a)[0] ?? null;
+  const ageMinutes = freshnessAnchor === null ? null : (Date.now() - freshnessAnchor) / 60000;
+  return {
+    refreshedAt,
+    rowCount: meta?.row_count ?? null,
+    normalizedRowCount: meta?.normalized_row_count ?? null,
+    lastError: meta?.last_error || null,
+    siSource: sourceMeta.si_source || null,
+    siFallbackReason: sourceMeta.si_fallback_reason || null,
+    ingestStatus: sourceMeta.ingest_status || null,
+    ingestStartedAt: sourceMeta.ingest_started_at || null,
+    ingestCompletedAt: sourceMeta.ingest_completed_at || null,
+    ingestStage: sourceMeta.ingest_stage || null,
+    ingestHeartbeatAt: sourceMeta.ingest_heartbeat_at || null,
+    stale: ageMinutes === null ? true : ageMinutes > staleAfterMinutes,
+    ageMinutes: ageMinutes === null ? null : Math.round(ageMinutes),
+  };
+}
+
+async function loadSnapshotRows(pool, { workbookKind, setType, store, periodWeek, staleAfterMinutes = 20 } = {}) {
+  if (!workbookKind) {
+    const err = new Error('workbookKind is required');
+    err.statusCode = 400;
+    throw err;
+  }
+  const meta = await loadSnapshotMetaSummary(pool, { workbookKind, staleAfterMinutes });
   const conditions = ['workbook_kind = $1'];
   const params = [workbookKind];
   if (setType) {
@@ -545,16 +579,6 @@ async function loadSnapshotRows(pool, { workbookKind, setType, store, periodWeek
       ORDER BY store, period_week, category_id, dbkey`,
     params,
   );
-  const refreshedAt = meta?.refreshed_at || null;
-  // Freshness anchor: most recent of refreshed_at and ingest_completed_at.
-  // ingest_completed_at only counts when last_error is null - error completions
-  // also stamp it, and a fresh error timestamp over old rows must never read fresh.
-  const completedAt = (!meta?.last_error && sourceMeta.ingest_completed_at) || null;
-  const freshnessAnchor = [refreshedAt, completedAt]
-    .filter(Boolean)
-    .map((t) => new Date(t).getTime())
-    .sort((a, b) => b - a)[0] ?? null;
-  const ageMinutes = freshnessAnchor === null ? null : (Date.now() - freshnessAnchor) / 60000;
   return {
     workbookKind,
     rows: rows.map((r) => ({
@@ -570,21 +594,7 @@ async function loadSnapshotRows(pool, { workbookKind, setType, store, periodWeek
       bucketReason: r.bucket_reason,
       expectation: r.expectation,
     })),
-    meta: {
-      refreshedAt,
-      rowCount: meta?.row_count ?? null,
-      normalizedRowCount: meta?.normalized_row_count ?? null,
-      lastError: meta?.last_error || null,
-      siSource: sourceMeta.si_source || null,
-      siFallbackReason: sourceMeta.si_fallback_reason || null,
-      ingestStatus: sourceMeta.ingest_status || null,
-      ingestStartedAt: sourceMeta.ingest_started_at || null,
-      ingestCompletedAt: sourceMeta.ingest_completed_at || null,
-      ingestStage: sourceMeta.ingest_stage || null,
-      ingestHeartbeatAt: sourceMeta.ingest_heartbeat_at || null,
-      stale: ageMinutes === null ? true : ageMinutes > staleAfterMinutes,
-      ageMinutes: ageMinutes === null ? null : Math.round(ageMinutes),
-    },
+    meta,
   };
 }
 
@@ -597,6 +607,7 @@ module.exports = {
   classifyRowsForActiveWindow,
   defaultFetchSourceRows,
   ingestTrackerSnapshot,
+  loadSnapshotMetaSummary,
   loadSnapshotRows,
   mergeWindowedRows,
   normalizeSnapshotRows,

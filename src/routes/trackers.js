@@ -29,6 +29,7 @@ const {
 const {
   claimSnapshotIngest,
   ingestTrackerSnapshot,
+  loadSnapshotMetaSummary,
   loadSnapshotRows,
   sweepStuckSnapshotIngests,
   validateSnapshotPayload,
@@ -741,6 +742,23 @@ function createTrackersRouter({ pool, snapshotIngest = {} }) {
         err.message,
       );
     });
+  });
+
+  router.get('/snapshot/meta', async (req, res) => {
+    const expectedToken = String(process.env.TRACKER_META_TOKEN || '').trim();
+    if (!expectedToken) {
+      return res.status(503).json({ ok: false, error: 'Tracker meta token is not configured' });
+    }
+    if (!safeTokenEquals(bearerToken(req), expectedToken)) {
+      return res.status(401).json({ ok: false, error: 'Invalid tracker meta token' });
+    }
+    try {
+      const workbookKind = String(req.query.workbookKind || '').trim();
+      const meta = await loadSnapshotMetaSummary(req.trackerPool, { workbookKind });
+      return res.json({ ok: true, workbookKind, meta });
+    } catch (err) {
+      return res.status(err.statusCode || 502).json({ ok: false, error: err.message });
+    }
   });
 
   router.use(requireAuth);
