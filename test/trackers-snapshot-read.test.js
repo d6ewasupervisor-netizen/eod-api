@@ -76,6 +76,34 @@ test('loadSnapshotRows: stale after 20 minutes', async () => {
   assert.ok(result.meta.ageMinutes >= 25);
 });
 
+test('loadSnapshotRows: fresh ingest_completed_at overrides old refreshed_at when last_error is null', async () => {
+  const old = new Date(Date.now() - 30 * 60000).toISOString();
+  const recentCompleted = new Date(Date.now() - 2 * 60000).toISOString();
+  const pool = makeFakePool({
+    metaRow: { refreshed_at: old, row_count: 1, normalized_row_count: 1, last_error: null },
+    sourceRow: { si_source: 'grafana', si_fallback_reason: null, ingest_status: 'ok', ingest_completed_at: recentCompleted },
+    dataRows: [DATA_ROW],
+  });
+  const result = await loadSnapshotRows(pool, { workbookKind: 'ise' });
+  assert.equal(result.meta.stale, false);
+  assert.ok(result.meta.ageMinutes <= 3);
+  assert.equal(result.meta.refreshedAt, old);
+});
+
+test('loadSnapshotRows: fresh ingest_completed_at is ignored when last_error is set, snapshot stays stale', async () => {
+  const old = new Date(Date.now() - 30 * 60000).toISOString();
+  const recentCompleted = new Date(Date.now() - 2 * 60000).toISOString();
+  const pool = makeFakePool({
+    metaRow: { refreshed_at: old, row_count: 1, normalized_row_count: 1, last_error: 'Grafana exploded' },
+    sourceRow: { si_source: 'grafana', si_fallback_reason: null, ingest_status: 'error', ingest_completed_at: recentCompleted },
+    dataRows: [DATA_ROW],
+  });
+  const result = await loadSnapshotRows(pool, { workbookKind: 'ise' });
+  assert.equal(result.meta.stale, true);
+  assert.ok(result.meta.ageMinutes >= 30);
+  assert.equal(result.meta.ingestCompletedAt, recentCompleted);
+});
+
 test('loadSnapshotRows: no meta row means stale true, never silently fresh', async () => {
   const pool = makeFakePool({ metaRow: null, sourceRow: null, dataRows: [] });
   const result = await loadSnapshotRows(pool, { workbookKind: 'blitz' });

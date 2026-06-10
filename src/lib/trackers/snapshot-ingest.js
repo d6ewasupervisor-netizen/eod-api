@@ -523,7 +523,6 @@ async function loadSnapshotRows(pool, { workbookKind, setType, store, periodWeek
     [workbookKind],
   );
   const sourceMeta = metaSourceRows[0] || {};
-
   const conditions = ['workbook_kind = $1'];
   const params = [workbookKind];
   if (setType) {
@@ -546,9 +545,16 @@ async function loadSnapshotRows(pool, { workbookKind, setType, store, periodWeek
       ORDER BY store, period_week, category_id, dbkey`,
     params,
   );
-
   const refreshedAt = meta?.refreshed_at || null;
-  const ageMinutes = refreshedAt ? (Date.now() - new Date(refreshedAt).getTime()) / 60000 : null;
+  // Freshness anchor: most recent of refreshed_at and ingest_completed_at.
+  // ingest_completed_at only counts when last_error is null - error completions
+  // also stamp it, and a fresh error timestamp over old rows must never read fresh.
+  const completedAt = (!meta?.last_error && sourceMeta.ingest_completed_at) || null;
+  const freshnessAnchor = [refreshedAt, completedAt]
+    .filter(Boolean)
+    .map((t) => new Date(t).getTime())
+    .sort((a, b) => b - a)[0] ?? null;
+  const ageMinutes = freshnessAnchor === null ? null : (Date.now() - freshnessAnchor) / 60000;
   return {
     workbookKind,
     rows: rows.map((r) => ({
