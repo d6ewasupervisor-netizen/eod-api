@@ -1,9 +1,12 @@
 'use strict';
 
 const fs = require('node:fs');
+const express = require('express');
+const http = require('node:http');
 const path = require('node:path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { createTrackersRouter } = require('../src/routes/trackers');
 
 const indexSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.js'), 'utf8');
 const routerSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'trackers.js'), 'utf8');
@@ -18,6 +21,10 @@ test('/api/trackers remains mounted through the tracker router', () => {
   assert.match(indexSource, /app\.use\('\/api\/trackers', createTrackersRouter\(\{ pool \}\)\)/);
 });
 
+test('/api/trackers/snapshot/ingest is public to the global gate', () => {
+  assert.match(indexSource, /'\/api\/trackers\/snapshot\/ingest'/);
+});
+
 test('tracker API router keeps requireAuth before tracker access checks', () => {
   const authIndex = routerSource.indexOf('router.use(requireAuth)');
   const accessIndex = routerSource.indexOf('router.use(requireTrackerAccess)');
@@ -25,4 +32,49 @@ test('tracker API router keeps requireAuth before tracker access checks', () => 
   assert.notEqual(authIndex, -1);
   assert.notEqual(accessIndex, -1);
   assert.ok(authIndex < accessIndex);
+});
+
+test('tracker ingest route is registered before tracker user auth', () => {
+  const ingestIndex = routerSource.indexOf("router.post('/snapshot/ingest'");
+  const authIndex = routerSource.indexOf('router.use(requireAuth)');
+
+  assert.notEqual(ingestIndex, -1);
+  assert.notEqual(authIndex, -1);
+  assert.ok(ingestIndex < authIndex);
+});
+
+test('unauthenticated tracker ingest reaches bearer guard, not session auth', async (t) => {
+  const originalToken = process.env.TRACKER_INGEST_TOKEN;
+  process.env.TRACKER_INGEST_TOKEN = 'secret';
+  t.after(() => {
+    if (originalToken == null) delete process.env.TRACKER_INGEST_TOKEN;
+    else process.env.TRACKER_INGEST_TOKEN = originalToken;
+  });
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api/trackers', createTrackersRouter({
+    pool: {
+      query: async () => ({ rows: [] }),
+    },
+    snapshotIngest: {
+      settingsLoader: async () => ({}),
+    },
+  }));
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+  const { port } = server.address();
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/trackers/snapshot/ingest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workbookKind: 'ise', rows: [] }),
+    });
+    assert.equal(res.status, 401);
+    const body = await res.json();
+    assert.equal(body.error, 'Invalid tracker ingest token');
+    assert.notEqual(body.error, 'Sign in required');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });

@@ -4,7 +4,7 @@
 
 const crypto = require('crypto');
 const { requireAuth } = require('./auth-middleware');
-const { addReplyTo } = require('./lib/resend-reply-to');
+const { sendAuthAlertEmail } = require('./lib/auth-alert-email');
 
 const logger = {
   info: (...a) => console.log('[rebotics-bridge]', ...a),
@@ -193,10 +193,6 @@ async function triggerReboticsReauth(pathThatFailed, { force = false } = {}) {
     return { ok: true, skipped: true, reason: 'debounced' };
   }
   lastReauthTriggerAt = now;
-  if (!_resend || !process.env.RESEND_API_KEY) {
-    logger.error('Cannot trigger Rebotics re-auth email: Resend not configured');
-    return { ok: false, error: 'Resend not configured' };
-  }
   try {
     const reauthPayload = {
       from: 'EOD System <noreply@retail-odyssey.com>',
@@ -205,8 +201,19 @@ async function triggerReboticsReauth(pathThatFailed, { force = false } = {}) {
       html: `<p>Auto-triggered by KOMPASS EOD Railway for Rebotics path: <code>${(pathThatFailed || '').replace(/</g, '')}</code></p>
         <p>Your local Gmail poller should run <code>morning-auth-rebotics.js</code> and push a fresh token.</p>`,
     };
-    addReplyTo(reauthPayload, {});
-    await _resend.emails.send(reauthPayload);
+    const result = await sendAuthAlertEmail(_resend, {
+      ...reauthPayload,
+      replyToOptions: {},
+      loggerLabel: 'rebotics',
+    });
+    if (result?.ok === false) {
+      if (result.error === 'Resend not configured') {
+        logger.error('Cannot trigger Rebotics re-auth email: Resend not configured');
+      } else {
+        logger.error('Rebotics re-auth email send failed:', result.error);
+      }
+      return { ok: false, error: result.error };
+    }
     logger.info('Sent KOMPASS REBOTICS AUTH email via Resend');
     return { ok: true };
   } catch (e) {

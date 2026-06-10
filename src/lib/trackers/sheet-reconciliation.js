@@ -22,20 +22,46 @@ function normalizeDbkey(value) {
   return embedded ? embedded[1] : '';
 }
 
+function normalizePeriodWeek(value) {
+  const direct = String(value || '').trim().toUpperCase();
+  const match = direct.match(/P(\d{1,2})W([1-4])/);
+  if (!match) return '';
+  return `P${String(parseInt(match[1], 10)).padStart(2, '0')}W${parseInt(match[2], 10)}`;
+}
+
 function rowStore(row = {}) {
-  return normalizeStore(row.store ?? row.storeNumber ?? row.store_number ?? row['Store#'] ?? row['Store #']);
+  return normalizeStore(firstPresent(row.store, row.storeNumber, row.store_number, row['Store#'], row['Store #']));
 }
 
 function rowCategoryId(row = {}) {
-  return normalizeCategoryId(row.categoryId ?? row.category_id ?? row.category ?? row['Category#'] ?? row['Category #'] ?? row['Category ID']);
+  return normalizeCategoryId(firstPresent(row.categoryId, row.category_id, row.category, row['Category#'], row['Category #'], row['Category ID']));
 }
 
 function rowDbkey(row = {}) {
-  return normalizeDbkey(row.dbkey ?? row.pog ?? row.pogId ?? row.planogramId ?? row.planogram_id ?? row['POG ID'] ?? row['Planogram ID']);
+  return normalizeDbkey(firstPresent(row.dbkey, row.pog, row.pogId, row.planogramId, row.planogram_id, row['POG ID'], row['Planogram ID']));
+}
+
+function rowPeriodWeek(row = {}) {
+  return firstPeriodWeek(row.periodWeek, row.period_week, row.pogId, row.planogramId, row.planogram_id, row['POG ID'], row['Planogram ID'], row.title, row.raw?.title);
+}
+
+function firstPresent(...values) {
+  for (const value of values) {
+    if (value != null && String(value).trim()) return value;
+  }
+  return '';
+}
+
+function firstPeriodWeek(...values) {
+  for (const value of values) {
+    const periodWeek = normalizePeriodWeek(value);
+    if (periodWeek) return periodWeek;
+  }
+  return '';
 }
 
 function buildReconciliationKey(row = {}) {
-  return `${rowStore(row)}|${rowCategoryId(row)}|${rowDbkey(row)}`;
+  return `${rowPeriodWeek(row)}|${rowStore(row)}|${rowCategoryId(row)}|${rowDbkey(row)}`;
 }
 
 function normalizeSiStatus(status) {
@@ -47,7 +73,42 @@ function firstByKey(rows = []) {
   const out = new Map();
   for (const row of rows || []) {
     const key = buildReconciliationKey(row);
-    if (key.split('|').every(Boolean) && !out.has(key)) out.set(key, row);
+    const [, store, categoryId, dbkey] = key.split('|');
+    if (store && categoryId && dbkey && !out.has(key)) out.set(key, row);
+  }
+  return out;
+}
+
+function rowTime(row = {}) {
+  const raw = firstPresent(row.workDate, row.work_date, row.date, row.scheduledDate, row.scheduled_date, row.completedAt, row.completed_at, row.raw?.work_date, row.raw?.date);
+  if (!raw) return 0;
+  const parsed = Date.parse(String(raw));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isProdDone(row = {}) {
+  return row?.categoryCompletionStatus === 'done';
+}
+
+function isSiDone(row = {}) {
+  return normalizeSiStatus(row?.status) === 'done';
+}
+
+function shouldReplaceCollapsedRow(current, candidate, isDone) {
+  if (!current) return true;
+  const currentDone = isDone(current);
+  const candidateDone = isDone(candidate);
+  if (candidateDone !== currentDone) return candidateDone;
+  return rowTime(candidate) >= rowTime(current);
+}
+
+function collapseRowsByKey(rows = [], isDone = () => false) {
+  const out = new Map();
+  for (const row of rows || []) {
+    const key = buildReconciliationKey(row);
+    const [, store, categoryId, dbkey] = key.split('|');
+    if (!store || !categoryId || !dbkey) continue;
+    if (shouldReplaceCollapsedRow(out.get(key), row, isDone)) out.set(key, row);
   }
   return out;
 }
@@ -57,6 +118,16 @@ function currentFromTracker(tracker) {
     K: tracker?.K ?? tracker?.k ?? tracker?.completeVerified ?? tracker?.currentK ?? '',
     L: tracker?.L ?? tracker?.l ?? tracker?.notes ?? tracker?.currentL ?? '',
   };
+}
+
+function normalizeCellValue(value) {
+  return String(value ?? '').replace(/\u00a0/g, ' ').trim();
+}
+
+function proposedEqualsCurrent(proposed, current) {
+  if (!proposed) return false;
+  return normalizeCellValue(proposed.K).toLowerCase() === normalizeCellValue(current.K).toLowerCase()
+    && normalizeCellValue(proposed.L) === normalizeCellValue(current.L);
 }
 
 function prodSummary(prod) {
@@ -73,13 +144,21 @@ function siSummary(si) {
   return {
     present: Boolean(si),
     status: si ? normalizeSiStatus(si.status) : 'absent',
+    currentTask: Boolean(si?.currentTask || si?.isCurrentTask),
+    taskId: si?.taskId ?? si?.raw?.taskId ?? null,
+    scanStatus: si?.scanStatus ?? si?.scan_status ?? null,
+    actionsCount: si?.actionsCount ?? si?.actions_count ?? null,
+    hasPrePhoto: Boolean(si?.hasPrePhoto || si?.has_pre_photo),
   };
 }
 
 function makeProposal({ key, tracker = null, prod = null, si = null, bucket, reason, proposed = null, candidatePhrase = null }) {
-  const [store, categoryId, dbkey] = key.split('|');
+  const [periodWeek, store, categoryId, dbkey] = key.split('|');
   const proposal = {
     key,
+    periodWeek,
+    rowIndex: tracker?.rowIndex ?? null,
+    workbookKind: tracker?.workbookKind ?? tracker?.routedWorkbookKind ?? '',
     store,
     categoryId,
     dbkey,
@@ -101,6 +180,33 @@ function writeProposal(bucket, reason, proposed) {
 
 function noWrite(bucket, reason, extra = {}) {
   return { bucket, reason, proposed: null, ...extra };
+}
+
+function actionsCountTotal(si = {}) {
+  const actionsCount = si.actionsCount || si.actions_count || {};
+  if (!actionsCount || typeof actionsCount !== 'object') return 0;
+  return Object.values(actionsCount).reduce((sum, value) => {
+    const parsed = parseInt(value, 10);
+    return sum + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
+}
+
+function hasSiCaptureActivity(si = {}) {
+  return actionsCountTotal(si) > 0
+    || Boolean(si.hasPrePhoto || si.has_pre_photo)
+    || (Array.isArray(si.images) && si.images.length > 0)
+    || (parseInt(si.photoCount, 10) || 0) > 0
+    || !['', 'NO_CAPTURE', 'no_capture'].includes(String(si.scanStatus || si.scan_status || '').trim());
+}
+
+function prodToSiMirrorBucket(si) {
+  if (!si || !(si.currentTask || si.isCurrentTask)) {
+    return noWrite('mirror_si_stale_or_absent', 'PROD is complete; no current-date SI task was resolved.');
+  }
+  if (hasSiCaptureActivity(si)) {
+    return noWrite('mirror_si_simple_close', 'PROD is complete; current SI task has scan/photo/action activity and may only need close.');
+  }
+  return noWrite('mirror_si_photo_push', 'PROD is complete; current SI task is empty and would need PROD photos before close.');
 }
 
 function resolveBucket({ prod = null, si = null, notInStorePatterns = DEFAULT_NOT_IN_STORE_PATTERNS }) {
@@ -155,7 +261,11 @@ function resolveBucket({ prod = null, si = null, notInStorePatterns = DEFAULT_NO
   }
 
   if (prodStatus === 'done' && !siDone) {
-    return noWrite('mirror_prod_to_si', reclassificationNote || 'PROD is complete; SI would need Phase 2 push.');
+    if (reclassificationNote) {
+      const bucket = prodToSiMirrorBucket(si);
+      return noWrite(bucket.bucket, reclassificationNote);
+    }
+    return prodToSiMirrorBucket(si);
   }
 
   if (siDone && prodStatus !== 'done') {
@@ -175,15 +285,23 @@ function classifyReconciliation({
   siRows = [],
   notInStorePatterns = DEFAULT_NOT_IN_STORE_PATTERNS,
   projectMode = true,
+  ignoredKeys = [],
+  suppressAlreadySatisfied = true,
 } = {}) {
-  const prodByKey = firstByKey(prodRows);
-  const siByKey = firstByKey(siRows);
+  const prodByKey = collapseRowsByKey(prodRows, isProdDone);
+  const siByKey = collapseRowsByKey(siRows, isSiDone);
   const trackerByKey = firstByKey(trackerRows);
+  const ignoredKeySet = new Set((ignoredKeys || []).filter(Boolean));
   const proposals = [];
   const pendingPatternCandidates = [];
   const byBucket = {};
+  let alreadySatisfied = 0;
 
   function add(proposal) {
+    if (suppressAlreadySatisfied && proposedEqualsCurrent(proposal.proposed, proposal.current)) {
+      alreadySatisfied += 1;
+      return;
+    }
     proposals.push(proposal);
     byBucket[proposal.bucket] = (byBucket[proposal.bucket] || 0) + 1;
     if (proposal.bucket === 'not_in_store_candidate' && proposal.candidatePhrase) {
@@ -195,6 +313,7 @@ function classifyReconciliation({
   }
 
   for (const [key, tracker] of trackerByKey.entries()) {
+    if (ignoredKeySet.has(key)) continue;
     const prod = prodByKey.get(key) || null;
     const si = siByKey.get(key) || null;
     const bucket = resolveBucket({ prod, si, notInStorePatterns, projectMode });
@@ -202,6 +321,7 @@ function classifyReconciliation({
   }
 
   for (const key of new Set([...prodByKey.keys(), ...siByKey.keys()])) {
+    if (ignoredKeySet.has(key)) continue;
     if (trackerByKey.has(key)) continue;
     const prod = prodByKey.get(key) || null;
     const si = siByKey.get(key) || null;
@@ -213,13 +333,14 @@ function classifyReconciliation({
     add(makeProposal({ key, prod, si, bucket: 'no_match', reason, proposed: null }));
   }
 
-  return { proposals, byBucket, pendingPatternCandidates };
+  return { proposals, byBucket, pendingPatternCandidates, alreadySatisfied };
 }
 
 module.exports = {
   buildReconciliationKey,
   classifyReconciliation,
   normalizeDbkey,
+  normalizePeriodWeek,
   normalizeSiStatus,
   normalizeStore,
   resolveBucket,
