@@ -28,6 +28,7 @@ const {
 } = require('../lib/trackers/settings');
 const {
   ingestTrackerSnapshot,
+  loadSnapshotRows,
   validateSnapshotPayload,
 } = require('../lib/trackers/snapshot-ingest');
 
@@ -756,6 +757,20 @@ function createTrackersRouter({ pool, snapshotIngest = {} }) {
       },
       rebotics: reboticsStatus,
     });
+  });
+
+  router.get('/snapshot', async (req, res) => {
+    try {
+      const result = await loadSnapshotRows(req.trackerPool, {
+        workbookKind: String(req.query.workbookKind || '').trim(),
+        setType: String(req.query.setType || '').trim() || undefined,
+        store: String(req.query.store || '').trim() || undefined,
+        periodWeek: String(req.query.periodWeek || '').trim() || undefined,
+      });
+      return res.json({ ok: true, ...result });
+    } catch (err) {
+      return res.status(err.statusCode || 502).json({ ok: false, error: err.message });
+    }
   });
 
   router.get('/projects', async (_req, res) => {

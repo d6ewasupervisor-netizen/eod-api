@@ -446,6 +446,72 @@ async function ingestTrackerSnapshot({
   }
 }
 
+async function loadSnapshotRows(pool, { workbookKind, setType, store, periodWeek, staleAfterMinutes = 20 } = {}) {
+  if (!workbookKind) {
+    const err = new Error('workbookKind is required');
+    err.statusCode = 400;
+    throw err;
+  }
+  const meta = await loadSnapshotMeta(pool, workbookKind);
+  const { rows: metaSourceRows } = await pool.query(
+    'SELECT si_source, si_fallback_reason FROM tracker_snapshot_meta WHERE workbook_kind = $1',
+    [workbookKind],
+  );
+  const sourceMeta = metaSourceRows[0] || {};
+
+  const conditions = ['workbook_kind = $1'];
+  const params = [workbookKind];
+  if (setType) {
+    params.push(setType);
+    conditions.push(`set_type = $${params.length}`);
+  }
+  if (store) {
+    params.push(String(store));
+    conditions.push(`store = $${params.length}`);
+  }
+  if (periodWeek) {
+    params.push(periodWeek);
+    conditions.push(`period_week = $${params.length}`);
+  }
+  const { rows } = await pool.query(
+    `SELECT store, period_week, category_id, dbkey, row_index, set_type,
+            current_k, current_l, bucket, bucket_reason, expectation, refreshed_at
+       FROM tracker_snapshot_rows
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY store, period_week, category_id, dbkey`,
+    params,
+  );
+
+  const refreshedAt = meta?.refreshed_at || null;
+  const ageMinutes = refreshedAt ? (Date.now() - new Date(refreshedAt).getTime()) / 60000 : null;
+  return {
+    workbookKind,
+    rows: rows.map((r) => ({
+      store: r.store,
+      periodWeek: r.period_week,
+      categoryId: String(r.category_id),
+      dbkey: r.dbkey,
+      rowIndex: r.row_index,
+      setType: r.set_type,
+      currentK: r.current_k,
+      currentL: r.current_l,
+      bucket: r.bucket,
+      bucketReason: r.bucket_reason,
+      expectation: r.expectation,
+    })),
+    meta: {
+      refreshedAt,
+      rowCount: meta?.row_count ?? null,
+      normalizedRowCount: meta?.normalized_row_count ?? null,
+      lastError: meta?.last_error || null,
+      siSource: sourceMeta.si_source || null,
+      siFallbackReason: sourceMeta.si_fallback_reason || null,
+      stale: ageMinutes === null ? true : ageMinutes > staleAfterMinutes,
+      ageMinutes: ageMinutes === null ? null : Math.round(ageMinutes),
+    },
+  };
+}
+
 module.exports = {
   SHORT_PAYLOAD_FLOOR_RATIO,
   assertPayloadCountAllowed,
@@ -454,6 +520,7 @@ module.exports = {
   classifyRowsForActiveWindow,
   defaultFetchSourceRows,
   ingestTrackerSnapshot,
+  loadSnapshotRows,
   mergeWindowedRows,
   normalizeSnapshotRows,
   parseRowPeriod,
