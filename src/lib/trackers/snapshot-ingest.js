@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { performance } = require('node:perf_hooks');
 const { getCurrentPeriodWeek } = require('../fiscal-calendar');
 const { resolveRange } = require('./date-range');
 const { DEFAULT_PROJECT_IDS } = require('./metadata');
@@ -16,6 +17,14 @@ const SHORT_PAYLOAD_FLOOR_RATIO = 0.6;
 const SNAPSHOT_INGEST_STUCK_MINUTES = 3;
 const SNAPSHOT_INGEST_HEARTBEAT_MS = 60000;
 const QUERY46_SQL = fs.readFileSync(path.join(__dirname, 'query46.sql'), 'utf8');
+
+function nowMs() {
+  return performance.now();
+}
+
+function elapsedMs(startMs) {
+  return Math.round(performance.now() - startMs);
+}
 
 function httpError(statusCode, message) {
   const err = new Error(message);
@@ -80,7 +89,15 @@ function periodWeekToRange(periodWeek) {
 }
 
 async function defaultFetchSourceRows(trackerRows, options = {}) {
-  if (!trackerRows.length) return { prodRows: [], siRows: [], siSourceInfo: { siSource: 'si-api', siFallbackReason: null } };
+  const timing = options.timingCollector || {};
+  timing.prodRanges = timing.prodRanges || [];
+  timing.slowSiRanges = timing.slowSiRanges || [];
+  if (timing.siGrafanaMs === undefined) timing.siGrafanaMs = null;
+  const sourceFetchStart = nowMs();
+  if (!trackerRows.length) {
+    timing.sourceFetchMs = elapsedMs(sourceFetchStart);
+    return { prodRows: [], siRows: [], siSourceInfo: { siSource: 'si-api', siFallbackReason: null } };
+  }
   const stores = [...new Set(trackerRows.map((row) => row.store).filter(Boolean))]
     .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
   const ranges = [...new Set(trackerRows.map((row) => row.periodWeek).filter(Boolean))]
@@ -101,6 +118,7 @@ async function defaultFetchSourceRows(trackerRows, options = {}) {
   let grafanaSiRows = null;
 
   if (grafanaPrimary) {
+    const siStart = nowMs();
     try {
       grafanaSiRows = await fetchSiGrafana({ rawSql: QUERY46_SQL });
       siSourceInfo.siSource = 'grafana';
@@ -115,6 +133,8 @@ async function defaultFetchSourceRows(trackerRows, options = {}) {
       } else {
         throw err;
       }
+    } finally {
+      timing.siGrafanaMs = elapsedMs(siStart);
     }
   }
 
@@ -122,6 +142,7 @@ async function defaultFetchSourceRows(trackerRows, options = {}) {
   const siRows = [];
   const useSlowSi = grafanaSiRows === null;
   for (const range of ranges) {
+    const rangeStart = nowMs();
     const fetches = [
       fetchProdRows({
         stores,
@@ -139,10 +160,26 @@ async function defaultFetchSourceRows(trackerRows, options = {}) {
       }));
     }
     const [prod, si] = await Promise.all(fetches);
+    const rangeMs = elapsedMs(rangeStart);
     prodRows.push(...prod);
-    if (useSlowSi) siRows.push(...si);
+    timing.prodRanges.push({
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
+      prodRows: prod.length,
+      ms: rangeMs,
+    });
+    if (useSlowSi) {
+      siRows.push(...si);
+      timing.slowSiRanges.push({
+        dateFrom: range.dateFrom,
+        dateTo: range.dateTo,
+        siRows: si.length,
+        ms: rangeMs,
+      });
+    }
   }
   if (!useSlowSi) siRows.push(...grafanaSiRows);
+  timing.sourceFetchMs = elapsedMs(sourceFetchStart);
   return { prodRows, siRows, siSourceInfo };
 }
 
@@ -154,14 +191,17 @@ async function resolveSettings(options = {}) {
 
 async function reconcileSnapshotRows(trackerRows, options = {}) {
   if (!trackerRows.length) return [];
+  const timing = options.timingCollector || {};
   const settings = await resolveSettings(options);
   const sourceFetcher = options.sourceFetcher || defaultFetchSourceRows;
   const classify = options.classify || classifyReconciliation;
   const { prodRows = [], siRows = [], siSourceInfo } = await sourceFetcher(trackerRows, {
     settings,
     projects: options.projects,
+    timingCollector: timing,
   });
   if (options.siSourceCollector && siSourceInfo) Object.assign(options.siSourceCollector, siSourceInfo);
+  const classifyStart = nowMs();
   const result = classify({
     trackerRows,
     prodRows,
@@ -169,6 +209,7 @@ async function reconcileSnapshotRows(trackerRows, options = {}) {
     projectMode: true,
     suppressAlreadySatisfied: false,
   });
+  timing.classifyMs = elapsedMs(classifyStart);
   const proposalsByKey = new Map((result.proposals || []).map((proposal) => [proposal.key, proposal]));
   return trackerRows.map((row) => {
     const proposal = proposalsByKey.get(row.key);
@@ -472,6 +513,8 @@ async function ingestTrackerSnapshot({
   const normalizedRows = normalizeSnapshotRows(rows, workbookKind);
   const normalizedCount = normalizedRows.length;
   const refreshedAt = now instanceof Date ? now.toISOString() : String(now);
+  const timingCollector = {};
+  const totalIngestStart = nowMs();
   const heartbeatTimer = setInterval(() => {
     touchSnapshotIngestHeartbeat(pool, workbookKind).catch(() => {});
   }, SNAPSHOT_INGEST_HEARTBEAT_MS);
@@ -488,10 +531,30 @@ async function ingestTrackerSnapshot({
     const { activeRows, staticRowsByKey } = classifyRowsForActiveWindow(normalizedRows, activeWindow);
     await stage('fetching_and_reconciling');
     const siSourceCollector = {};
-    const reconciledActiveRows = await reconcileSnapshotRows(activeRows, { ...options, siSourceCollector });
+    const reconciledActiveRows = await reconcileSnapshotRows(activeRows, {
+      ...options,
+      siSourceCollector,
+      timingCollector,
+    });
     const reconciledRows = mergeWindowedRows(normalizedRows, staticRowsByKey, reconciledActiveRows);
     await stage('writing_snapshot');
+    const writeStart = nowMs();
     await replaceSnapshotRows(pool, workbookKind, reconciledRows, refreshedAt, normalizedCount, siSourceCollector);
+    timingCollector.writeSnapshotMs = elapsedMs(writeStart);
+    timingCollector.totalIngestMs = elapsedMs(totalIngestStart);
+    console.log('[trackers.snapshot.timing]', JSON.stringify({
+      workbookKind,
+      normalizedRows: normalizedCount,
+      activeRows: activeRows.length,
+      siSource: siSourceCollector.siSource || null,
+      siGrafanaMs: timingCollector.siGrafanaMs ?? null,
+      prodRanges: timingCollector.prodRanges || [],
+      slowSiRanges: timingCollector.slowSiRanges || [],
+      classifyMs: timingCollector.classifyMs ?? null,
+      sourceFetchMs: timingCollector.sourceFetchMs ?? null,
+      writeSnapshotMs: timingCollector.writeSnapshotMs ?? null,
+      totalIngestMs: timingCollector.totalIngestMs,
+    }));
     return {
       kind: workbookKind,
       rowsReceived: rows.length,
@@ -502,6 +565,7 @@ async function ingestTrackerSnapshot({
       forced: Boolean(force),
       siSource: siSourceCollector.siSource || null,
       siFallbackReason: siSourceCollector.siFallbackReason || null,
+      timing: timingCollector,
     };
   } catch (err) {
     await recordSnapshotError(pool, workbookKind, err).catch(() => {});
