@@ -13,6 +13,7 @@ const { normalizeTrackerRow } = require('./tracker-sheet-reader');
 const { normalizeWorkbookKind } = require('./tracker-workbooks');
 
 const SHORT_PAYLOAD_FLOOR_RATIO = 0.6;
+const SNAPSHOT_INGEST_STUCK_MINUTES = 10;
 const QUERY46_SQL = fs.readFileSync(path.join(__dirname, 'query46.sql'), 'utf8');
 
 function httpError(statusCode, message) {
@@ -298,6 +299,34 @@ async function loadSnapshotMeta(pool, workbookKind) {
   return rows[0] || null;
 }
 
+async function claimSnapshotIngest(pool, workbookKind, { stuckMinutes = SNAPSHOT_INGEST_STUCK_MINUTES } = {}) {
+  const { rowCount } = await pool.query(
+    `INSERT INTO tracker_snapshot_meta
+       (workbook_kind, refreshed_at, row_count, ingest_status, ingest_started_at, ingest_completed_at)
+     VALUES ($1, to_timestamp(0), 0, 'processing', NOW(), NULL)
+     ON CONFLICT (workbook_kind) DO UPDATE
+       SET ingest_status = 'processing',
+           ingest_started_at = NOW(),
+           ingest_completed_at = NULL
+     WHERE tracker_snapshot_meta.ingest_status IS DISTINCT FROM 'processing'
+        OR tracker_snapshot_meta.ingest_started_at IS NULL
+        OR tracker_snapshot_meta.ingest_started_at < NOW() - ($2 || ' minutes')::interval`,
+    [workbookKind, String(stuckMinutes)],
+  );
+  return rowCount === 1;
+}
+
+async function sweepStuckSnapshotIngests(pool) {
+  const { rowCount } = await pool.query(
+    `UPDATE tracker_snapshot_meta
+        SET ingest_status = 'error',
+            ingest_completed_at = NOW(),
+            last_error = 'Ingest interrupted by service restart'
+      WHERE ingest_status = 'processing'`,
+  );
+  return rowCount;
+}
+
 function shouldRejectShortPayload({ newCount, lastGood, force = false }) {
   if (force) return false;
   if (newCount === 0) return true;
@@ -370,15 +399,17 @@ async function replaceSnapshotRows(pool, workbookKind, rows, refreshedAt, normal
     await client.query('DELETE FROM tracker_snapshot_rows WHERE workbook_kind = $1', [workbookKind]);
     await insertSnapshotRows(client, rows, refreshedAt);
     await client.query(
-      `INSERT INTO tracker_snapshot_meta (workbook_kind, refreshed_at, row_count, normalized_row_count, last_error, si_source, si_fallback_reason)
-       VALUES ($1, $2, $3, $4, NULL, $5, $6)
+      `INSERT INTO tracker_snapshot_meta (workbook_kind, refreshed_at, row_count, normalized_row_count, last_error, si_source, si_fallback_reason, ingest_status, ingest_completed_at)
+       VALUES ($1, $2, $3, $4, NULL, $5, $6, 'ok', NOW())
        ON CONFLICT (workbook_kind) DO UPDATE
          SET refreshed_at = EXCLUDED.refreshed_at,
              row_count = EXCLUDED.row_count,
              normalized_row_count = EXCLUDED.normalized_row_count,
              last_error = NULL,
              si_source = EXCLUDED.si_source,
-             si_fallback_reason = EXCLUDED.si_fallback_reason`,
+             si_fallback_reason = EXCLUDED.si_fallback_reason,
+             ingest_status = 'ok',
+             ingest_completed_at = NOW()`,
       [workbookKind, refreshedAt, rows.length, normalizedRowCount, siSourceInfo.siSource || null, siSourceInfo.siFallbackReason || null],
     );
     await client.query('COMMIT');
@@ -397,10 +428,12 @@ async function recordSnapshotError(pool, workbookKind, err) {
       ? JSON.stringify(err.snapshotStage)
       : String(err?.message || err || 'Tracker snapshot ingest failed').slice(0, 2000);
   await pool.query(
-    `INSERT INTO tracker_snapshot_meta (workbook_kind, refreshed_at, row_count, last_error)
-     VALUES ($1, NOW(), 0, $2)
+    `INSERT INTO tracker_snapshot_meta (workbook_kind, refreshed_at, row_count, last_error, ingest_status, ingest_completed_at)
+     VALUES ($1, NOW(), 0, $2, 'error', NOW())
      ON CONFLICT (workbook_kind) DO UPDATE
-       SET last_error = EXCLUDED.last_error`,
+       SET last_error = EXCLUDED.last_error,
+           ingest_status = 'error',
+           ingest_completed_at = NOW()`,
     [workbookKind, message],
   );
 }
@@ -454,7 +487,7 @@ async function loadSnapshotRows(pool, { workbookKind, setType, store, periodWeek
   }
   const meta = await loadSnapshotMeta(pool, workbookKind);
   const { rows: metaSourceRows } = await pool.query(
-    'SELECT si_source, si_fallback_reason FROM tracker_snapshot_meta WHERE workbook_kind = $1',
+    'SELECT si_source, si_fallback_reason, ingest_status, ingest_started_at, ingest_completed_at FROM tracker_snapshot_meta WHERE workbook_kind = $1',
     [workbookKind],
   );
   const sourceMeta = metaSourceRows[0] || {};
@@ -506,6 +539,9 @@ async function loadSnapshotRows(pool, { workbookKind, setType, store, periodWeek
       lastError: meta?.last_error || null,
       siSource: sourceMeta.si_source || null,
       siFallbackReason: sourceMeta.si_fallback_reason || null,
+      ingestStatus: sourceMeta.ingest_status || null,
+      ingestStartedAt: sourceMeta.ingest_started_at || null,
+      ingestCompletedAt: sourceMeta.ingest_completed_at || null,
       stale: ageMinutes === null ? true : ageMinutes > staleAfterMinutes,
       ageMinutes: ageMinutes === null ? null : Math.round(ageMinutes),
     },
@@ -517,6 +553,7 @@ module.exports = {
   assertPayloadCountAllowed,
   buildActivePeriodWindow,
   bucketCounts,
+  claimSnapshotIngest,
   classifyRowsForActiveWindow,
   defaultFetchSourceRows,
   ingestTrackerSnapshot,
@@ -527,5 +564,6 @@ module.exports = {
   periodWeekToRange,
   reconcileSnapshotRows,
   replaceSnapshotRows,
+  sweepStuckSnapshotIngests,
   validateSnapshotPayload,
 };

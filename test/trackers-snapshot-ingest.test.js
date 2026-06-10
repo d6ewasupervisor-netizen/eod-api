@@ -6,7 +6,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createTrackersRouter } = require('../src/routes/trackers');
-const { ingestTrackerSnapshot } = require('../src/lib/trackers/snapshot-ingest');
+const {
+  claimSnapshotIngest,
+  ingestTrackerSnapshot,
+  sweepStuckSnapshotIngests,
+} = require('../src/lib/trackers/snapshot-ingest');
 
 class MemoryTrackerPool {
   constructor() {
@@ -83,6 +87,47 @@ class MemoryTrackerPool {
       }
       return { rows: [] };
     }
+    if (normalized.startsWith('UPDATE TRACKER_SNAPSHOT_META') && normalized.includes("INGEST_STATUS = 'ERROR'") && normalized.includes("WHERE INGEST_STATUS = 'PROCESSING'")) {
+      let swept = 0;
+      for (const [kind, row] of this.meta.entries()) {
+        if (row.ingest_status === 'processing') {
+          this.meta.set(kind, {
+            ...row,
+            ingest_status: 'error',
+            ingest_completed_at: new Date().toISOString(),
+            last_error: 'Ingest interrupted by service restart',
+          });
+          swept += 1;
+        }
+      }
+      return { rows: [], rowCount: swept };
+    }
+    if (normalized.startsWith('INSERT INTO TRACKER_SNAPSHOT_META') && normalized.includes('INGEST_STATUS, INGEST_STARTED_AT')) {
+      const kind = params[0];
+      const stuckMinutes = parseInt(params[1], 10);
+      const existing = this.meta.get(kind);
+      const startedAt = existing?.ingest_started_at ? new Date(existing.ingest_started_at).getTime() : null;
+      const isFreshProcessing = existing
+        && existing.ingest_status === 'processing'
+        && startedAt !== null
+        && (Date.now() - startedAt) < stuckMinutes * 60000;
+      if (isFreshProcessing) {
+        return { rows: [], rowCount: 0 };
+      }
+      this.meta.set(kind, {
+        workbook_kind: kind,
+        refreshed_at: existing?.refreshed_at || new Date(0).toISOString(),
+        row_count: existing?.row_count || 0,
+        normalized_row_count: existing?.normalized_row_count ?? null,
+        last_error: existing?.last_error ?? null,
+        si_source: existing?.si_source ?? null,
+        si_fallback_reason: existing?.si_fallback_reason ?? null,
+        ingest_status: 'processing',
+        ingest_started_at: new Date().toISOString(),
+        ingest_completed_at: null,
+      });
+      return { rows: [], rowCount: 1 };
+    }
     if (normalized.startsWith('INSERT INTO TRACKER_SNAPSHOT_META') && params.length === 6) {
       this.meta.set(params[0], {
         workbook_kind: params[0],
@@ -92,6 +137,8 @@ class MemoryTrackerPool {
         last_error: null,
         si_source: params[4],
         si_fallback_reason: params[5],
+        ingest_status: 'ok',
+        ingest_completed_at: new Date().toISOString(),
       });
       return { rows: [] };
     }
@@ -129,6 +176,8 @@ class MemoryTrackerPool {
         last_error: params[1],
         si_source: existing?.si_source ?? null,
         si_fallback_reason: existing?.si_fallback_reason ?? null,
+        ingest_status: 'error',
+        ingest_completed_at: new Date().toISOString(),
       });
       return { rows: [] };
     }
@@ -218,6 +267,16 @@ async function withTrackerServer(pool, snapshotIngest, fn) {
   }
 }
 
+async function waitForIngestSettled(pool, kind, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const row = pool.meta.get(kind);
+    if (row && row.ingest_status && row.ingest_status !== 'processing') return row;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Ingest for '${kind}' did not settle within ${timeoutMs}ms`);
+}
+
 test('snapshot ingest rejects missing/wrong bearer and unset-token fail closed', async (t) => {
   const originalToken = process.env.TRACKER_INGEST_TOKEN;
   t.after(() => {
@@ -285,16 +344,13 @@ test('snapshot ingest stores sample ISE rows and returns bucketCounts', async (t
         rows: [trackerRow('1000001', { rowIndex: 5 }), trackerRow('1000002', { rowIndex: 6 })],
       }),
     });
-    assert.equal(res.status, 200);
+    assert.equal(res.status, 202);
     const body = await res.json();
+    assert.equal(body.ok, true);
     assert.equal(body.kind, 'ise');
-    assert.equal(body.rowsReceived, 2);
-    assert.equal(body.rowsStored, 2);
-    assert.equal(body.forced, false);
-    assert.deepEqual(body.bucketCounts, {
-      matched_both: 1,
-      leave_alone_backlog: 1,
-    });
+    assert.equal(body.status, 'processing');
+    const settled = await waitForIngestSettled(pool, 'ise');
+    assert.equal(settled.ingest_status, 'ok');
   });
 
   assert.equal(pool.snapshotRows.length, 2);
@@ -303,6 +359,111 @@ test('snapshot ingest stores sample ISE rows and returns bucketCounts', async (t
   assert.equal(pool.meta.get('ise').row_count, 2);
   assert.equal(pool.meta.get('ise').normalized_row_count, 2);
   assert.equal(pool.meta.get('ise').last_error, null);
+});
+
+test('claim: concurrent ingest for same kind is rejected with 409', async (t) => {
+  const originalToken = process.env.TRACKER_INGEST_TOKEN;
+  process.env.TRACKER_INGEST_TOKEN = 'secret';
+  t.after(() => {
+    if (originalToken == null) delete process.env.TRACKER_INGEST_TOKEN;
+    else process.env.TRACKER_INGEST_TOKEN = originalToken;
+  });
+  const pool = new MemoryTrackerPool();
+  let releaseFirst;
+  const firstGate = new Promise((resolve) => { releaseFirst = resolve; });
+  const snapshotIngest = {
+    settingsLoader: async () => ({}),
+    sourceFetcher: async () => {
+      await firstGate;
+      return { prodRows: [prodRow('1000001')], siRows: [siRow('1000001')] };
+    },
+  };
+  await withTrackerServer(pool, snapshotIngest, async (baseUrl) => {
+    const post = () => fetch(`${baseUrl}/api/trackers/snapshot/ingest`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workbookKind: 'ise', rows: [trackerRow('1000001')] }),
+    });
+    const first = await post();
+    assert.equal(first.status, 202);
+    const second = await post();
+    assert.equal(second.status, 409);
+    const secondBody = await second.json();
+    assert.match(secondBody.error, /already processing/);
+    releaseFirst();
+    const settled = await waitForIngestSettled(pool, 'ise');
+    assert.equal(settled.ingest_status, 'ok');
+  });
+});
+
+test('claim: stuck processing older than threshold is reclaimable', async () => {
+  const pool = new MemoryTrackerPool();
+  pool.meta.set('ise', {
+    workbook_kind: 'ise',
+    refreshed_at: new Date().toISOString(),
+    row_count: 5,
+    normalized_row_count: 5,
+    last_error: null,
+    si_source: null,
+    si_fallback_reason: null,
+    ingest_status: 'processing',
+    ingest_started_at: new Date(Date.now() - 15 * 60000).toISOString(),
+    ingest_completed_at: null,
+  });
+  const claimed = await claimSnapshotIngest(pool, 'ise');
+  assert.equal(claimed, true);
+  assert.equal(pool.meta.get('ise').ingest_status, 'processing');
+});
+
+test('claim: fresh processing within threshold is NOT reclaimable', async () => {
+  const pool = new MemoryTrackerPool();
+  pool.meta.set('ise', {
+    workbook_kind: 'ise',
+    refreshed_at: new Date().toISOString(),
+    row_count: 5,
+    normalized_row_count: 5,
+    last_error: null,
+    si_source: null,
+    si_fallback_reason: null,
+    ingest_status: 'processing',
+    ingest_started_at: new Date(Date.now() - 2 * 60000).toISOString(),
+    ingest_completed_at: null,
+  });
+  const claimed = await claimSnapshotIngest(pool, 'ise');
+  assert.equal(claimed, false);
+});
+
+test('sweep: orphaned processing rows are marked error, settled rows untouched', async () => {
+  const pool = new MemoryTrackerPool();
+  pool.meta.set('ise', {
+    workbook_kind: 'ise',
+    refreshed_at: new Date().toISOString(),
+    row_count: 5,
+    normalized_row_count: 5,
+    last_error: null,
+    si_source: null,
+    si_fallback_reason: null,
+    ingest_status: 'processing',
+    ingest_started_at: new Date().toISOString(),
+    ingest_completed_at: null,
+  });
+  pool.meta.set('blitz', {
+    workbook_kind: 'blitz',
+    refreshed_at: new Date().toISOString(),
+    row_count: 3,
+    normalized_row_count: 3,
+    last_error: null,
+    si_source: 'grafana',
+    si_fallback_reason: null,
+    ingest_status: 'ok',
+    ingest_started_at: new Date().toISOString(),
+    ingest_completed_at: new Date().toISOString(),
+  });
+  const swept = await sweepStuckSnapshotIngests(pool);
+  assert.equal(swept, 1);
+  assert.equal(pool.meta.get('ise').ingest_status, 'error');
+  assert.match(pool.meta.get('ise').last_error, /interrupted by service restart/);
+  assert.equal(pool.meta.get('blitz').ingest_status, 'ok');
 });
 
 test('active period window sends current and prior period rows to live reconciliation only', async () => {
@@ -491,9 +652,10 @@ test('calendar failure returns 502, preserves prior snapshot, and stamps active_
       headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
       body: JSON.stringify({ workbookKind: 'ise', rows: [periodRow({ period: 5, week: 2, dbkey: '1000602' })] }),
     });
-    assert.equal(res.status, 502);
-    const body = await res.json();
-    assert.match(body.error, /active tracker period window/);
+    assert.equal(res.status, 202);
+    const settled = await waitForIngestSettled(pool, 'ise');
+    assert.equal(settled.ingest_status, 'error');
+    assert.match(settled.last_error, /calendar unavailable/);
   });
 
   assert.deepEqual(pool.snapshotRows, beforeRows);
@@ -635,14 +797,11 @@ test('short-payload guard rejects below-floor unforced payloads without moving g
       headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
       body: JSON.stringify({ workbookKind: 'ise', rows: trackerRows(5, 20) }),
     });
-    assert.equal(res.status, 409);
-    const body = await res.json();
-    assert.equal(body.rejected, true);
-    assert.equal(body.kind, 'ise');
-    assert.equal(body.reason, 'short_payload');
-    assert.equal(body.newCount, 5);
-    assert.equal(body.lastGood, 10);
-    assert.equal(body.floorRatio, 0.6);
+    assert.equal(res.status, 202);
+    const settled = await waitForIngestSettled(pool, 'ise');
+    assert.equal(settled.ingest_status, 'error');
+    assert.match(settled.last_error, /"reason":"short_payload"/);
+    assert.match(settled.last_error, /"newCount":5/);
   });
 
   assert.deepEqual(pool.snapshotRows, beforeRows);
@@ -680,10 +839,13 @@ test('short-payload guard allows forced below-floor payloads and emits a log', a
       headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
       body: JSON.stringify({ workbookKind: 'ise', rows: trackerRows(5, 20), force: true }),
     });
-    assert.equal(res.status, 200);
+    assert.equal(res.status, 202);
     const body = await res.json();
-    assert.equal(body.forced, true);
-    assert.equal(body.normalizedRows, 5);
+    assert.equal(body.ok, true);
+    assert.equal(body.kind, 'ise');
+    assert.equal(body.status, 'processing');
+    const settled = await waitForIngestSettled(pool, 'ise');
+    assert.equal(settled.ingest_status, 'ok');
   });
 
   assert.equal(pool.snapshotRows.filter((row) => row.workbook_kind === 'ise').length, 5);
@@ -723,11 +885,11 @@ test('short-payload guard rejects zero rows unforced with and without prior snap
       headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
       body: JSON.stringify({ workbookKind: 'ise', rows: [] }),
     });
-    assert.equal(res.status, 409);
-    const body = await res.json();
-    assert.equal(body.reason, 'zero_rows');
-    assert.equal(body.newCount, 0);
-    assert.equal(body.lastGood, 2);
+    assert.equal(res.status, 202);
+    const settled = await waitForIngestSettled(priorPool, 'ise');
+    assert.equal(settled.ingest_status, 'error');
+    assert.match(settled.last_error, /"reason":"zero_rows"/);
+    assert.match(settled.last_error, /"newCount":0/);
   });
   assert.deepEqual(priorPool.snapshotRows, beforeRows);
   assert.equal(priorPool.meta.get('ise').refreshed_at, beforeMeta.refreshed_at);
@@ -742,11 +904,11 @@ test('short-payload guard rejects zero rows unforced with and without prior snap
       headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
       body: JSON.stringify({ workbookKind: 'ise', rows: [] }),
     });
-    assert.equal(res.status, 409);
-    const body = await res.json();
-    assert.equal(body.reason, 'zero_rows');
-    assert.equal(body.newCount, 0);
-    assert.equal(body.lastGood, null);
+    assert.equal(res.status, 202);
+    const settled = await waitForIngestSettled(emptyPool, 'ise');
+    assert.equal(settled.ingest_status, 'error');
+    assert.match(settled.last_error, /"reason":"zero_rows"/);
+    assert.match(settled.last_error, /"newCount":0/);
   });
   assert.equal(emptyPool.snapshotRows.length, 0);
   assert.equal(emptyPool.meta.get('ise').row_count, 0);
@@ -780,11 +942,13 @@ test('short-payload guard allows forced zero rows as a deliberate clear', async 
       headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
       body: JSON.stringify({ workbookKind: 'ise', rows: [], force: true }),
     });
-    assert.equal(res.status, 200);
+    assert.equal(res.status, 202);
     const body = await res.json();
-    assert.equal(body.forced, true);
-    assert.equal(body.rowsStored, 0);
-    assert.equal(body.normalizedRows, 0);
+    assert.equal(body.ok, true);
+    assert.equal(body.kind, 'ise');
+    assert.equal(body.status, 'processing');
+    const settled = await waitForIngestSettled(pool, 'ise');
+    assert.equal(settled.ingest_status, 'ok');
   });
 
   assert.equal(pool.snapshotRows.filter((row) => row.workbook_kind === 'ise').length, 0);
@@ -828,7 +992,10 @@ test('short-payload guard rejects ise without touching blitz snapshot or meta', 
       headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
       body: JSON.stringify({ workbookKind: 'ise', rows: trackerRows(5, 40) }),
     });
-    assert.equal(res.status, 409);
+    assert.equal(res.status, 202);
+    const settled = await waitForIngestSettled(pool, 'ise');
+    assert.equal(settled.ingest_status, 'error');
+    assert.match(settled.last_error, /short_payload/);
   });
 
   assert.deepEqual(pool.snapshotRows.filter((row) => row.workbook_kind === 'blitz'), blitzRows);
@@ -937,9 +1104,10 @@ test('reconciliation failure returns 502 and leaves the previous snapshot intact
       headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
       body: JSON.stringify({ workbookKind: 'ise', rows: [trackerRow('1000002')] }),
     });
-    assert.equal(res.status, 502);
-    const body = await res.json();
-    assert.match(body.error, /compare unavailable/);
+    assert.equal(res.status, 202);
+    const settled = await waitForIngestSettled(pool, 'ise');
+    assert.equal(settled.ingest_status, 'error');
+    assert.match(settled.last_error, /compare unavailable/);
   });
 
   assert.deepEqual(pool.snapshotRows, beforeRows);

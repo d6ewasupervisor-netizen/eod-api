@@ -27,8 +27,10 @@ const {
   isTrackerUserAllowed,
 } = require('../lib/trackers/settings');
 const {
+  claimSnapshotIngest,
   ingestTrackerSnapshot,
   loadSnapshotRows,
+  sweepStuckSnapshotIngests,
   validateSnapshotPayload,
 } = require('../lib/trackers/snapshot-ingest');
 
@@ -686,6 +688,9 @@ function createTrackersRouter({ pool, snapshotIngest = {} }) {
   sweepInterruptedRuns(pool).catch((err) => {
     console.error('[trackers] failed to mark interrupted startup runs:', err.message);
   });
+  sweepStuckSnapshotIngests(pool).catch((err) => {
+    console.error('[trackers] failed to sweep stuck snapshot ingests:', err.message);
+  });
 
   router.use((req, _res, next) => {
     req.trackerPool = pool;
@@ -708,22 +713,34 @@ function createTrackersRouter({ pool, snapshotIngest = {} }) {
       return res.status(err.statusCode || 400).json({ ok: false, error: err.message });
     }
 
+    let claimed;
     try {
-      const result = await ingestTrackerSnapshot({
-        pool,
-        workbookKind: payload.workbookKind,
-        rows: payload.rows,
-        force: payload.force,
-        settingsLoader: () => loadTrackerSettings(pool),
-        ...snapshotIngest,
-      });
-      return res.json({ ok: true, ...result });
+      claimed = await claimSnapshotIngest(pool, payload.workbookKind);
     } catch (err) {
-      if (err.snapshotReject) {
-        return res.status(409).json({ ok: false, ...err.snapshotReject });
-      }
-      return res.status(err.statusCode || 502).json({ ok: false, error: err.message });
+      return res.status(502).json({ ok: false, error: err.message });
     }
+    if (!claimed) {
+      return res.status(409).json({
+        ok: false,
+        error: `An ingest for '${payload.workbookKind}' is already processing`,
+      });
+    }
+
+    res.status(202).json({ ok: true, kind: payload.workbookKind, status: 'processing' });
+
+    ingestTrackerSnapshot({
+      pool,
+      workbookKind: payload.workbookKind,
+      rows: payload.rows,
+      force: payload.force,
+      settingsLoader: () => loadTrackerSettings(pool),
+      ...snapshotIngest,
+    }).catch((err) => {
+      console.error(
+        `[trackers] background snapshot ingest failed for '${payload.workbookKind}':`,
+        err.message,
+      );
+    });
   });
 
   router.use(requireAuth);
