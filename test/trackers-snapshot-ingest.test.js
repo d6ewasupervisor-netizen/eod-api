@@ -9,7 +9,9 @@ const { createTrackersRouter } = require('../src/routes/trackers');
 const {
   claimSnapshotIngest,
   ingestTrackerSnapshot,
+  setSnapshotIngestStage,
   sweepStuckSnapshotIngests,
+  touchSnapshotIngestHeartbeat,
 } = require('../src/lib/trackers/snapshot-ingest');
 
 class MemoryTrackerPool {
@@ -102,15 +104,31 @@ class MemoryTrackerPool {
       }
       return { rows: [], rowCount: swept };
     }
+    if (normalized.startsWith('UPDATE TRACKER_SNAPSHOT_META') && normalized.includes('INGEST_HEARTBEAT_AT = NOW()') && !normalized.includes('INGEST_STAGE')) {
+      const row = this.meta.get(params[0]);
+      if (row && row.ingest_status === 'processing') {
+        this.meta.set(params[0], { ...row, ingest_heartbeat_at: new Date().toISOString() });
+        return { rows: [], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    }
+    if (normalized.startsWith('UPDATE TRACKER_SNAPSHOT_META') && normalized.includes('INGEST_STAGE = $2')) {
+      const row = this.meta.get(params[0]);
+      if (row && row.ingest_status === 'processing') {
+        this.meta.set(params[0], { ...row, ingest_stage: params[1], ingest_heartbeat_at: new Date().toISOString() });
+        return { rows: [], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    }
     if (normalized.startsWith('INSERT INTO TRACKER_SNAPSHOT_META') && normalized.includes('INGEST_STATUS, INGEST_STARTED_AT')) {
       const kind = params[0];
       const stuckMinutes = parseInt(params[1], 10);
       const existing = this.meta.get(kind);
-      const startedAt = existing?.ingest_started_at ? new Date(existing.ingest_started_at).getTime() : null;
+      const heartbeatAt = existing?.ingest_heartbeat_at ? new Date(existing.ingest_heartbeat_at).getTime() : null;
       const isFreshProcessing = existing
         && existing.ingest_status === 'processing'
-        && startedAt !== null
-        && (Date.now() - startedAt) < stuckMinutes * 60000;
+        && heartbeatAt !== null
+        && (Date.now() - heartbeatAt) < stuckMinutes * 60000;
       if (isFreshProcessing) {
         return { rows: [], rowCount: 0 };
       }
@@ -125,6 +143,8 @@ class MemoryTrackerPool {
         ingest_status: 'processing',
         ingest_started_at: new Date().toISOString(),
         ingest_completed_at: null,
+        ingest_heartbeat_at: new Date().toISOString(),
+        ingest_stage: 'claimed',
       });
       return { rows: [], rowCount: 1 };
     }
@@ -139,6 +159,7 @@ class MemoryTrackerPool {
         si_fallback_reason: params[5],
         ingest_status: 'ok',
         ingest_completed_at: new Date().toISOString(),
+        ingest_stage: null,
       });
       return { rows: [] };
     }
@@ -178,6 +199,7 @@ class MemoryTrackerPool {
         si_fallback_reason: existing?.si_fallback_reason ?? null,
         ingest_status: 'error',
         ingest_completed_at: new Date().toISOString(),
+        ingest_stage: null,
       });
       return { rows: [] };
     }
@@ -409,6 +431,7 @@ test('claim: stuck processing older than threshold is reclaimable', async () => 
     ingest_status: 'processing',
     ingest_started_at: new Date(Date.now() - 15 * 60000).toISOString(),
     ingest_completed_at: null,
+    ingest_heartbeat_at: new Date(Date.now() - 15 * 60000).toISOString(),
   });
   const claimed = await claimSnapshotIngest(pool, 'ise');
   assert.equal(claimed, true);
@@ -428,6 +451,7 @@ test('claim: fresh processing within threshold is NOT reclaimable', async () => 
     ingest_status: 'processing',
     ingest_started_at: new Date(Date.now() - 2 * 60000).toISOString(),
     ingest_completed_at: null,
+    ingest_heartbeat_at: new Date(Date.now() - 1 * 60000).toISOString(),
   });
   const claimed = await claimSnapshotIngest(pool, 'ise');
   assert.equal(claimed, false);
@@ -464,6 +488,79 @@ test('sweep: orphaned processing rows are marked error, settled rows untouched',
   assert.equal(pool.meta.get('ise').ingest_status, 'error');
   assert.match(pool.meta.get('ise').last_error, /interrupted by service restart/);
   assert.equal(pool.meta.get('blitz').ingest_status, 'ok');
+});
+
+test('heartbeat: live job with fresh heartbeat but old started_at is NOT reclaimable', async () => {
+  const pool = new MemoryTrackerPool();
+  pool.meta.set('ise', {
+    workbook_kind: 'ise',
+    refreshed_at: new Date().toISOString(),
+    row_count: 5,
+    normalized_row_count: 5,
+    last_error: null,
+    si_source: null,
+    si_fallback_reason: null,
+    ingest_status: 'processing',
+    ingest_started_at: new Date(Date.now() - 30 * 60000).toISOString(),
+    ingest_completed_at: null,
+    ingest_heartbeat_at: new Date(Date.now() - 30 * 1000).toISOString(),
+    ingest_stage: 'fetching_and_reconciling',
+  });
+  const claimed = await claimSnapshotIngest(pool, 'ise');
+  assert.equal(claimed, false);
+});
+
+test('heartbeat: stage updates only touch processing rows', async () => {
+  const pool = new MemoryTrackerPool();
+  pool.meta.set('ise', {
+    workbook_kind: 'ise',
+    refreshed_at: new Date().toISOString(),
+    row_count: 5,
+    normalized_row_count: 5,
+    last_error: null,
+    si_source: null,
+    si_fallback_reason: null,
+    ingest_status: 'ok',
+    ingest_started_at: new Date().toISOString(),
+    ingest_completed_at: new Date().toISOString(),
+    ingest_heartbeat_at: null,
+    ingest_stage: null,
+  });
+  await setSnapshotIngestStage(pool, 'ise', 'writing_snapshot');
+  assert.equal(pool.meta.get('ise').ingest_stage, null);
+  await touchSnapshotIngestHeartbeat(pool, 'ise');
+  assert.equal(pool.meta.get('ise').ingest_heartbeat_at, null);
+});
+
+test('heartbeat: successful ingest clears stage and lifecycle settles ok', async (t) => {
+  const originalToken = process.env.TRACKER_INGEST_TOKEN;
+  process.env.TRACKER_INGEST_TOKEN = 'secret';
+  t.after(() => {
+    if (originalToken == null) delete process.env.TRACKER_INGEST_TOKEN;
+    else process.env.TRACKER_INGEST_TOKEN = originalToken;
+  });
+  const pool = new MemoryTrackerPool();
+  const stagesSeen = [];
+  const snapshotIngest = {
+    settingsLoader: async () => ({}),
+    sourceFetcher: async () => {
+      const row = pool.meta.get('ise');
+      if (row && row.ingest_stage) stagesSeen.push(row.ingest_stage);
+      return { prodRows: [prodRow('1000001')], siRows: [siRow('1000001')] };
+    },
+  };
+  await withTrackerServer(pool, snapshotIngest, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/api/trackers/snapshot/ingest`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workbookKind: 'ise', rows: [trackerRow('1000001')] }),
+    });
+    assert.equal(res.status, 202);
+    const settled = await waitForIngestSettled(pool, 'ise');
+    assert.equal(settled.ingest_status, 'ok');
+    assert.equal(settled.ingest_stage, null);
+  });
+  assert.deepEqual(stagesSeen, ['fetching_and_reconciling']);
 });
 
 test('active period window sends current and prior period rows to live reconciliation only', async () => {
