@@ -349,8 +349,11 @@ async function start() {
     // Dump bin file GET: session Bearer OR short-lived ?t= JWT (typ dump_dl).
     '/api/download',
     // Local tracker agent authenticates with its own ingest bearer before the
-    // tracker router's normal user/session gate.
+    // tracker router's normal user/session gate. The meta read endpoint
+    // self-protects the same way with its own read-only bearer
+    // (TRACKER_META_TOKEN) and fails closed (503) when unconfigured.
     '/api/trackers/snapshot/ingest',
+    '/api/trackers/snapshot/meta',
     '/trackers',
     '/trackers/',
     '/trackers/admin',
