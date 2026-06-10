@@ -116,3 +116,62 @@ test('recomputes the frozen PROD/SI intersection count', () => {
 
   assert.equal(sharedKeyCount, golden.meta.sharedKeyCount);
 });
+
+test('classifies adapter SI rows against the frozen shared-key oracle', () => {
+  const {
+    buildReconciliationKey,
+    classifyReconciliation,
+  } = require('../src/lib/trackers/sheet-reconciliation');
+
+  const siPayload = loadJson(SI_FIXTURE_PATH);
+  const golden = loadJson(GOLDEN_PATH);
+  const prodCsv = fs.readFileSync(PROD_FIXTURE_PATH, 'utf8');
+  const prodRows = normalizeProdCsv(prodCsv, { periodWeek: TARGET_PERIOD_WEEK }).prodRows;
+  const siRows = normalizeQuery46Rows(siPayload);
+
+  const prodKeys = new Set(prodRows.map(buildReconciliationKey).filter(Boolean));
+  const goldenSiKeys = new Set(golden.rows.map(buildReconciliationKey).filter(Boolean));
+  const expectedSharedKeys = [...goldenSiKeys].filter((key) => prodKeys.has(key)).sort();
+
+  assert.equal(expectedSharedKeys.length, golden.meta.sharedKeyCount);
+
+  const trackerRows = expectedSharedKeys.map((key, index) => {
+    const [periodWeek, store, categoryId, dbkey] = key.split('|');
+    return {
+      rowIndex: index + 1,
+      workbookKind: 'ise',
+      routedWorkbookKind: 'ise',
+      periodWeek,
+      store,
+      categoryId,
+      dbkey,
+      K: 'No',
+      L: '',
+    };
+  });
+
+  for (const [index, row] of trackerRows.entries()) {
+    assert.equal(buildReconciliationKey(row), expectedSharedKeys[index]);
+  }
+
+  const result = classifyReconciliation({
+    trackerRows,
+    prodRows,
+    siRows,
+    suppressAlreadySatisfied: false,
+  });
+
+  const bothPresentKeys = result.proposals
+    .filter((proposal) => {
+      assert.equal(typeof proposal.key, 'string');
+      assert.ok(proposal.prod && Object.hasOwn(proposal.prod, 'completionStatus'));
+      assert.ok(proposal.si && Object.hasOwn(proposal.si, 'present'));
+      assert.equal(typeof proposal.si.present, 'boolean');
+      return proposal.prod.completionStatus !== 'absent' && proposal.si.present === true;
+    })
+    .map((proposal) => proposal.key)
+    .sort();
+
+  assert.deepEqual(bothPresentKeys, expectedSharedKeys);
+  assert.equal(bothPresentKeys.length, golden.meta.sharedKeyCount);
+});
