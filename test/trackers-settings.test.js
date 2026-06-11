@@ -75,3 +75,15 @@ test('sanitize preserves explicit sasConcurrency overrides within the 1..10 clam
   assert.equal(sanitize({ sasConcurrency: 1 }).sasConcurrency, 1);
   assert.equal(sanitize({}).sasConcurrency, 6);
 });
+
+test('default SAS range concurrency is 1 to preserve sequential range fetching', () => {
+  assert.equal(DEFAULTS.sasRangeConcurrency, 1);
+});
+
+test('sanitize preserves explicit sasRangeConcurrency overrides within the 1..3 clamp', () => {
+  assert.equal(sanitize({ sasRangeConcurrency: 2 }).sasRangeConcurrency, 2);
+  assert.equal(sanitize({ sasRangeConcurrency: 3 }).sasRangeConcurrency, 3);
+  assert.equal(sanitize({ sasRangeConcurrency: 4 }).sasRangeConcurrency, 3);
+  assert.equal(sanitize({ sasRangeConcurrency: 1 }).sasRangeConcurrency, 1);
+  assert.equal(sanitize({}).sasRangeConcurrency, 1);
+});

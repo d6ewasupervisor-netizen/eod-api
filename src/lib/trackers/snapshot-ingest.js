@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { performance } = require('node:perf_hooks');
 const { getCurrentPeriodWeek } = require('../fiscal-calendar');
+const { mapLimit, normalizeConcurrency } = require('./concurrency');
 const { resolveRange } = require('./date-range');
 const { DEFAULT_PROJECT_IDS } = require('./metadata');
 const reboticsReports = require('./rebotics-reports');
@@ -97,6 +98,7 @@ async function defaultFetchSourceRows(trackerRows, options = {}) {
   const sourceFetchStart = nowMs();
   if (!trackerRows.length) {
     timing.sourceFetchMs = elapsedMs(sourceFetchStart);
+    timing.rangeConcurrency = 1;
     return { prodRows: [], siRows: [], siSourceInfo: { siSource: 'si-api', siFallbackReason: null } };
   }
   const stores = [...new Set(trackerRows.map((row) => row.store).filter(Boolean))]
@@ -108,16 +110,16 @@ async function defaultFetchSourceRows(trackerRows, options = {}) {
     ? options.projects
     : DEFAULT_PROJECT_IDS;
   const settings = options.settings || {};
+  const rangeConcurrency = normalizeConcurrency(settings.sasRangeConcurrency, 1, 3);
+  timing.rangeConcurrency = rangeConcurrency;
   const grafanaPrimary = options.grafanaPrimary !== undefined
     ? Boolean(options.grafanaPrimary)
     : process.env.SI_GRAFANA_PRIMARY === 'true';
   const fetchSiGrafana = options.fetchSiGrafana || fetchSiRowsViaGrafana;
   const fetchProdRows = options.fetchProdRows || sasReports.fetchRows;
   const fetchSlowSiRows = options.fetchSlowSiRows || reboticsReports.fetchRows;
-
   const siSourceInfo = { siSource: 'si-api', siFallbackReason: null };
   let grafanaSiRows = null;
-
   if (grafanaPrimary) {
     onStage('fetching:si-grafana');
     const siStart = nowMs();
@@ -139,14 +141,10 @@ async function defaultFetchSourceRows(trackerRows, options = {}) {
       timing.siGrafanaMs = elapsedMs(siStart);
     }
   }
-
-  const prodRows = [];
-  const siRows = [];
   const useSlowSi = grafanaSiRows === null;
   const rangeCount = ranges.length;
-  for (let i = 0; i < rangeCount; i += 1) {
-    const range = ranges[i];
-    onStage(`fetching:prod:${i + 1}-of-${rangeCount}`);
+  let completedRanges = 0;
+  const rangeResults = await mapLimit(ranges, rangeConcurrency, async (range) => {
     const rangeStart = nowMs();
     const fetches = [
       fetchProdRows({
@@ -166,21 +164,35 @@ async function defaultFetchSourceRows(trackerRows, options = {}) {
     }
     const [prod, si] = await Promise.all(fetches);
     const rangeMs = elapsedMs(rangeStart);
-    prodRows.push(...prod);
-    timing.prodRanges.push({
-      dateFrom: range.dateFrom,
-      dateTo: range.dateTo,
-      prodRows: prod.length,
-      ms: rangeMs,
-    });
-    if (useSlowSi) {
-      siRows.push(...si);
-      timing.slowSiRanges.push({
+    completedRanges += 1;
+    onStage(`fetching:prod:${completedRanges}-of-${rangeCount}-done`);
+    return {
+      prod,
+      si: useSlowSi ? si : null,
+      prodEntry: {
         dateFrom: range.dateFrom,
         dateTo: range.dateTo,
-        siRows: si.length,
+        prodRows: prod.length,
         ms: rangeMs,
-      });
+      },
+      slowSiEntry: useSlowSi
+        ? {
+          dateFrom: range.dateFrom,
+          dateTo: range.dateTo,
+          siRows: si.length,
+          ms: rangeMs,
+        }
+        : null,
+    };
+  }, { signal: settings.cancelSignal || null });
+  const prodRows = [];
+  const siRows = [];
+  for (const result of rangeResults) {
+    prodRows.push(...result.prod);
+    timing.prodRanges.push(result.prodEntry);
+    if (useSlowSi && result.si) {
+      siRows.push(...result.si);
+      timing.slowSiRanges.push(result.slowSiEntry);
     }
   }
   if (!useSlowSi) siRows.push(...grafanaSiRows);
@@ -588,6 +600,7 @@ async function ingestTrackerSnapshot({
       activeRows: activeRowCount,
       siSource: siSourceLabel,
       siGrafanaMs: timingCollector.siGrafanaMs ?? null,
+      rangeConcurrency: timingCollector.rangeConcurrency ?? 1,
       prodRanges: timingCollector.prodRanges || [],
       slowSiRanges: timingCollector.slowSiRanges || [],
       classifyMs: timingCollector.classifyMs ?? null,
