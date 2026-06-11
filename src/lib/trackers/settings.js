@@ -64,7 +64,7 @@ function sanitize(input = {}) {
   out.sasRequestTimeoutMs = Math.min(120000, Math.max(5000, parseInt(input.sasRequestTimeoutMs, 10) || DEFAULTS.sasRequestTimeoutMs));
   out.sasMaxAttempts = Math.min(5, Math.max(1, parseInt(input.sasMaxAttempts, 10) || DEFAULTS.sasMaxAttempts));
   out.sasConcurrency = Math.min(10, Math.max(1, parseInt(input.sasConcurrency, 10) || DEFAULTS.sasConcurrency));
-  out.sasRangeConcurrency = Math.min(3, Math.max(1, parseInt(input.sasRangeConcurrency, 10) || DEFAULTS.sasRangeConcurrency));
+  out.sasRangeConcurrency = Math.min(4, Math.max(1, parseInt(input.sasRangeConcurrency, 10) || DEFAULTS.sasRangeConcurrency));
   out.runItemsPageSizeDefault = Math.min(500, Math.max(10, parseInt(input.runItemsPageSizeDefault, 10) || DEFAULTS.runItemsPageSizeDefault));
   out.runItemsPageSizeMax = Math.min(1000, Math.max(50, parseInt(input.runItemsPageSizeMax, 10) || DEFAULTS.runItemsPageSizeMax));
   if (out.runItemsPageSizeDefault > out.runItemsPageSizeMax) {
