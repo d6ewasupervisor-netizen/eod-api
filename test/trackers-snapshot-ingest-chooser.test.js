@@ -277,6 +277,37 @@ test('range concurrency 2 overlaps ranges (peak in-flight 2) and preserves range
     'prodRanges must be in range order even when ranges complete out of order');
 });
 
+test('range concurrency clamps direct settings to 4 and overlaps four ranges', async () => {
+  const multiPeriodRows = [
+    { store: '70123', periodWeek: 'P04W4' },
+    { store: '70456', periodWeek: 'P05W1' },
+    { store: '70789', periodWeek: 'P05W2' },
+    { store: '70111', periodWeek: 'P05W3' },
+    { store: '70222', periodWeek: 'P05W4' },
+  ];
+  let inFlight = 0;
+  let peakInFlight = 0;
+  const fetchProdRows = async ({ dateFrom }) => {
+    inFlight += 1;
+    peakInFlight = Math.max(peakInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    inFlight -= 1;
+    return [{ tag: dateFrom }];
+  };
+  const timingCollector = {};
+  const result = await defaultFetchSourceRows(multiPeriodRows, {
+    settings: { sasRangeConcurrency: 99 },
+    grafanaPrimary: true,
+    fetchSiGrafana: async () => [],
+    fetchProdRows,
+    fetchSlowSiRows: async () => [],
+    timingCollector,
+  });
+  assert.equal(timingCollector.rangeConcurrency, 4);
+  assert.equal(peakInFlight, 4, 'direct range concurrency values must clamp to four workers');
+  assert.equal(result.prodRows.length, 5);
+});
+
 test('range concurrency 2: one range failure rejects the fetch with no partial rows', async () => {
   const multiPeriodRows = [
     { store: '70123', periodWeek: 'P05W1' },

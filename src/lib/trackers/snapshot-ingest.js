@@ -110,7 +110,7 @@ async function defaultFetchSourceRows(trackerRows, options = {}) {
     ? options.projects
     : DEFAULT_PROJECT_IDS;
   const settings = options.settings || {};
-  const rangeConcurrency = normalizeConcurrency(settings.sasRangeConcurrency, 1, 3);
+  const rangeConcurrency = normalizeConcurrency(settings.sasRangeConcurrency, 1, 4);
   timing.rangeConcurrency = rangeConcurrency;
   const grafanaPrimary = options.grafanaPrimary !== undefined
     ? Boolean(options.grafanaPrimary)
