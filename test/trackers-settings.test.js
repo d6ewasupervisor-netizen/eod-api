@@ -63,3 +63,15 @@ test('sanitize clamps runtime settings and drops invalid emails', () => {
 test('default Rebotics request timeout allows slower SI pages', () => {
   assert.equal(DEFAULTS.reboticsRequestTimeoutMs, 30000);
 });
+
+test('default SAS concurrency is raised to 6 for faster PROD range fetches', () => {
+  assert.equal(DEFAULTS.sasConcurrency, 6);
+});
+
+test('sanitize preserves explicit sasConcurrency overrides within the 1..10 clamp', () => {
+  assert.equal(sanitize({ sasConcurrency: 4 }).sasConcurrency, 4);
+  assert.equal(sanitize({ sasConcurrency: 10 }).sasConcurrency, 10);
+  assert.equal(sanitize({ sasConcurrency: 15 }).sasConcurrency, 10);
+  assert.equal(sanitize({ sasConcurrency: 1 }).sasConcurrency, 1);
+  assert.equal(sanitize({}).sasConcurrency, 6);
+});

@@ -272,7 +272,7 @@ async function fetchRows({ stores, projects, dateFrom, dateTo, settings = {}, on
   const normalizedStores = (stores || []).map((s) => String(parseInt(String(s), 10))).filter(Boolean);
   const allRows = [];
   const totalLookups = Math.max(1, normalizedProjects.length * normalizedStores.length);
-  const sasConcurrency = normalizeConcurrency(settings.sasConcurrency, 3, 10);
+  const sasConcurrency = normalizeConcurrency(settings.sasConcurrency, 6, 10);
   let completedLookups = 0;
 
   const projectContexts = await mapLimit(normalizedProjects, sasConcurrency, async (projectId) => {

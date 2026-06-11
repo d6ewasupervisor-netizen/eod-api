@@ -33,7 +33,7 @@ const DEFAULTS = {
   reboticsConcurrency: parseIntEnv('TRACKER_REBOTICS_CONCURRENCY', 3),
   sasRequestTimeoutMs: parseIntEnv('TRACKER_SAS_REQUEST_TIMEOUT_MS', 30000),
   sasMaxAttempts: parseIntEnv('TRACKER_SAS_MAX_ATTEMPTS', 3),
-  sasConcurrency: parseIntEnv('TRACKER_SAS_CONCURRENCY', 3),
+  sasConcurrency: parseIntEnv('TRACKER_SAS_CONCURRENCY', 6),
   runItemsPageSizeDefault: parseIntEnv('TRACKER_RUN_ITEMS_PAGE_SIZE_DEFAULT', 100),
   runItemsPageSizeMax: parseIntEnv('TRACKER_RUN_ITEMS_PAGE_SIZE_MAX', 500),
   maxRunStores: parseIntEnv('TRACKER_MAX_RUN_STORES', 120),
