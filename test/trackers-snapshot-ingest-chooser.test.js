@@ -174,3 +174,38 @@ test('timing: stale grafana fallback records siGrafanaMs plus per-range slowSiRa
   assert.equal(typeof entry.siRows, 'number');
   assert.equal(typeof entry.ms, 'number');
 });
+
+test('substage: grafana primary fires si-grafana then one prod stage for single range', async () => {
+  const { options } = makeSeams({
+    grafanaImpl: () => [{ periodWeek: 'P05W3', storeNumber: '70123' }],
+  });
+  const stages = [];
+  await defaultFetchSourceRows(TRACKER_ROWS, {
+    ...options,
+    grafanaPrimary: true,
+    onStage: (label) => stages.push(label),
+  });
+  assert.deepEqual(stages, ['fetching:si-grafana', 'fetching:prod:1-of-1']);
+});
+
+test('substage: multi-period fires si-grafana then one prod stage per range in order', async () => {
+  const multiPeriodRows = [
+    { store: '70123', periodWeek: 'P05W2' },
+    { store: '70456', periodWeek: 'P05W3' },
+  ];
+  const { options } = makeSeams({
+    grafanaImpl: () => [],
+  });
+  const stages = [];
+  await defaultFetchSourceRows(multiPeriodRows, {
+    ...options,
+    grafanaPrimary: true,
+    onStage: (label) => stages.push(label),
+  });
+  const expectedRanges = [...new Set(multiPeriodRows.map((r) => r.periodWeek))];
+  assert.equal(stages[0], 'fetching:si-grafana');
+  assert.equal(stages.length, 1 + expectedRanges.length);
+  for (let i = 0; i < expectedRanges.length; i += 1) {
+    assert.equal(stages[i + 1], `fetching:prod:${i + 1}-of-${expectedRanges.length}`);
+  }
+});
