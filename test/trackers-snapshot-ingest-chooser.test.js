@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { defaultFetchSourceRows } = require('../src/lib/trackers/snapshot-ingest');
+const { defaultFetchSourceRows, periodWeekToRange } = require('../src/lib/trackers/snapshot-ingest');
 const { SiGrafanaSessionError } = require('../src/lib/trackers/si-grafana-source');
 
 const TRACKER_ROWS = [
@@ -185,7 +185,7 @@ test('substage: grafana primary fires si-grafana then one prod stage for single 
     grafanaPrimary: true,
     onStage: (label) => stages.push(label),
   });
-  assert.deepEqual(stages, ['fetching:si-grafana', 'fetching:prod:1-of-1']);
+  assert.deepEqual(stages, ['fetching:si-grafana', 'fetching:prod:1-of-1-done']);
 });
 
 test('substage: multi-period fires si-grafana then one prod stage per range in order', async () => {
@@ -206,6 +206,103 @@ test('substage: multi-period fires si-grafana then one prod stage per range in o
   assert.equal(stages[0], 'fetching:si-grafana');
   assert.equal(stages.length, 1 + expectedRanges.length);
   for (let i = 0; i < expectedRanges.length; i += 1) {
-    assert.equal(stages[i + 1], `fetching:prod:${i + 1}-of-${expectedRanges.length}`);
+    assert.equal(stages[i + 1], `fetching:prod:${i + 1}-of-${expectedRanges.length}-done`);
   }
+});
+
+test('range concurrency 1 (default) fetches ranges sequentially, peak in-flight is 1', async () => {
+  const multiPeriodRows = [
+    { store: '70123', periodWeek: 'P05W1' },
+    { store: '70456', periodWeek: 'P05W2' },
+    { store: '70789', periodWeek: 'P05W3' },
+  ];
+  let inFlight = 0;
+  let peakInFlight = 0;
+  const fetchProdRows = async ({ dateFrom }) => {
+    inFlight += 1;
+    peakInFlight = Math.max(peakInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    inFlight -= 1;
+    return [{ tag: dateFrom }];
+  };
+  const timingCollector = {};
+  const result = await defaultFetchSourceRows(multiPeriodRows, {
+    settings: {},
+    grafanaPrimary: true,
+    fetchSiGrafana: async () => [],
+    fetchProdRows,
+    fetchSlowSiRows: async () => [],
+    timingCollector,
+  });
+  assert.equal(peakInFlight, 1, 'default range concurrency must keep ranges sequential');
+  assert.equal(timingCollector.rangeConcurrency, 1);
+  assert.equal(result.prodRows.length, 3);
+});
+
+test('range concurrency 2 overlaps ranges (peak in-flight 2) and preserves range order in output', async () => {
+  const multiPeriodRows = [
+    { store: '70123', periodWeek: 'P05W1' },
+    { store: '70456', periodWeek: 'P05W2' },
+    { store: '70789', periodWeek: 'P05W3' },
+  ];
+  let inFlight = 0;
+  let peakInFlight = 0;
+  const delayByRange = { '2026-04-26': 40, '2026-05-03': 10, '2026-05-10': 25 };
+  const fetchProdRows = async ({ dateFrom }) => {
+    inFlight += 1;
+    peakInFlight = Math.max(peakInFlight, inFlight);
+    const delay = delayByRange[dateFrom] ?? 15;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    inFlight -= 1;
+    return [{ tag: dateFrom }];
+  };
+  const timingCollector = {};
+  const result = await defaultFetchSourceRows(multiPeriodRows, {
+    settings: { sasRangeConcurrency: 2 },
+    grafanaPrimary: true,
+    fetchSiGrafana: async () => [],
+    fetchProdRows,
+    fetchSlowSiRows: async () => [],
+    timingCollector,
+  });
+  assert.equal(timingCollector.rangeConcurrency, 2);
+  assert.equal(peakInFlight, 2, 'range concurrency 2 must run two ranges at once');
+  assert.equal(result.prodRows.length, 3);
+  const timingOrder = timingCollector.prodRanges.map((entry) => entry.dateFrom);
+  const sortedRanges = [...new Set(multiPeriodRows.map((r) => r.periodWeek))]
+    .map(periodWeekToRange)
+    .filter(Boolean)
+    .map((range) => range.dateFrom);
+  assert.deepEqual(timingOrder, sortedRanges,
+    'prodRanges must be in range order even when ranges complete out of order');
+});
+
+test('range concurrency 2: one range failure rejects the fetch with no partial rows', async () => {
+  const multiPeriodRows = [
+    { store: '70123', periodWeek: 'P05W1' },
+    { store: '70456', periodWeek: 'P05W2' },
+    { store: '70789', periodWeek: 'P05W3' },
+  ];
+  let prodCalls = 0;
+  const fetchProdRows = async ({ dateFrom }) => {
+    prodCalls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    if (dateFrom === periodWeekToRange('P05W2').dateFrom) {
+      throw new Error('SAS range fetch failed under outer concurrency');
+    }
+    return [{ tag: dateFrom }];
+  };
+  const timingCollector = {};
+  await assert.rejects(
+    () => defaultFetchSourceRows(multiPeriodRows, {
+      settings: { sasRangeConcurrency: 2 },
+      grafanaPrimary: true,
+      fetchSiGrafana: async () => [],
+      fetchProdRows,
+      fetchSlowSiRows: async () => [],
+      timingCollector,
+    }),
+    /SAS range fetch failed under outer concurrency/,
+  );
+  assert.ok(prodCalls >= 1, 'at least one range fetch must have started');
 });

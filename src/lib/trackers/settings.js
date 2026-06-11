@@ -34,6 +34,7 @@ const DEFAULTS = {
   sasRequestTimeoutMs: parseIntEnv('TRACKER_SAS_REQUEST_TIMEOUT_MS', 30000),
   sasMaxAttempts: parseIntEnv('TRACKER_SAS_MAX_ATTEMPTS', 3),
   sasConcurrency: parseIntEnv('TRACKER_SAS_CONCURRENCY', 6),
+  sasRangeConcurrency: parseIntEnv('TRACKER_SAS_RANGE_CONCURRENCY', 1),
   runItemsPageSizeDefault: parseIntEnv('TRACKER_RUN_ITEMS_PAGE_SIZE_DEFAULT', 100),
   runItemsPageSizeMax: parseIntEnv('TRACKER_RUN_ITEMS_PAGE_SIZE_MAX', 500),
   maxRunStores: parseIntEnv('TRACKER_MAX_RUN_STORES', 120),
@@ -63,6 +64,7 @@ function sanitize(input = {}) {
   out.sasRequestTimeoutMs = Math.min(120000, Math.max(5000, parseInt(input.sasRequestTimeoutMs, 10) || DEFAULTS.sasRequestTimeoutMs));
   out.sasMaxAttempts = Math.min(5, Math.max(1, parseInt(input.sasMaxAttempts, 10) || DEFAULTS.sasMaxAttempts));
   out.sasConcurrency = Math.min(10, Math.max(1, parseInt(input.sasConcurrency, 10) || DEFAULTS.sasConcurrency));
+  out.sasRangeConcurrency = Math.min(3, Math.max(1, parseInt(input.sasRangeConcurrency, 10) || DEFAULTS.sasRangeConcurrency));
   out.runItemsPageSizeDefault = Math.min(500, Math.max(10, parseInt(input.runItemsPageSizeDefault, 10) || DEFAULTS.runItemsPageSizeDefault));
   out.runItemsPageSizeMax = Math.min(1000, Math.max(50, parseInt(input.runItemsPageSizeMax, 10) || DEFAULTS.runItemsPageSizeMax));
   if (out.runItemsPageSizeDefault > out.runItemsPageSizeMax) {
