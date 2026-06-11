@@ -413,6 +413,71 @@ test('timing: ingest return carries outer-owned timings and threads collector th
   assert.ok(result.timing.totalIngestMs >= 0);
 });
 
+test('timing: failure path emits timing log with outcome error and sanitized errorMessage', async (t) => {
+  const timingLogs = [];
+  t.mock.method(console, 'log', (...args) => {
+    if (args[0] === '[trackers.snapshot.timing]') timingLogs.push(JSON.parse(args[1]));
+  });
+  const pool = new MemoryTrackerPool();
+  await ingestTrackerSnapshot({
+    pool,
+    workbookKind: 'ise',
+    rows: trackerRows(3),
+    sourceFetcher: async () => ({ prodRows: [], siRows: [] }),
+    settings: {},
+    now: new Date('2026-06-08T12:00:00.000Z'),
+  });
+  timingLogs.length = 0;
+  await assert.rejects(
+    ingestTrackerSnapshot({
+      pool,
+      workbookKind: 'ise',
+      rows: trackerRows(3, 20),
+      sourceFetcher: async () => {
+        throw new Error('Failed to download SAS CSV (HTTP 500)');
+      },
+      settings: {},
+      now: new Date('2026-06-08T12:01:00.000Z'),
+    }),
+    /HTTP 500/,
+  );
+  assert.equal(timingLogs.length, 1, 'failure path must emit exactly one timing line');
+  const line = timingLogs[0];
+  assert.equal(line.outcome, 'error');
+  assert.equal(line.workbookKind, 'ise');
+  assert.match(line.errorMessage, /HTTP 500/);
+  assert.ok(line.errorMessage.length <= 500);
+  assert.equal(typeof line.totalIngestMs, 'number');
+  assert.ok(line.totalIngestMs >= 0);
+});
+
+test('timing: success path emits timing log with outcome success and null errorMessage', async (t) => {
+  const timingLogs = [];
+  t.mock.method(console, 'log', (...args) => {
+    if (args[0] === '[trackers.snapshot.timing]') timingLogs.push(JSON.parse(args[1]));
+  });
+  const pool = new MemoryTrackerPool();
+  const result = await ingestTrackerSnapshot({
+    pool,
+    workbookKind: 'ise',
+    rows: [periodRow({ period: 5, week: 2, dbkey: '1000951' })],
+    sourceFetcher: async (rows) => ({
+      prodRows: rows.map((row) => prodRow(row.dbkey, { periodWeek: row.periodWeek })),
+      siRows: rows.map((row) => siRow(row.dbkey, { periodWeek: row.periodWeek })),
+    }),
+    currentPeriodWeek: currentPeriod(5),
+    settings: {},
+    now: new Date('2026-06-08T12:00:00.000Z'),
+  });
+  assert.equal(timingLogs.length, 1, 'success path must emit exactly one timing line');
+  const line = timingLogs[0];
+  assert.equal(line.outcome, 'success');
+  assert.equal(line.errorMessage, null);
+  assert.equal(typeof line.classifyMs, 'number');
+  assert.equal(typeof line.writeSnapshotMs, 'number');
+  assert.equal(result.timing.totalIngestMs >= 0, true);
+});
+
 test('claim: concurrent ingest for same kind is rejected with 409', async (t) => {
   const originalToken = process.env.TRACKER_INGEST_TOKEN;
   process.env.TRACKER_INGEST_TOKEN = 'secret';
