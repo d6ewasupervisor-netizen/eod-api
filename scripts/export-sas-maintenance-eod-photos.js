@@ -19,8 +19,8 @@ const DEFAULT_PERIOD = 'P05W3';
 const DEFAULT_FISCAL_YEAR = 2026;
 const DEFAULT_OUTPUT = path.join(os.homedir(), 'Downloads', 'eod_p05W3');
 const DEFAULT_D1_STORES = [
-  75, 93, 125, 127, 135, 140, 150, 185, 208, 236,
-  255, 360, 372, 460, 600, 614, 660, 663, 683,
+  35, 40, 60, 63, 143, 153, 218, 220, 240, 242,
+  285, 375, 377, 393, 462, 482, 516, 651, 661, 694,
 ];
 const DEFAULT_STATE_PATH = path.join('C:/Users/tgaut/sas-auth/.sas-session/auth-state.json');
 const DEFAULT_SESSION_URL = 'http://127.0.0.1:7291/session';
@@ -69,7 +69,7 @@ function parseArgs(argv) {
         'Usage:',
         '  node scripts/export-sas-maintenance-eod-photos.js --period P05W3 --stores 75,93 --out ~/Downloads/eod_p05W3',
         '',
-        'Defaults: D1 stores, category 5555, project 1, scheduled P05W3 FY2026.',
+        'Defaults: true D1 stores, category 5555, project 1, scheduled P05W3 FY2026.',
       ].join('\n'));
       process.exit(0);
     }

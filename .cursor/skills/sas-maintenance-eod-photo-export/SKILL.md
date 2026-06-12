@@ -9,6 +9,21 @@ description: Pulls SAS Prod category-reset-report before and after photos for ma
 
 Use this for read-only SAS Prod photo recovery when the user asks to audit missing EODs or pull maintenance category photos. The default workflow is Fred Meyer Kompass ISE project `1`, category `5555`, scheduled-date reports, and output under `Downloads`.
 
+## True District 1 Stores
+
+The true District 1 Fred Meyer store list is:
+
+```text
+35, 40, 60, 63, 143, 153, 218, 220, 240, 242, 285, 375, 377, 393, 462, 482, 516, 651, 661, 694
+```
+
+When the user provides a general store list and asks for District 1 only, normalize store numbers and pull only the intersection. For example:
+
+```text
+General: 63, 668(Mon), 153, 63, 668(Tue), 694, 462, 668(Wed), 30, 240, 227, 668, 224
+True D1 match: 63, 153, 240, 462, 694
+```
+
 ## Export Command
 
 Default D1/P05W3/category `5555` export:
@@ -22,7 +37,7 @@ Custom store/week export:
 ```powershell
 node scripts/export-sas-maintenance-eod-photos.js `
   --period P05W3 `
-  --stores 75,93,125 `
+  --stores 63,153,240,462,694 `
   --category 5555 `
   --out "$env:USERPROFILE\Downloads\eod_p05W3"
 ```
