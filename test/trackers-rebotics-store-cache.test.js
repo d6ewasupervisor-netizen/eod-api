@@ -25,3 +25,16 @@ test('Rebotics committed cache includes known Kompass Tyson stores', () => {
   assert.equal(REBOTICS_STORE_IDS['701-00023'], 3838);
   assert.equal(REBOTICS_STORE_IDS['701-00682'], 3890);
 });
+
+test('Rebotics committed cache includes all D9 Kompass stores', () => {
+  assert.equal(REBOTICS_STORE_IDS['701-00156'], 3773);
+  assert.equal(REBOTICS_STORE_IDS['701-00198'], 3774);
+  assert.equal(REBOTICS_STORE_IDS['701-00226'], 3775);
+  assert.equal(REBOTICS_STORE_IDS['701-00260'], 3776);
+  assert.equal(REBOTICS_STORE_IDS['701-00383'], 3777);
+  assert.equal(REBOTICS_STORE_IDS['701-00439'], 3778);
+  assert.equal(REBOTICS_STORE_IDS['701-00449'], 3779);
+  assert.equal(REBOTICS_STORE_IDS['701-00613'], 3780);
+  assert.equal(REBOTICS_STORE_IDS['701-00662'], 3781);
+  assert.equal(REBOTICS_STORE_IDS['701-00685'], 3782);
+});
