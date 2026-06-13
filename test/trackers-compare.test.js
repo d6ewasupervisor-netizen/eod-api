@@ -59,6 +59,22 @@ test('compareRows marks PROD done with no SI task as missing_in_si with reason',
   assert.match(result.items[0].notes, /Missing SI match/);
 });
 
+test('compareRows withholds missing_in_si as si_unverified when SI coverage is incomplete', () => {
+  const result = compareRows([prod()], [], { siCoverageComplete: false });
+  assert.equal(result.items[0].rowState, 'si_unverified');
+  assert.equal(result.items[0].siPresenceState, 'absent');
+  assert.match(result.items[0].reason, /coverage was incomplete/);
+  assert.equal(result.summary.byStatus.si_unverified, 1);
+  assert.equal(result.summary.byStatus.missing_in_si || 0, 0);
+});
+
+test('compareRows still reports matched_done under incomplete SI coverage', () => {
+  const result = compareRows([prod()], [si()], { siCoverageComplete: false });
+  assert.equal(result.items[0].rowState, 'matched_done');
+  assert.equal(result.summary.byStatus.matched_done, 1);
+  assert.equal(result.summary.byStatus.si_unverified || 0, 0);
+});
+
 test('compareRows treats completed photo-count mismatches as done_photo_mismatch', () => {
   const result = compareRows([prod({ photoCount: 3 })], [si({ photoCount: 1 })]);
   assert.equal(result.items[0].confidence, 'needs_review');

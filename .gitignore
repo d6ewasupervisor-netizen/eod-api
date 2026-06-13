@@ -6,3 +6,7 @@ agent/.run.lock
 scripts/kompass-proof/.cookie
 scripts/kompass-proof/.env
 scripts/kompass-proof/*.log
+
+# Local temp/staging for one-off diagnostic dumps (per-store/per-range JSON, etc.)
+# Never tracked -- scratch space only.
+output/

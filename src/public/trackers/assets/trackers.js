@@ -198,6 +198,9 @@
     const progress = run.progress || {};
     if (run.status === 'cancelled' || progress.stage === 'cancelled') return 'Run cancelled.';
     if (run.error || progress.stage === 'failed') return 'Run failed before the comparison finished.';
+    if (run.status === 'degraded') {
+      return progress.message || 'Finished, but Store Intelligence coverage was incomplete — some sets could not be verified against SI.';
+    }
     if (run.status === 'completed' || progress.stage === 'done') {
       const total = Number(progress.total ?? run.summary?.total ?? 0);
       return total ? `Finished comparing ${plural(total, 'row')}.` : 'Finished; no matching rows were found.';
@@ -223,6 +226,7 @@
 
   function statusLabel(status) {
     if (status === 'completed') return 'Complete';
+    if (status === 'degraded') return 'Complete (SI unverified)';
     if (status === 'failed') return 'Failed';
     if (status === 'cancelled') return 'Cancelled';
     if (status === 'queued') return 'Queued';
@@ -509,6 +513,7 @@
       <div class="summary-card"><strong>${byStatus.done_photo_mismatch || 0}</strong><span>Done, photo mismatch</span></div>
       <div class="summary-card"><strong>${byStatus.si_incomplete || 0}</strong><span>SI incomplete</span></div>
       <div class="summary-card"><strong>${byStatus.missing_in_si || 0}</strong><span>Missing in SI</span></div>
+      <div class="summary-card"><strong>${byStatus.si_unverified || 0}</strong><span>SI unverified</span></div>
       <div class="summary-card"><strong>${byStatus.missing_in_prod || 0}</strong><span>Missing in PROD</span></div>
       <div class="summary-card"><strong>${byStatus.off_scope_si || 0}</strong><span>Off-scope SI</span></div>
     `;
@@ -597,12 +602,12 @@
       setProgress(run.progress.progress || 0);
       renderRunStatus(run);
       if (run.error && run.status !== 'cancelled') showRunError({ message: run.error, errorType: run.progress.errorType }, 'Run failed');
-      if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+      if (run.status === 'completed' || run.status === 'degraded' || run.status === 'failed' || run.status === 'cancelled') {
         clearInterval(state.pollTimer);
         state.pollTimer = null;
         state.canceling = false;
         updateCancelButton(run);
-        if (run.status === 'completed') {
+        if (run.status === 'completed' || run.status === 'degraded') {
           document.getElementById('runActions').classList.remove('hidden');
           document.getElementById('manifestJson').href = '#';
           document.getElementById('manifestCsv').href = '#';

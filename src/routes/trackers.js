@@ -38,7 +38,7 @@ const {
 const inFlightRuns = new Map();
 const TRACKER_ADMIN_EMAILS = trackerAdminEmails();
 const RUN_HEARTBEAT_MS = 15000;
-const TERMINAL_RUN_STATUSES = new Set(['completed', 'failed', 'cancelled']);
+const TERMINAL_RUN_STATUSES = new Set(['completed', 'failed', 'cancelled', 'degraded']);
 const STALE_THRESHOLD_MS = RUN_HEARTBEAT_MS * 6;
 const INTERRUPTED_RUN_ERROR = 'Run interrupted by a server restart. Please re-run.';
 const PROCESS_STARTED_AT = new Date().toISOString();
@@ -574,10 +574,22 @@ async function processRun(pool, run, options = {}) {
 
     let prodRows = [];
     let siRows = [];
+    let siCoverageComplete = true;
     if (prodResult.status === 'fulfilled') prodRows = prodResult.value;
     else warnings.push(`SAS pull failed: ${prodResult.reason?.message || String(prodResult.reason)}`);
-    if (siResult.status === 'fulfilled') siRows = siResult.value;
-    else warnings.push(`Rebotics pull failed: ${siResult.reason?.message || String(siResult.reason)}`);
+    if (siResult.status === 'fulfilled') {
+      const siValue = siResult.value;
+      siRows = Array.isArray(siValue) ? siValue : (siValue?.rows || []);
+      const coverageComplete = Array.isArray(siValue) ? true : siValue?.coverageComplete !== false;
+      const skipped = Array.isArray(siValue) ? [] : (siValue?.skipped || []);
+      siCoverageComplete = coverageComplete;
+      if (!coverageComplete) {
+        warnings.push(`Store Intelligence coverage incomplete: ${skipped.length} unit(s) skipped; absence not verified for affected sets.`);
+      }
+    } else {
+      siCoverageComplete = false;
+      warnings.push(`Rebotics pull failed: ${siResult.reason?.message || String(siResult.reason)}`);
+    }
     if (prodResult.status === 'rejected' && siResult.status === 'rejected') {
       throw new Error('Both SAS and Rebotics pulls failed; no rows to compare.');
     }
@@ -596,6 +608,7 @@ async function processRun(pool, run, options = {}) {
       expectedProdRows: [],
       projectMode,
       includeOffScope,
+      siCoverageComplete,
     });
     for (const note of compared.summary.notes || [PHASE2_ROSTER_NOTE]) {
       if (!warnings.includes(note)) warnings.push(note);
@@ -603,20 +616,27 @@ async function processRun(pool, run, options = {}) {
     throwIfAborted(cancelSignal);
     await insertRunResults(pool, run.id, compared);
     throwIfAborted(cancelSignal);
-
+    const siDegraded = prodResult.status === 'fulfilled'
+      && (siResult.status === 'rejected' || !siCoverageComplete);
+    const finalStatus = siDegraded ? 'degraded' : 'completed';
+    const doneMessage = siDegraded
+      ? 'Comparison complete — Store Intelligence coverage incomplete; absence not verified for affected sets'
+      : (compared.summary.total ? 'Comparison complete' : 'No matching rows found');
     await updateRun(pool, run.id, {
-      status: 'completed',
+      status: finalStatus,
       completed_at: new Date().toISOString(),
       warnings_json: JSON.stringify(warnings),
       summary_json: JSON.stringify({
         ...compared.summary,
         prodRows: prodRows.length,
         siRows: siRows.length,
+        siCoverageComplete,
+        status: finalStatus,
       }),
       progress_json: JSON.stringify({
-        stage: 'done',
+        stage: siDegraded ? 'done_degraded' : 'done',
         progress: 100,
-        message: compared.summary.total ? 'Comparison complete' : 'No matching rows found',
+        message: doneMessage,
         prodRows: prodRows.length,
         siRows: siRows.length,
         dateFrom: range.dateFrom,

@@ -161,6 +161,7 @@ legend {
   padding: 3px 8px;
 }
 .run-state-completed { color: #86efac; }
+.run-state-degraded { color: #fbbf24; }
 .run-state-failed { color: #fecaca; }
 .run-state-cancelled { color: #fde68a; }
 .run-meta {

@@ -420,6 +420,7 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
     });
   }
   const rows = [];
+  const skipped = [];
   const totalLookups = Math.max(1, dates.length * stores.length);
   const reboticsRequestTimeoutMs = parseInt(settings.reboticsRequestTimeoutMs, 10) || DEFAULT_REQUEST_TIMEOUT_MS;
   const reboticsConcurrency = normalizeConcurrency(settings.reboticsConcurrency, 3, 10);
@@ -465,6 +466,13 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
     const internalId = storeIds.get(customId);
     if (!internalId) {
       warn({ onWarning }, `Rebotics store lookup skipped for ${customId}: store not found`);
+      skipped.push({
+        storeNumber,
+        customId,
+        date,
+        reason: 'store_not_resolved',
+        message: 'store not found',
+      });
       completedLookups += 1;
       if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
       return [];
@@ -567,9 +575,20 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
       });
       if (onProgress) await onProgress({ ...progressContext, completedLookups, rows: rows.length, status: 'complete' });
       warn({ onWarning }, `Rebotics tasks skipped for store ${storeNumber} on ${date}: ${err.message}`);
+      skipped.push({
+        storeNumber,
+        customId,
+        date,
+        reason: 'unit_fetch_failed',
+        message: err.message,
+      });
     }
   }, { signal: cancelSignal });
-  return rows;
+  return {
+    rows,
+    coverageComplete: skipped.length === 0,
+    skipped,
+  };
 }
 
 module.exports = {

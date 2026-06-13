@@ -87,6 +87,44 @@ Expected after CORS is fixed: JSON from the route, e.g. `400 {"success":false,"e
 - If terminal output shows `EADDRINUSE` on port `3001`, treat it as an existing server conflict and avoid launching another process. Inspect logs/status or ask the user to restart their regular server if needed.
 - Use Railway logs/status to verify deployed `eod-api`; do not use local servers as proof that production works.
 
+## PROD/SI Reconciliation Notes
+
+- Fresh-check SAS PROD before uploading. Match by exact store and POG/dbkey from `planogram_id`; category name is secondary.
+- Project ids:
+  - `1` Fred Meyer Kompass ISE
+  - `1668` Cut In Kompass ISE
+  - `1715` Blitz Kompass ISE
+  - `3568` DIV Special Projects
+- For FM391 P05W3 Cut In, use existing project `1668` visits only. If no active Cut In visit exists, report it; never build/start one unless the user explicitly instructs that mutation.
+- Photo source priority for backfill: current-week SI pre-photo actions, last-Friday PROD after images for the same POG, then local `Downloads/FM391_P05W3_Photos` folders.
+- Known FM391 local photo folder pattern:
+  `Downloads/FM391_P05W3_Photos/C### Category - POG #######/Bay ## of ## - Category.jpg`.
+- In-progress category-reset time assignment uses:
+
+```http
+PATCH /api/v1/field-app/visits/{visitId}/category-resets/{resetId}/
+```
+
+```json
+{
+  "id": 40962664,
+  "shift_id": 44208085,
+  "spent_time": "2h",
+  "spent_time_reason": null
+}
+```
+
+- Use `"0m"` for zero-hour rows; SAS may return `"0h 0m"`.
+- If SAS rejects with a total-work-time limit, reduce lower-priority rows first, then increase the desired row.
+- Verify `completed` remains false when the user says not to finish the shift.
+
+## Shift/Roster Safety
+
+- Never build a SAS visit/shift, start a shift, add a person, remove a person, or change lead status unless the user explicitly instructs that exact mutation.
+- Adding a person to a shift uses `POST /api/v1/team-scheduling/shifts/`; lead assignment is controlled by `is_lead`.
+- A regular person uses `is_lead: "false"`. Only use `"true"` when the user explicitly asks to make that person the lead.
+- Some Chrome HAR exports omit POST/PATCH bodies. If the body is missing, inspect the current frontend bundle or checked-in helper before mutating; do not infer from response shape alone.
+
 ## Verification Checklist
 
 - Run syntax checks on changed JS: `node --check <file>`.

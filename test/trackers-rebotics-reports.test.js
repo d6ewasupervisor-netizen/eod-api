@@ -109,14 +109,23 @@ test('fetchRows keeps partial SI rows when one task page times out', async (t) =
   });
 
   const warnings = [];
-  const rows = await reboticsReports.fetchRows({
+  const result = await reboticsReports.fetchRows({
     stores: ['19'],
     dates: ['2026-05-31', '2026-06-01'],
     settings: { reboticsMaxAttempts: 1 },
     onWarning: (message) => warnings.push(message),
   });
+  const rows = result.rows;
 
   assert.equal(rows.length, 1);
+  assert.equal(result.coverageComplete, false);
+  assert.equal(result.skipped.length, 1);
+  const skip = result.skipped[0];
+  assert.equal(skip.storeNumber, '19');
+  assert.equal(skip.customId, '701-00019');
+  assert.equal(skip.date, '2026-05-31');
+  assert.equal(skip.reason, 'unit_fetch_failed');
+  assert.match(skip.message, /timed out/);
   assert.equal(rows[0].dbkey, '8732361');
   assert.equal(rows[0].categoryId, '82');
   assert.equal(rows[0].source, 'si');
