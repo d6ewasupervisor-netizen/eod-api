@@ -7,6 +7,7 @@ const { DISTRICT_STORES } = require('../src/lib/trackers/metadata');
 const {
   REBOTICS_STORE_IDS,
   TRACKER_DISTRICT_CUSTOM_IDS,
+  seededMissingCustomIds,
 } = require('../src/lib/trackers/rebotics-store-id-cache');
 
 function toCustomId(storeNumber) {
@@ -37,4 +38,19 @@ test('Rebotics committed cache includes all D9 Kompass stores', () => {
   assert.equal(REBOTICS_STORE_IDS['701-00613'], 3780);
   assert.equal(REBOTICS_STORE_IDS['701-00662'], 3781);
   assert.equal(REBOTICS_STORE_IDS['701-00685'], 3782);
+});
+
+test('Rebotics committed cache includes verified non-fuel tracker stores', () => {
+  assert.equal(Object.keys(REBOTICS_STORE_IDS).length, 126);
+  assert.equal(REBOTICS_STORE_IDS['701-00035'], 3786);
+  assert.equal(REBOTICS_STORE_IDS['701-00140'], 268);
+  assert.equal(REBOTICS_STORE_IDS['701-00668'], 3771);
+});
+
+test('Rebotics committed cache intentionally leaves only fuel-center tracker stores unresolved', () => {
+  assert.deepEqual(seededMissingCustomIds(), [
+    '701-00004',
+    '701-00007',
+    '701-00051',
+  ]);
 });
