@@ -73,6 +73,8 @@ function reasonFor(rowState, { prodPhotoCount = 0, siPhotoCount = 0 } = {}) {
       return "SI captured this; dbkey not in the selected project's scope.";
     case 'missing_in_both':
       return 'Expected by the project roster, but neither system shows completion.';
+    case 'si_unverified':
+      return 'PROD shows this complete, but Store Intelligence coverage was incomplete this run — its absence could not be verified. Re-run when SI is healthy to confirm.';
     default:
       return 'No comparison result was available.';
   }
@@ -83,6 +85,7 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
     expectedProdRows = [],
     projectMode = true,
     includeOffScope = false,
+    siCoverageComplete = true,
   } = options;
   const prodRows = attachPeriodWeek(prodRowsIn || []);
   const siRows = attachPeriodWeek(siRowsIn || []);
@@ -134,11 +137,15 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
     else if (siPresenceState === 'not_done') rowState = 'si_incomplete';
     else if (prodPresenceState === 'done' && siPresenceState === 'done' && prodPhotoCount !== siPhotoCount) rowState = 'done_photo_mismatch';
     else if (prodPresenceState === 'done' && siPresenceState === 'done') rowState = 'matched_done';
-    else if (prodPresenceState === 'done' && siPresenceState === 'absent') rowState = 'missing_in_si';
+    else if (prodPresenceState === 'done' && siPresenceState === 'absent') rowState = siCoverageComplete ? 'missing_in_si' : 'si_unverified';
     else if (expectation === 'in_project_scope' && prodPresenceState === 'absent' && siPresenceState === 'done') rowState = 'missing_in_prod';
     // TODO(phase2): missing_in_both requires expectedProdRows from the PROD roster.
     // With Phase 1's completed-only PROD rows, this state should not be emitted.
-    if (rowState === 'missing_in_both' && !expectedRows.length) rowState = bucket.si.length ? 'missing_in_prod' : 'missing_in_si';
+    if (rowState === 'missing_in_both' && !expectedRows.length) {
+      rowState = bucket.si.length
+        ? 'missing_in_prod'
+        : (siCoverageComplete ? 'missing_in_si' : 'si_unverified');
+    }
     const confidence = notes.length || !storeNumber || !dbkey ? 'needs_review' : 'high';
     const itemKey = `${storeNumber}|${dbkey}`;
     const workDate = representativeDate(allRows);
