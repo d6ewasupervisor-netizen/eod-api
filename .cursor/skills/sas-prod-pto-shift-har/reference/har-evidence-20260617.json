@@ -1,0 +1,32 @@
+{
+  "sourceHar": "C:/Users/tgaut/Downloads/sas-har-20260617-150709.json",
+  "recordedAt": "2026-06-17T22:07:54Z",
+  "scenario": "Sick PTO shift for Fred Meyer admin non-billable project",
+  "project": { "id": 147, "name": "Fred Meyer InHouse NonBillable Admin", "programId": 92 },
+  "cycle": { "id": 242543, "name": "2026 Non-Billable Admin P5", "startDate": "2026-05-24", "endDate": "2026-06-20" },
+  "store": { "number": 999, "projectStoreId": 3289133, "accountStoreId": 246 },
+  "team": { "id": 989886, "name": "PTO" },
+  "visit": { "id": 26944919, "scheduledDate": "2026-06-17", "shiftStartTime": "07:00 AM", "shiftEndTime": "03:00 PM" },
+  "shift": { "id": 44265162, "employeeId": 390965, "isLead": true, "mileageOff": true },
+  "breakReasons": [
+    { "id": 4, "text": "Sick" },
+    { "id": 5, "text": "Holiday" },
+    { "id": 6, "text": "Vacation" },
+    { "id": 7, "text": "Bereavement" },
+    { "id": 8, "text": "Jury Duty" }
+  ],
+  "apiSequence": [
+    "POST /api/v1/team-scheduling/visits/",
+    "POST /api/v1/team-scheduling/shifts/",
+    "PATCH /api/v1/field-app/visits/{visitId}/",
+    "POST /api/v2/field-app/travel/{shiftId}/to_store/",
+    "PATCH /api/v2/field-app/shifts/{shiftId}/",
+    "PUT /api/v1/field-app/visits/{visitId}/shift-complete/",
+    "PATCH /api/v1/field-app/visits/{visitId}/shift-complete/"
+  ],
+  "notes": [
+    "HAR recorder did not capture POST/PATCH request bodies (empty params). Shapes are confirmed from responses and live GET of completed shift 44265162.",
+    "SAS v2 shift PATCH sets actual times plus shift_breaks[].reason (numeric break reason id).",
+    "time_change_reason 5 = Tablet was Not Available (operations/time-change-reason/?is_admin=true)."
+  ]
+}
