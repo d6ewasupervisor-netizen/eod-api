@@ -374,3 +374,28 @@ test('only safe buckets carry write proposals', () => {
   const writeBuckets = result.proposals.filter((proposal) => proposal.proposed).map((proposal) => proposal.bucket).sort();
   assert.deepEqual(writeBuckets, ['confirmed_not_in_si', 'matched_both', 'not_in_store_closeout'].sort());
 });
+
+test('classifyReconciliation buckets an excluded store as si_excluded with no write', () => {
+  const result = classifyReconciliation({
+    trackerRows: [tracker({ store: '51' })],
+    prodRows: [prod({ storeNumber: '51' })],
+    siRows: [],
+  });
+  const excluded = result.proposals.filter((p) => p.bucket === 'si_excluded');
+  assert.equal(excluded.length, 1);
+  assert.equal(excluded[0].store, '51');
+  assert.equal(excluded[0].proposed, null);
+  assert.match(excluded[0].reason, /not assigned to this login/);
+  assert.equal(result.byBucket.si_excluded, 1);
+});
+
+test('classifyReconciliation does not exclude a non-excluded store', () => {
+  const result = classifyReconciliation({
+    trackerRows: [tracker({ store: '60' })],
+    prodRows: [prod({ storeNumber: '60' })],
+    siRows: [si({ storeNumber: '60' })],
+  });
+  assert.equal(result.byBucket.si_excluded || 0, 0);
+  assert.equal(result.proposals.length, 1);
+  assert.equal(result.proposals[0].bucket, 'matched_both');
+});

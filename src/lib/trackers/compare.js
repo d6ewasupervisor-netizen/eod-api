@@ -1,6 +1,7 @@
 'use strict';
 
 const { attachPeriodWeek } = require('./date-range');
+const { isSiExcluded, SI_EXCLUDED_STATE } = require('./si-assignment-scope');
 
 // Tracker compare done model:
 // Done is status-based. Photo count is not part of done.
@@ -75,6 +76,8 @@ function reasonFor(rowState, { prodPhotoCount = 0, siPhotoCount = 0 } = {}) {
       return 'Expected by the project roster, but neither system shows completion.';
     case 'si_unverified':
       return 'PROD shows this complete, but Store Intelligence coverage was incomplete this run — its absence could not be verified. Re-run when SI is healthy to confirm.';
+    case 'si_excluded':
+      return 'In your PROD footprint but not assigned to this login in Store Intelligence — the SI comparison was intentionally skipped. PROD data is shown for reference.';
     default:
       return 'No comparison result was available.';
   }
@@ -96,7 +99,6 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
   const nonPlanogramSiRows = siRows.filter((row) => !normDbkey(row.dbkey));
   const scopeDbkeys = new Set([...comparableProdRows, ...expectedRows].map((row) => normDbkey(row.dbkey)).filter(Boolean));
   const grouped = new Map();
-
   for (const row of comparableProdRows) {
     const key = buildKey(row);
     if (!grouped.has(key)) grouped.set(key, { prod: [], si: [], key });
@@ -107,7 +109,6 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
     if (!grouped.has(key)) grouped.set(key, { prod: [], si: [], key });
     grouped.get(key).si.push(row);
   }
-
   const items = [];
   const images = [];
   let offScopeHidden = 0;
@@ -122,6 +123,7 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
     const sample = prodSample || siSample || allRows[0] || {};
     const storeNumber = normStore(sample.storeNumber);
     const dbkey = normDbkey(sample.dbkey);
+    const siExcluded = isSiExcluded(`701-${String(storeNumber).padStart(5, '0')}`);
     const prodPhotoCount = bucket.prod.reduce((acc, r) => acc + (r.photoCount || 0), 0);
     const siPhotoCount = bucket.si.reduce((acc, r) => acc + (r.photoCount || 0), 0);
     const prodPresenceState = prodSample && normalizeProdStatus(prodSample.status) === 'done' ? 'done' : 'absent';
@@ -129,11 +131,12 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
     const expectation = expectationForDbkey(dbkey);
     const notes = [];
     if (!dbkey) notes.push('Missing dbkey');
-    if (!bucket.prod.length || !bucket.si.length) notes.push(bucket.prod.length ? 'Missing SI match' : 'Missing PROD match');
+    if (!siExcluded && (!bucket.prod.length || !bucket.si.length)) notes.push(bucket.prod.length ? 'Missing SI match' : 'Missing PROD match');
     if (bucket.prod.length > 1 || bucket.si.length > 1) notes.push('Multiple rows merged for same key');
-    if (Math.abs(prodPhotoCount - siPhotoCount) > 0) notes.push('Photo count mismatch');
+    if (!siExcluded && Math.abs(prodPhotoCount - siPhotoCount) > 0) notes.push('Photo count mismatch');
     let rowState = 'missing_in_both';
-    if (expectation === 'off_scope' && siSample) rowState = 'off_scope_si';
+    if (siExcluded) rowState = SI_EXCLUDED_STATE;
+    else if (expectation === 'off_scope' && siSample) rowState = 'off_scope_si';
     else if (siPresenceState === 'not_done') rowState = 'si_incomplete';
     else if (prodPresenceState === 'done' && siPresenceState === 'done' && prodPhotoCount !== siPhotoCount) rowState = 'done_photo_mismatch';
     else if (prodPresenceState === 'done' && siPresenceState === 'done') rowState = 'matched_done';
@@ -149,7 +152,6 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
     const confidence = notes.length || !storeNumber || !dbkey ? 'needs_review' : 'high';
     const itemKey = `${storeNumber}|${dbkey}`;
     const workDate = representativeDate(allRows);
-
     const item = {
       itemKey,
       storeNumber,
@@ -182,7 +184,6 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
       return;
     }
     items.push(item);
-
     for (const row of bucket.prod) {
       for (const img of row.images || []) {
         images.push({ ...img, itemKey });
@@ -195,7 +196,6 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
     }
   }
   for (const bucket of grouped.values()) addBucket(bucket);
-
   items.sort((a, b) => {
     const byStore = String(a.storeNumber).localeCompare(String(b.storeNumber), undefined, { numeric: true });
     if (byStore) return byStore;
@@ -203,7 +203,6 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
     if (byDate) return byDate;
     return String(a.dbkey || '').localeCompare(String(b.dbkey || ''));
   });
-
   const notes = [PHASE2_ROSTER_NOTE];
   if (nonPlanogramProdRows.length) {
     notes.push(`${nonPlanogramProdRows.length} non-planogram PROD row${nonPlanogramProdRows.length === 1 ? '' : 's'} excluded from planogram comparison.`);
@@ -211,7 +210,6 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
   if (nonPlanogramSiRows.length) {
     notes.push(`${nonPlanogramSiRows.length} non-planogram SI row${nonPlanogramSiRows.length === 1 ? '' : 's'} excluded from planogram comparison.`);
   }
-
   const summary = {
     total: items.length,
     byStatus: items.reduce((acc, item) => {
@@ -225,7 +223,6 @@ function compareRows(prodRowsIn, siRowsIn, options = {}) {
     nonPlanogramProdRows: nonPlanogramProdRows.length,
     nonPlanogramSiRows: nonPlanogramSiRows.length,
   };
-
   return { items, images, summary };
 }
 

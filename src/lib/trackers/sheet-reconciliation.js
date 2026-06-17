@@ -7,6 +7,7 @@ const {
   isBacklogException,
   isNotInSiClaim,
 } = require('./not-in-store-patterns');
+const { isSiExcluded } = require('./si-assignment-scope');
 
 function normalizeStore(value) {
   const parsed = parseInt(String(value || '').trim(), 10);
@@ -279,6 +280,12 @@ function resolveBucket({ prod = null, si = null, notInStorePatterns = DEFAULT_NO
   return noWrite('judgment_call', 'Ambiguous PROD/SI state needs manual review.');
 }
 
+function keyStoreIsSiExcluded(key) {
+  const store = String(key).split('|')[1];
+  if (!store) return false;
+  return isSiExcluded(`701-${store.padStart(5, '0')}`);
+}
+
 function classifyReconciliation({
   trackerRows = [],
   prodRows = [],
@@ -296,7 +303,7 @@ function classifyReconciliation({
   const pendingPatternCandidates = [];
   const byBucket = {};
   let alreadySatisfied = 0;
-
+  const siExcludedKeys = new Set();
   function add(proposal) {
     if (suppressAlreadySatisfied && proposedEqualsCurrent(proposal.proposed, proposal.current)) {
       alreadySatisfied += 1;
@@ -311,18 +318,45 @@ function classifyReconciliation({
       });
     }
   }
-
   for (const [key, tracker] of trackerByKey.entries()) {
     if (ignoredKeySet.has(key)) continue;
+    if (keyStoreIsSiExcluded(key)) {
+      siExcludedKeys.add(key);
+      const prod = prodByKey.get(key) || null;
+      const si = siByKey.get(key) || null;
+      add(makeProposal({
+        key,
+        tracker,
+        prod,
+        si,
+        bucket: 'si_excluded',
+        reason: 'Store is not assigned to this login in Store Intelligence; SI comparison intentionally skipped (PROD-only).',
+        proposed: null,
+      }));
+      continue;
+    }
     const prod = prodByKey.get(key) || null;
     const si = siByKey.get(key) || null;
     const bucket = resolveBucket({ prod, si, notInStorePatterns, projectMode });
     add(makeProposal({ key, tracker, prod, si, ...bucket }));
   }
-
   for (const key of new Set([...prodByKey.keys(), ...siByKey.keys()])) {
     if (ignoredKeySet.has(key)) continue;
     if (trackerByKey.has(key)) continue;
+    if (siExcludedKeys.has(key)) continue;
+    if (keyStoreIsSiExcluded(key)) {
+      const prod = prodByKey.get(key) || null;
+      const si = siByKey.get(key) || null;
+      add(makeProposal({
+        key,
+        prod,
+        si,
+        bucket: 'si_excluded',
+        reason: 'Store is not assigned to this login in Store Intelligence; SI comparison intentionally skipped (PROD-only).',
+        proposed: null,
+      }));
+      continue;
+    }
     const prod = prodByKey.get(key) || null;
     const si = siByKey.get(key) || null;
     const reason = prod && si
@@ -332,7 +366,6 @@ function classifyReconciliation({
         : 'SI row has no matching tracker row.';
     add(makeProposal({ key, prod, si, bucket: 'no_match', reason, proposed: null }));
   }
-
   return { proposals, byBucket, pendingPatternCandidates, alreadySatisfied };
 }
 

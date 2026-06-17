@@ -514,6 +514,7 @@
       <div class="summary-card"><strong>${byStatus.si_incomplete || 0}</strong><span>SI incomplete</span></div>
       <div class="summary-card"><strong>${byStatus.missing_in_si || 0}</strong><span>Missing in SI</span></div>
       <div class="summary-card"><strong>${byStatus.si_unverified || 0}</strong><span>SI unverified</span></div>
+      <div class="summary-card"><strong>${byStatus.si_excluded || 0}</strong><span>SI excluded (PROD-only)</span></div>
       <div class="summary-card"><strong>${byStatus.missing_in_prod || 0}</strong><span>Missing in PROD</span></div>
       <div class="summary-card"><strong>${byStatus.off_scope_si || 0}</strong><span>Off-scope SI</span></div>
     `;
