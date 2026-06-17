@@ -18,6 +18,7 @@ const { looksLikeEmail } = require('./lib/resend-reply-to');
 const { buildSetRelatedEmailPayload } = require('./lib/checklanes-email');
 const { extractPlanogramMeta } = require('./lib/helpdesk-email');
 const { issueReviewToken } = require('./lib/decision-review-jwt');
+const { storesMatch } = require('../lib/sas-store-match');
 
 const BASE_URL = 'https://prod.sasretail.com';
 const SUPERVISOR_WORKDAY_ID = '800175315';
@@ -275,7 +276,7 @@ function registerRoutes(app, resend, pool) {
       });
 
       const storeResults = Array.isArray(storeResp.data) ? storeResp.data : (storeResp.data?.results || []);
-      const exactMatch = storeResults.find(s => String(s.store__number) === String(store));
+      const exactMatch = storeResults.find((s) => storesMatch(s.store__number, store));
       if (!exactMatch) {
         return res.status(404).json({ error: `Store number ${store} not found` });
       }

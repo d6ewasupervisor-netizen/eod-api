@@ -1,6 +1,6 @@
 ---
 name: sas-prod-shift-management-har
-description: Build and mutate SAS Prod team-scheduling visits from HAR-confirmed patterns. Use when the user provides date, time, shift type, store number, team lead, team members, or asks to copy roster/team details from an existing Kompass ISE shift.
+description: Build and mutate SAS Prod team-scheduling visits from HAR-confirmed patterns. Use when the user provides date, time, shift type, store number, team lead, team members, asks to copy roster/team details from an existing Kompass ISE shift, or asks to change/reassign/swap the lead on one or more shifts for a date.
 ---
 
 # SAS Prod Shift Management HAR
@@ -10,6 +10,42 @@ description: Build and mutate SAS Prod team-scheduling visits from HAR-confirmed
 Never build a SAS visit/shift, start a shift, add a person, remove a person, or change lead status unless the user explicitly instructs that exact mutation. A reconciliation or photo request is not permission to create shifts or edit rosters.
 
 Before any live SAS API call, use `sas-auth-prod-session` to load the current SAS prod session. Never print or commit tokens, cookies, CSRF values, HAR headers, employee addresses, phone numbers, emails, or full raw HAR bodies.
+
+## Store Number Matching (Mandatory)
+
+SAS PROD **substring-matches** `store_number` on list endpoints. Verified: `team-scheduling/visits?store_number=28` returns store **281** (not store 28). Never trust that filter alone.
+
+**Rules — every PROD workflow:**
+
+1. Match store numbers as **whole numbers only** (store `28` ≠ `128`, `281`, `286`, `428`, …).
+2. Fetch cycle visits **without** relying on `store_number=` results, then filter client-side with exact match.
+3. When the user names a store, resolve **store + date** (+ lead if given) before any mutation. Do not pick a visit from employee-only cycle shift search unless the user did not specify a store.
+4. Before mutate/report, confirm: requested store, actual visit store (`visit.store.store.number`), visit id, date, lead.
+5. Use shared helpers — do not hand-roll string `includes` / partial matching:
+
+```js
+const {
+  normalizeStoreNumber,
+  getVisitStoreNumber,
+  filterVisitsByStore,
+  assertVisitStore,
+} = require('./scripts/sas-store-match');
+// eod-api app code: require('../../../lib/sas-store-match')
+```
+
+```js
+// Preferred visit lookup when store + date are known:
+const visits = rows(await sas('GET', `/team-scheduling/visits/?cycle=${cycleId}&page=1&page_size=500`));
+const forStore = filterVisitsByStore(
+  visits.filter((v) => String(v.scheduled_date) === targetDate),
+  requestedStore
+);
+if (forStore.length !== 1) throw new Error(`Expected one visit for store ${requestedStore} on ${targetDate}, found ${forStore.length}`);
+const visit = await sas('GET', `/team-scheduling/visits/${forStore[0].id}/`);
+assertVisitStore(visit, requestedStore, 'Resolved visit');
+```
+
+If `store_number=` is used as a pre-filter for bandwidth, **always** re-filter with `filterVisitsByStore` / `assertVisitStore` before acting.
 
 ## Project Targeting
 
@@ -27,7 +63,9 @@ Use the user's "shift type" to pick the destination project. For example, "blitz
 ```http
 GET /api/v1/projects/projects/?current_status=active,approved&fields=id,name&program=1&sort=name
 GET /api/v1/projects/project-cycles/?current_status=active&page=1&page_size=10&project={projectId}&sort=start_date
-GET /api/v1/team-scheduling/visits/?cycle={cycleId}&page=1&page_size=10&store_number={store}
+GET /api/v1/team-scheduling/visits/?cycle={cycleId}&page=1&page_size=500
+# Optional pre-filter only — MUST exact-filter client-side (see Store Number Matching):
+# GET ...&store_number={store}
 GET /api/v1/operations/field-data/?customer_id=2&program_id=1&project_id={projectId}&project_store_id={projectStoreId}&scheduled_dt_from=YYYY-MM-DD&scheduled_dt_to=YYYY-MM-DD
 ```
 
@@ -145,6 +183,36 @@ PATCH /api/v1/team-scheduling/shifts/{shiftId}/
 
 Use only with explicit user approval for the named person/shift.
 
+## Reassigning Lead On Existing Shifts
+
+SAS does **not** support in-place lead changes. Pattern: **delete old lead shift, recreate new lead shift** on the same visit.
+
+1. Resolve both employees via `workday-employees` search. User nicknames may not match SAS legal names — search partial names and confirm IDs (e.g. user "Alexandera Wright" → SAS `Alexandra Wright Jamsyn`).
+2. For each Kompass project (`1`, `1668`, `1715`, `3568`), resolve the active cycle covering the target date.
+3. Find active lead shifts for the outgoing employee:
+
+```http
+GET /api/v1/team-scheduling/shifts/?current_status=active&cycle={cycleId}&employee={oldEmployeeId}
+```
+
+Keep only rows where `is_lead` is truthy and the visit `scheduled_date` matches. Include visits with `current_status` `active` or `in-progress`.
+
+4. **Deduplicate by `visitId`** before mutating. The same shift can surface when scanning multiple project cycles; mutate each visit once.
+5. For each visit:
+   - `PATCH /api/v1/team-scheduling/shifts/{oldLeadShiftId}/` → `{ "current_status": "deleted" }`
+   - If the incoming lead already has a non-lead shift on the visit, delete that shift too.
+   - `POST /api/v1/team-scheduling/shifts/` with same `visit`, `cycle`, `shift_start_time`, `shift_end_time`, new `employee`, and `"is_lead": "true"`.
+6. Verify with `field-data` for the date (fast roster check) and per-visit `team-scheduling/shifts`.
+
+Repeatable script (dry-run first):
+
+```bash
+node ~/.cursor/skills/sas-prod-shift-management-har/scripts/reassign-lead-by-date.js \
+  --date YYYY-MM-DD --from "Old Lead Name" --to "New Lead Name" --dry-run
+```
+
+Omit `--dry-run` only after explicit user approval. Default date is tomorrow when `--date` is omitted.
+
 ## Autonomous Input Contract
 
 When the user provides:
@@ -170,6 +238,14 @@ GET /api/v1/team-scheduling/visits/{visitId}/
 GET /api/v1/field-app/visits/{visitId}/category-resets/
 ```
 
-Report the visit id, project id, employee names, `shift_id`s, lead flags, and current statuses.
+For date-wide lead changes, also query:
+
+```http
+GET /api/v1/operations/field-data/?customer_id=2&program_id=1&scheduled_dt_from=YYYY-MM-DD&scheduled_dt_to=YYYY-MM-DD&page=1&page_size=500
+```
+
+Filter `visit_lead` for old vs new names; expect zero old-lead rows when complete.
+
+Report the visit id, project id, store number, employee names, `shift_id`s, lead flags, and current statuses.
 
 For copied rosters, also report the source visit id and destination visit id, plus any source employees skipped because they were inactive, duplicates, missing from employee search, or explicitly excluded by the user.
