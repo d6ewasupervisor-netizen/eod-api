@@ -164,6 +164,7 @@ legend {
 .run-state-degraded { color: #fbbf24; }
 .run-state-failed { color: #fecaca; }
 .run-state-cancelled { color: #fde68a; }
+.row-state-si-excluded { color: #93c5fd; }
 .run-meta {
   color: #94a3b8;
   font-size: 12px;

@@ -183,3 +183,28 @@ test('compareRows matches run-19 project-mode shape with hidden off-scope SI', (
   assert.equal(visible.items.length, 28);
   assert.equal(visible.summary.byStatus.off_scope_si, 13);
 });
+
+test('compareRows buckets an excluded store as si_excluded, not missing_in_si', () => {
+  const result = compareRows([prod({ storeNumber: '4' })], []);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].rowState, 'si_excluded');
+  assert.equal(result.items[0].comparisonStatus, 'si_excluded');
+  assert.match(result.items[0].reason, /not assigned to this login/);
+  assert.equal(result.summary.byStatus.si_excluded, 1);
+  assert.equal(result.summary.byStatus.missing_in_si || 0, 0);
+});
+
+test('compareRows si_excluded wins even when SI coverage is incomplete', () => {
+  const result = compareRows([prod({ storeNumber: '4' })], [], { siCoverageComplete: false });
+  assert.equal(result.items[0].rowState, 'si_excluded');
+  assert.equal(result.summary.byStatus.si_excluded, 1);
+  assert.equal(result.summary.byStatus.si_unverified || 0, 0);
+  assert.equal(result.summary.byStatus.missing_in_si || 0, 0);
+});
+
+test('compareRows does not exclude a non-excluded store', () => {
+  const result = compareRows([prod({ storeNumber: '60' })], []);
+  assert.equal(result.items[0].rowState, 'missing_in_si');
+  assert.equal(result.summary.byStatus.si_excluded || 0, 0);
+  assert.equal(result.summary.byStatus.missing_in_si, 1);
+});
