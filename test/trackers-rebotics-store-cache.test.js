@@ -41,7 +41,7 @@ test('Rebotics committed cache includes all D9 Kompass stores', () => {
 });
 
 test('Rebotics committed cache includes verified non-fuel tracker stores', () => {
-  assert.equal(Object.keys(REBOTICS_STORE_IDS).length, 126);
+  assert.equal(Object.keys(REBOTICS_STORE_IDS).length, 128);
   assert.equal(REBOTICS_STORE_IDS['701-00035'], 3786);
   assert.equal(REBOTICS_STORE_IDS['701-00140'], 268);
   assert.equal(REBOTICS_STORE_IDS['701-00668'], 3771);
@@ -49,8 +49,6 @@ test('Rebotics committed cache includes verified non-fuel tracker stores', () =>
 
 test('Rebotics committed cache intentionally leaves only fuel-center tracker stores unresolved', () => {
   assert.deepEqual(seededMissingCustomIds(), [
-    '701-00004',
     '701-00007',
-    '701-00051',
   ]);
 });
