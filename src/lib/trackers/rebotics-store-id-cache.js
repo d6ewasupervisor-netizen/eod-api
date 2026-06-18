@@ -132,6 +132,9 @@ const REBOTICS_STORE_IDS = {
   '701-00281': 3814,
   '701-00464': 3826,
   '701-00650': 3830,
+  // Fuel centers (added 2026-06-17, resolver-verified from P05W4 Rebotics task rows)
+  '701-00004': 4748, // FM4 — Fuel Kiosks on 2026-06-14..17 (visit scheduled 6/18)
+  '701-00051': 4751, // FM51 — Walk Ins on 2026-06-16 (visit 26937901)
 };
 
 const TRACKER_DISTRICT_CUSTOM_IDS = [
