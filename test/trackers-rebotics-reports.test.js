@@ -152,3 +152,72 @@ test('categoryIdFromTask normalizes title and label category ids', () => {
     '82',
   );
 });
+
+test('fetchRows skips SI-excluded stores without scanning or breaking coverage', async (t) => {
+  t.mock.method(reboticsBridge, 'getTokenForServer', () => 'test-token');
+  t.mock.method(reboticsBridge, 'getApiBase', () => 'https://krcs.rebotics.net');
+  let dateWideScans = 0;
+  let excludedFetches = 0;
+  t.mock.method(https, 'request', (url, _options, callback) => {
+    const path = url.pathname;
+    const params = url.searchParams;
+    const store = params.get('store');
+    if (path === '/api/v1/stores/') {
+      throw new Error('Store custom_id endpoint should not be used');
+    }
+    // Date-wide resolver scan (no store param). An excluded store must never
+    // get here — if it does, the deep-scan/timeout bug is back.
+    if (path === '/api/v1/tasks/' && !store) {
+      dateWideScans += 1;
+      const req = mockJsonRequest({
+        results: [{ store: { custom_id: '701-00019', id: 3837 } }],
+        next: null,
+      });
+      req._callback = callback;
+      return req;
+    }
+    // Per-store fetch for the real store (701-00019 -> internal 3837).
+    if (path === '/api/v1/tasks/' && store === '3837') {
+      const req = mockJsonRequest({
+        results: [{
+          id: 9001,
+          store: { custom_id: '701-00019', id: 3837 },
+          title: 'P05W2-2026 8723240 201-CANDY - CHECKLANE 417 Reset',
+          status: { id: 'COMPLETED' },
+          category: { name: 'CANDY' },
+          planograms: [{ custom_id: '8723240', store_planogram_id: 444, name: 'CANDY' }],
+        }],
+        next: null,
+      });
+      req._callback = callback;
+      return req;
+    }
+    if (path === '/api/v1/tasks/9001/processing/actions/') {
+      const req = mockJsonRequest({ results: [], next: null });
+      req._callback = callback;
+      return req;
+    }
+    // Any fetch for the excluded store's hypothetical internal id is a failure.
+    excludedFetches += 1;
+    const req = mockJsonRequest({ results: [], next: null });
+    req._callback = callback;
+    return req;
+  });
+  const warnings = [];
+  const result = await reboticsReports.fetchRows({
+    stores: ['4', '19'],
+    dates: ['2026-06-13'],
+    settings: { reboticsMaxAttempts: 1 },
+    onWarning: (message) => warnings.push(message),
+  });
+  // 701-00019 is in the committed cache, so the only legitimate path is a
+  // cache hit -> zero date-wide scans. The excluded store 701-00004 must add
+  // no scans and no per-store fetches.
+  assert.equal(dateWideScans, 0, 'no date-wide scan should occur for cached + excluded stores');
+  assert.equal(excludedFetches, 0, 'excluded store must never be fetched');
+  // The excluded store is intentionally skipped, NOT a coverage gap.
+  assert.equal(result.coverageComplete, true, 'excluded store must not degrade coverage');
+  assert.equal(result.skipped.length, 0, 'excluded store must not appear in skipped');
+  // The real store's SI rows still come through.
+  assert.ok(result.rows.some((r) => String(r.storeNumber) === '19'), 'real store SI rows present');
+});

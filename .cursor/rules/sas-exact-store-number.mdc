@@ -1,0 +1,25 @@
+---
+description: SAS PROD store numbers must match exactly — never substring or fuzzy store matching
+alwaysApply: true
+---
+
+# SAS exact store number matching
+
+SAS PROD **substring-matches** `store_number` query params on list endpoints. Example: `team-scheduling/visits?store_number=28` returns store **281** as well as 28.
+
+## Required behavior
+
+- Match store numbers as **whole numbers only** after `normalizeStoreNumber` (strip leading zeros; compare canonical integer strings).
+- Store `28` must **not** match `128`, `281`, `286`, `428`, etc.
+- **Never** trust `store_number=` API filters alone. Fetch the cycle visit list, then filter client-side with `lib/sas-store-match.js` or `.cursor/skills/sas-prod-shift-management-har/scripts/sas-store-match.js`.
+- When the user names a store, **every** visit/shift mutation must verify the resolved visit's store equals that number exactly.
+- Do **not** pick a visit from employee-only cycle shift search when the user specified a store — resolve store + date (+ lead if given) first.
+- Before reporting or mutating, log/confirm: requested store, actual visit store, visit id, date, lead.
+
+## Prefer
+
+```js
+const { filterVisitsByStore, assertVisitStore, getVisitStoreNumber } = require('../lib/sas-store-match');
+```
+
+See `sas-prod-shift-management-har` skill **Store number matching (mandatory)** section.

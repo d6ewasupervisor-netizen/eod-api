@@ -6,6 +6,7 @@ const reboticsBridge = require('../../rebotics-bridge');
 const { mapLimit, normalizeConcurrency, throwIfAborted } = require('./concurrency');
 const { REBOTICS_STORE_IDS, seededMissingCustomIds } = require('./rebotics-store-id-cache');
 const { normalizeCategoryId } = require('./prod-row-fields');
+const { isSiExcluded } = require('./si-assignment-scope');
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 const DEFAULT_ACTIONS_PAGE_LIMIT = 200;
@@ -208,7 +209,15 @@ function cacheStoreFromTask(task) {
 }
 
 async function resolveStoreInternalIds(customIds, options = {}) {
-  const wanted = new Set((customIds || []).map((id) => String(id || '').trim()).filter(Boolean));
+  // Defensive: drop SI-excluded custom ids before resolution. These have no
+  // internal id reachable from this login; attempting to resolve them forces a
+  // date-wide deep page-scan that times out and rejects the shared promise,
+  // aborting SI for the whole run. fetchRows already filters them at unit
+  // creation; this guard protects any other/future caller from the same abort.
+  const wanted = new Set((customIds || [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean)
+    .filter((id) => !isSiExcluded(id)));
   const dates = Array.isArray(options.dates) ? [...options.dates].filter(Boolean).sort().reverse() : [];
   const maxTaskPages = options.maxTaskPages || DEFAULT_MAX_TASK_PAGES;
   const timeoutMs = options.reboticsRequestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
@@ -218,7 +227,6 @@ async function resolveStoreInternalIds(customIds, options = {}) {
   const startedAt = Date.now();
   let pagesScanned = 0;
   let lastDate = null;
-
   const out = new Map();
   for (const customId of wanted) {
     if (storeIdCache.has(customId)) out.set(customId, storeIdCache.get(customId));
@@ -241,7 +249,6 @@ async function resolveStoreInternalIds(customIds, options = {}) {
     });
     return out;
   }
-
   for (const date of dates) {
     lastDate = date;
     let offset = 0;
@@ -427,16 +434,33 @@ async function fetchRows({ stores, dates, settings = {}, onProgress, onWarning }
   let completedLookups = 0;
 
   const units = [];
+  const siExcludedCustomIds = new Set();
   for (const date of dates || []) {
     for (const storeNumber of stores || []) {
       const customId = toCustomId(storeNumber);
       if (!customId) continue;
+      if (isSiExcluded(customId)) {
+        // Not assigned to this login in SI. Building a unit would force the
+        // resolver to deep-scan for an internal id that does not exist for us,
+        // time out, and abort the entire SI phase for the whole run. Skip the
+        // unit entirely; the store's PROD rows are still labeled si_excluded
+        // at compare stage, and skipping here keeps coverageComplete honest
+        // (an excluded store is not a coverage gap).
+        siExcludedCustomIds.add(customId);
+        continue;
+      }
       units.push({
         storeNumber: String(parseInt(String(storeNumber), 10)),
         customId,
         date,
       });
     }
+  }
+  if (siExcludedCustomIds.size) {
+    logSi('info', 'si_excluded_skipped', {
+      customIds: [...siExcludedCustomIds],
+      count: siExcludedCustomIds.size,
+    });
   }
   const uniqueCustomIds = [...new Set(units.map((unit) => unit.customId))];
   const storeIdsPromise = resolveStoreInternalIds(uniqueCustomIds, {
