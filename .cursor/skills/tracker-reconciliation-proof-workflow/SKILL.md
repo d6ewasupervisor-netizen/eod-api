@@ -173,3 +173,13 @@ As of Step 1 completion on `tracker-reconciliation`:
 - Live proof passed after refreshing `.cookie`: `PASS=6`, `FAIL=0`.
 
 Next likely step: add `.gitattributes` for fixture byte stability, then extract PROD proof parsing into `src/` with its own golden before wiring the real ingest reconciliation path.
+
+## Operational batch reconcile (D6/D8 copies)
+
+For live District 6/8 tracker copy runs (not hermetic proof work), use skill **`d6-d8-tracker-reconcile`** and:
+
+- `scripts/d6-d8-tracking-reconcile.js` — copy trackers, cross-ref PROD/SI, optional remediation, write copies
+- `scripts/d6-d8-tracking-finish-writes.js` — resume K/L writes from cache + closeout reports
+- `scripts/reconcile-d1-d8-prod-to-si.js --discrepancies` — local PROD→SI closeout without Railway DB snapshot
+
+Do not conflate proof/fixture commits with operational tracker copy updates. Operational runs never modify live OneDrive tracker files.
