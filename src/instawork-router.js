@@ -1,7 +1,7 @@
 /**
  * InstaWork routes for eod-api — same JSON contract as flow-automation
  * /instawork/save-image. Delivery defaults: Resend email
- * (instawork@retail-odyssey.com → Gmail poller → OneDrive). Optional: Graph, local disk.
+ * (info@retail-odyssey.com → Gmail poller → OneDrive). Optional: Graph, local disk.
  */
 
 const express = require('express');
