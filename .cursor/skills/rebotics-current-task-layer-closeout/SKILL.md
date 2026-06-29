@@ -122,11 +122,40 @@ node scripts/process-backlog-corrections.js --store {fm} --date {today} --task {
 Clears idle actions:
 
 - `ACTION_IDENTIFY` → `STATE_REJECTED`, `Image not Ideal`
-- `ACTION_ADD` → `STATE_ACCEPTED`, `On Shelf - UPC Confirmed`
+- `ACTION_ADD` → `STATE_ACCEPTED`, `On Shelf - UPC Confirmed` **or** (when user says OOS / not required to restock) `STATE_REJECTED`, `Restocking Not Required`, `status: "missing"`
 - `ACTION_REMOVE` → `STATE_ACCEPTED`, `Removed Item`
 - `ACTION_MOVE` → `STATE_ACCEPTED`, `Moved Item`
 
 Real SAS photos on recycled/wrong bays generate **move/remove** idle actions — `process-backlog-corrections.js` handles these; do not skip corrections after SAS upload.
+
+### OOS / missing ADD — restocking not required
+
+When the user asks to mark out-of-stock items as **not required to be restocked**, reject idle `ACTION_ADD` (`status === "missing"`) instead of accepting on-shelf:
+
+```json
+{
+  "action": "ACTION_ADD",
+  "group_id": "7 - 1",
+  "id": 699624100,
+  "plu": "041260014758",
+  "reason": "Restocking Not Required",
+  "source_id": 152296974,
+  "state": "STATE_REJECTED",
+  "status": "missing"
+}
+```
+
+`Restocking Not Required` comes from settings `action_report_exception_reasons.restock`. Use the same `acceptGroupId()` shelf-position rule as on-shelf confirms.
+
+`process-backlog-corrections.js` always accepts ADD as on-shelf — for OOS-not-required sets, PATCH ADD rows manually or use a one-off script before close.
+
+### High-volume wandering moves — close when DONE
+
+On dense NII UPDATE sets (example: store **390** P06W2 dbkey **`9241258`** category **190**, task `39784230`), `ACTION_MOVE` PATCHes may return HTTP 200 with `[]` while rows stay `STATE_IDLE`. Identify/add/remove can still clear.
+
+**Deliverable when the user accepts DONE:** survey `0` → `PUT completed` → verify `status.id === "completed"` and `scan_status === "DONE"`. Residual `actions_count.move` or idle wandering rows in scan detail do not block that outcome — record them in the summary instead of endless re-upload loops.
+
+**Verify PATCH applied:** re-`GET …/processing/actions/{scanId}/?show_actions=below` and check row `state`/`reason`; do not trust empty PATCH bodies alone.
 
 ### pre_photo_required with done section reports
 
