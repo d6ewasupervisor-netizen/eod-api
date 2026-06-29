@@ -1,0 +1,94 @@
+---
+description: Authoritative rule bible for ALL Kompass weekly signoff generation (signoff_builder). Routing, eligibility, district/supervisor rules, test-set carryover, formatting, and delivery. Read before building, routing, or modifying any signoff sheet. Mirror of flow-automation/.cursor/rules/signoff-rule-bible.mdc.
+globs: scripts/*signoff*,scripts/*Signoff*,**/*signoff*,**/*Signoff*,**/*SIGNOFF*
+alwaysApply: false
+---
+
+# Signoff Rule Bible (authoritative)
+
+The single source of truth for every Kompass signoff build. If any other doc,
+skill, or memory conflicts with this file, **this file wins**. The builder lives in
+the `flow-automation` repo at `signoff_builder/signoff-builder` (config `config.yaml`,
+design `docs/SPEC.md`); this repo holds the per-period run scripts under `scripts/`.
+Keep this file in sync with `flow-automation/.cursor/rules/signoff-rule-bible.mdc`.
+
+## Eligibility — what is even a signoff candidate
+
+A tracker row is eligible for cross-reference checks AND for signoff sheets only when:
+
+- the `complete` column is **blank**, OR
+- the `complete` column says **`No`** AND the `comment` column is **empty**.
+
+Everything else is decided and routed **OFF** (never team, never REVIEW):
+
+- `complete = No` **with a comment** → a human already resolved it → OFF.
+- `complete = Yes` → trusted complete → OFF.
+
+## Routing
+
+- **Week is not a team gate.** Eligible rows incomplete in both PROD and SI go to
+  the team signoff regardless of fiscal week.
+- Cross-reference status routes eligible rows into supervisor-action buckets:
+  `Complete in PROD`, `Complete in SI`, `Mark Done on Tracker` (complete in both),
+  `Vendor - On Manifest`.
+- Tracker/system contradictions and lossless-backstop rows go to the validation
+  REVIEW list — never silently dropped.
+
+## District supervisor routing — D6 ONLY
+
+- **Only District 6 gets dedicated supervisor sheets/packages.** Config key:
+  `supervisor_routing_districts: [6]`.
+- **Every other district (D1, D8, D9, …) folds supervisor-action rows** (grocery/gm,
+  blitz, vendor/manifest, confirm in SI/PROD) **into its own regular team signoff**.
+  No separate supervisor package for non-D6 districts.
+- D6 supervisor sheets use the same new 5-master template as team sheets.
+
+## Test-set stores — D6 286 & 163
+
+- Config key: `test_set_keep_on_signoff_stores: ["163", "286"]`.
+- For these stores, any set **complete in BOTH PROD and SI** must **stay on the team
+  signoff** (its completion flags are cleared) instead of routing to `Mark Done on
+  Tracker` / a Complete-in-both confirm sheet. Test sets physically carry ~2 weeks
+  but must be signed off **every week**.
+- Only the both-complete case is overridden; PROD-only / SI-only still route normally.
+
+## Formatting / template fidelity
+
+- Use the **5-master template**. Copy **all** formatting — borders, merged cells,
+  exact row heights, fills — when resizing/populating data bands.
+- **Signature panel borders:** horizontal separators between rows + the exterior box
+  outline ONLY. **No interior vertical borders** splitting the label/value columns.
+  Implemented by `clear_interior_verticals` (styles.py) /
+  `_clear_signature_panel_verticals` (builder.py); never reintroduce them.
+- Signature blocks are **dynamic** — lines follow the active departments.
+
+## Output & delivery
+
+- Dump-bin drop is tied to `--export-pdf`, **independent of `--email`**. For manual
+  emailing, omit `--email`; team PDFs still land in the weekly Dump Bin.
+- Team folders `.../2026 Dump Bin/Kompass/Period ## .../P##W# .../Signoffs/District N/`
+  contain **team PDFs only** — no `.xlsx`/`.json`/`.csv`/temp and no
+  `P##W#_Supervisor_D#_...pdf` packages.
+- **File output versioning:** never overwrite or crash on a locked file. Bump to
+  `... version 2.pdf` (see `file-output-versioning` rule / `src/lib/file-utils.js`).
+
+## Store-number matching
+
+- Match store numbers as **whole numbers** after normalizing leading zeros. `28` must
+  not match `281`/`128`. Never trust upstream substring `store_number=` filters.
+  (See `sas-exact-store-number` rule.)
+
+## Cross-reference refresh
+
+- Live in-process refresh can deadlock (python → node → morning-auth) when the SAS
+  session needs re-auth. For reliable batch runs: refresh out-of-band
+  (`node scripts/refresh_signoff_crossrefs.mjs`), then set
+  `cross_reference.auto_refresh = false` and point `paths.prod_completion_dir` /
+  `paths.si_completion_dir` at `C:/SignoffBuilder/cross-reference-cache/{prod,si}`.
+  The `scripts/p06w2-signoff-*.py` runners in this repo follow that pattern.
+
+## Related skills
+
+- `kompass-full-scope-signoff-build` — full-scope / whole-district / targeted re-run.
+- `kompass-one-off-signoff-email` — single-store ad hoc signoff + Resend.
+- `sas-fill-signoff-pdfs-from-prod` — mark already-built PDFs from PROD completion.
