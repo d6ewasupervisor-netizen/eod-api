@@ -86,7 +86,28 @@ POST /api/v1/team-scheduling/shifts/
 GET  /api/v1/field-app/visits/{visitId}/shift-complete/
 ```
 
-Some Chrome HAR exports omit request bodies for these POST/PATCH calls. If body data is missing, inspect the current frontend bundle or checked-in helper before mutating. Do not infer from response shape alone.
+Some Chrome HAR exports omit request bodies for these POST/PATCH calls. If body data is missing, use `scripts/sas-visit-create.js`, `OPTIONS /team-scheduling/visits/`, or the checked-in helper before mutating. Do not infer from response shape alone.
+
+## Copying A Kompass Roster To Another Date (Same Project)
+
+When the user asks to duplicate today's team onto tomorrow (same store, same lead, same Kompass ISE project):
+
+1. Resolve the active cycle for the destination date (match period/week label such as `P06W1` in cycle name when given).
+2. Find the **source** visit: exact store + source date + project. Use `filterVisitsByStore` after listing cycle visits.
+3. Check the **destination** date for an existing visit at that store. Reuse it when present; do not create duplicates.
+4. Create the destination visit when missing (see **Creating A Visit**), then copy active source shifts with `POST /team-scheduling/shifts/`.
+5. Default destination start to **source start + 3 minutes** when the user says "a few minutes later" or when POST returns `Team already have scheduled Visit at this time!`.
+
+Repeatable script (dry-run first):
+
+```bash
+node ~/.cursor/skills/sas-prod-shift-management-har/scripts/copy-roster-to-date.js \
+  --store 462 --source-date 2026-06-25 --dest-date 2026-06-26 --project 1 --cycle-name P6W1 --dry-run
+```
+
+Omit `--dry-run` only after explicit user approval. Defaults: source date = today, dest date = tomorrow, project = `1`, start offset = 3 minutes.
+
+**Terminated employees:** a person may remain on an in-progress source visit but fail on the new visit with `Active Employee does not exists`. Check `shift.employee.termination_date` on the source roster; report skips — do not substitute unless the user names a replacement.
 
 ## Copying A Kompass Roster To A Blitz Shift
 
@@ -109,14 +130,45 @@ Use only active shifts. Copy the employee IDs from the source roster unless the 
 
 ## Creating A Visit
 
-Resolve these IDs before creating a visit:
+Resolve these from an existing visit on the same project/store or from `project-stores-autocomplete` + cycle detail:
 
-- `cycle`: destination cycle ID.
-- `store`: destination project-store ID from `project-stores-autocomplete` or an existing visit response, not the plain store number.
-- `team`: source or requested team ID.
-- `scheduled_date`: requested date in `YYYY-MM-DD`.
-- `shift_start_time`: SAS display time such as `05:03 AM`.
-- `scheduled_end_time` or `shift_end_time`: preserve source end time unless the user provides a new time.
+- `cycle`: destination cycle ID (integer).
+- `store`: `{ "id": projectStoreId }` — **not** a bare integer (`store: 99` → 500 `'int' object has no attribute 'get'`).
+- `team`: **full team object** from source visit GET (`{ id, name, teammates }`) — **not** bare team id (`team: 1570021` → same 500).
+- `scheduled_date`, `due_by`: requested date `YYYY-MM-DD` (both required).
+- `visit_id`: required composite string for new visits: `teamId + accountStoreId + projectId + cycleId` (no DB visit id prefix). Use `buildNewVisitId()` in `scripts/sas-visit-create.js`.
+- `shift_start_time`, `shift_end_time`: display format `%I:%M %p` (e.g. `05:03 AM`, `01:30 PM`).
+- `scheduled_end_time`: 24-hour `HH:MM:SS` (e.g. `13:30:00`).
+- `estimated_shift_hours`: decimal string such as `8.00`.
+- `current_status`: `active`.
+
+Confirmed POST body (2026-06-25, store 462 → next day):
+
+```json
+{
+  "cycle": 242295,
+  "store": { "id": 99 },
+  "team": { "id": 1570021, "name": "Kompass 1H", "teammates": [] },
+  "scheduled_date": "2026-06-26",
+  "due_by": "2026-06-26",
+  "visit_id": "15700211591242295",
+  "shift_start_time": "05:03 AM",
+  "shift_end_time": "01:30 PM",
+  "scheduled_end_time": "13:30:00",
+  "estimated_shift_hours": "8.00",
+  "current_status": "active"
+}
+```
+
+Build bodies with:
+
+```js
+const { buildVisitCreateBody, teamSchedulingReferer } = require('./scripts/sas-visit-create');
+const body = buildVisitCreateBody(sourceVisit, destDate, { startOffsetMinutes: 3 });
+// POST with Referer: teamSchedulingReferer(cycleId)
+```
+
+If creating the visit returns success, immediately fetch it by ID and confirm project, cycle, store number, date, team, and times before adding people.
 
 The HAR-confirmed Blitz result for store 391 on 2026-06-15 returned:
 
@@ -134,8 +186,6 @@ The HAR-confirmed Blitz result for store 391 on 2026-06-15 returned:
   "shift_end_time": "03:00 PM"
 }
 ```
-
-If creating the visit returns success, immediately fetch it by ID and confirm project, cycle, store number, date, team, and times before adding people.
 
 ## Adding A Person
 
@@ -248,4 +298,13 @@ Filter `visit_lead` for old vs new names; expect zero old-lead rows when complet
 
 Report the visit id, project id, store number, employee names, `shift_id`s, lead flags, and current statuses.
 
-For copied rosters, also report the source visit id and destination visit id, plus any source employees skipped because they were inactive, duplicates, missing from employee search, or explicitly excluded by the user.
+For copied rosters, also report the source visit id and destination visit id, plus any source employees skipped because they were inactive, terminated (`termination_date` set), duplicates, missing from employee search, or explicitly excluded by the user.
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/copy-roster-to-date.js` | Duplicate full roster to another date (same project/store/team) |
+| `scripts/sas-visit-create.js` | `buildVisitCreateBody`, `buildNewVisitId`, start-time offset helper |
+| `scripts/reassign-lead-by-date.js` | Swap visit lead across Kompass projects for a date |
+| `scripts/sas-store-match.js` | Exact store-number filtering (mandatory) |

@@ -2,16 +2,17 @@
 'use strict';
 
 /**
- * D6/D8 tracker reconciliation — copies only, never live OneDrive trackers.
+ * District-scoped tracker reconciliation — copies only, never live OneDrive trackers.
  *
- * 1) Copy ISE + Blitz trackers to Downloads/tracking_new/
- * 2) Scan D6/D8 eligible rows (K blank/No, L blank) through P06W1
- * 3) Dynamic period start = oldest eligible period in D6/D8
+ * 1) Copy ISE + Blitz trackers to --out-dir
+ * 2) Scan eligible rows (K blank/No, L blank) through --period-end
+ * 3) Dynamic period start = oldest eligible period in scope
  * 4) Cross-reference live PROD + SI; remediate one-sided rows
  * 5) Write K/L to copies only
  *
  * Usage:
  *   node scripts/d6-d8-tracking-reconcile.js
+ *   node scripts/d6-d8-tracking-reconcile.js --districts "1" --out-dir "C:/Users/tgaut/Downloads/p06w1_district1_tracking" --label D1
  *   node scripts/d6-d8-tracking-reconcile.js --skip-prod-to-si --skip-si-to-prod
  */
 
@@ -24,7 +25,7 @@ const sasBridge = require('../src/sas-bridge');
 const reboticsBridge = require('../src/rebotics-bridge');
 const { writeFileVersioned } = require('../src/lib/file-utils');
 const { loadSasSession } = require('../../kompass-netcap/lib/sas-session');
-const { storesForDistricts, DISTRICT_STORES } = require('../src/lib/trackers/metadata');
+const { storesForDistricts, DISTRICT_STORES, normalizeDistricts } = require('../src/lib/trackers/metadata');
 const { periodWeekToRange } = require('../src/lib/trackers/snapshot-ingest');
 const sasReports = require('../src/lib/trackers/sas-reports');
 const reboticsReports = require('../src/lib/trackers/rebotics-reports');
@@ -37,23 +38,68 @@ const { workbookForKind } = require('../src/lib/trackers/tracker-workbooks');
 
 const LIVE_ISE = "C:/Users/tgaut/OneDrive - Advantage Solutions/Auston Nix's files - Trackers/SUPER Tracker ISE V1.3.xlsm";
 const LIVE_BLITZ = "C:/Users/tgaut/OneDrive - Advantage Solutions/Auston Nix's files - Trackers/SUPER Tracker Blitz V1.3.xlsx";
-const OUT_DIR = 'C:/Users/tgaut/Downloads/tracking_new';
-const DISTRICTS = [6, 8];
-const PERIOD_END = 'P06W1';
 const REBOTICS_ROOT = 'C:/Users/tgaut/rebotics-carry-forward';
 const BEFORE_PHOTO = 'C:/Users/tgaut/Downloads/p06w1_signoff_verify/samples/701-00661_cat4_pog9011792_BAY1_P05W3_task39166297_action23580254.jpg';
 
-const ISE_COPY_NAME = 'SUPER Tracker ISE V1.3 - D6D8 reconcile copy.xlsm';
-const BLITZ_COPY_NAME = 'SUPER Tracker Blitz V1.3 - D6D8 reconcile copy.xlsx';
+let OUT_DIR = 'C:/Users/tgaut/Downloads/tracking_new';
+let DISTRICTS = [6, 8];
+let PERIOD_END = 'P06W1';
+let RUN_LABEL = 'D6D8';
+let CONFIRM_SCOPE = 'D6,D8';
+let ISE_COPY_NAME = 'SUPER Tracker ISE V1.3 - D6D8 reconcile copy.xlsm';
+let BLITZ_COPY_NAME = 'SUPER Tracker Blitz V1.3 - D6D8 reconcile copy.xlsx';
 
 function parseArgs(argv) {
-  const opts = { skipProdToSi: false, skipSiToProd: false, skipSiPhotos: false };
+  const opts = {
+    districts: [6, 8],
+    outDir: 'C:/Users/tgaut/Downloads/tracking_new',
+    periodEnd: 'P06W1',
+    label: 'D6D8',
+    confirmScope: null,
+    skipProdToSi: false,
+    skipSiToProd: false,
+    skipSiPhotos: false,
+    allowBlurry: true,
+  };
   for (let i = 2; i < argv.length; i += 1) {
-    if (argv[i] === '--skip-prod-to-si') opts.skipProdToSi = true;
-    if (argv[i] === '--skip-si-to-prod') opts.skipSiToProd = true;
-    if (argv[i] === '--skip-si-photos') opts.skipSiPhotos = true;
+    const arg = argv[i];
+    if (arg === '--skip-prod-to-si') opts.skipProdToSi = true;
+    else if (arg === '--skip-si-to-prod') opts.skipSiToProd = true;
+    else if (arg === '--skip-si-photos') opts.skipSiPhotos = true;
+    else if (arg === '--allow-blurry') opts.allowBlurry = true;
+    else if (arg === '--no-allow-blurry') opts.allowBlurry = false;
+    else if (arg === '--districts') opts.districts = normalizeDistricts(argv[++i]);
+    else if (arg === '--out-dir') opts.outDir = argv[++i];
+    else if (arg === '--period-end') opts.periodEnd = argv[++i];
+    else if (arg === '--label') opts.label = argv[++i];
+    else if (arg === '--confirm-scope') opts.confirmScope = argv[++i];
+    else if (arg === '-h' || arg === '--help') {
+      console.log([
+        'Usage: node scripts/d6-d8-tracking-reconcile.js [options]',
+        '  --districts "1" or "6,8"     District scope (default 6,8)',
+        '  --out-dir path               Output folder for copies + reports',
+        '  --period-end P06W1           Upper period bound (default P06W1)',
+        '  --label D1                   Prefix for copy names and report files',
+        '  --confirm-scope D1           Required confirm string for prod-to-SI apply',
+        '  --skip-prod-to-si --skip-si-to-prod --skip-si-photos',
+        '  --allow-blurry               Pass --allow-blurry to prod-to-SI closeout (default on)',
+      ].join('\n'));
+      process.exit(0);
+    }
   }
+  if (!opts.districts.length) throw new Error('No valid districts in --districts');
+  opts.confirmScope = opts.confirmScope || opts.districts.map((d) => `D${d}`).join(',');
   return opts;
+}
+
+function applyRuntimeConfig(opts) {
+  OUT_DIR = opts.outDir;
+  DISTRICTS = opts.districts;
+  PERIOD_END = opts.periodEnd;
+  RUN_LABEL = opts.label;
+  CONFIRM_SCOPE = opts.confirmScope;
+  ISE_COPY_NAME = `SUPER Tracker ISE V1.3 - ${RUN_LABEL} reconcile copy.xlsm`;
+  BLITZ_COPY_NAME = `SUPER Tracker Blitz V1.3 - ${RUN_LABEL} reconcile copy.xlsx`;
 }
 
 function periodOrdinal(periodWeek) {
@@ -461,32 +507,20 @@ function spawnNode(args, opts = {}) {
   });
 }
 
-async function runProdToSiCloseout(outDir) {
+async function runProdToSiCloseout(outDir, discrepancyPath, opts) {
   const script = path.resolve(__dirname, 'reconcile-d1-d8-prod-to-si.js');
   const closeoutDir = path.join(outDir, 'prod-to-si-closeout');
   const args = [
     script,
     '--apply-si',
-    '--districts', '6,8',
-    '--confirm-scope', 'D6,D8',
+    '--districts', DISTRICTS.join(','),
+    '--confirm-scope', CONFIRM_SCOPE,
     '--cutoff', PERIOD_END,
     '--out', closeoutDir,
+    '--discrepancies', discrepancyPath,
   ];
-  if (process.env.DATABASE_URL) {
-    return spawnNode(args);
-  }
-  console.log('[prod-to-si] DATABASE_URL not set; trying railway run...');
-  return new Promise((resolve, reject) => {
-    const child = spawn('railway', ['run', 'node', ...args], {
-      cwd: path.resolve(__dirname, '..'),
-      env: process.env,
-      stdio: 'inherit',
-      windowsHide: true,
-      shell: true,
-    });
-    child.on('error', (err) => resolve({ ok: false, code: null, error: err.message }));
-    child.on('close', (code) => resolve({ ok: code === 0, code }));
-  });
+  if (opts.allowBlurry) args.push('--allow-blurry');
+  return spawnNode(args);
 }
 
 async function runSiToProdBackfill(discrepancyPath, outDir) {
@@ -614,6 +648,8 @@ function toCsv(rows, headers) {
 
 async function main() {
   const opts = parseArgs(process.argv);
+  applyRuntimeConfig(opts);
+  console.log(`=== Tracker reconcile: districts=${DISTRICTS.join(',')} label=${RUN_LABEL} out=${OUT_DIR} ===`);
   await fsp.mkdir(OUT_DIR, { recursive: true });
 
   if (!fs.existsSync(LIVE_ISE)) throw new Error(`Live ISE tracker not found: ${LIVE_ISE}`);
@@ -631,7 +667,7 @@ async function main() {
 
   const discovery = await discoverPeriodStart(storeSet);
   if (!discovery.periodStart) {
-    console.log('No eligible D6/D8 incomplete rows found through P06W1. Nothing to reconcile.');
+    console.log(`No eligible district ${DISTRICTS.join(',')} incomplete rows found through ${PERIOD_END}. Nothing to reconcile.`);
     const emptySummary = {
       generatedAt: new Date().toISOString(),
       districts: DISTRICTS,
@@ -639,7 +675,7 @@ async function main() {
       copies: { ise: iseCopy, blitz: blitzCopy },
       discovery,
     };
-    await fsp.writeFile(path.join(OUT_DIR, `D6D8_reconcile_summary_${stamp}.json`), JSON.stringify(emptySummary, null, 2));
+    await fsp.writeFile(path.join(OUT_DIR, `${RUN_LABEL}_reconcile_summary_${stamp}.json`), JSON.stringify(emptySummary, null, 2));
     return;
   }
 
@@ -667,7 +703,7 @@ async function main() {
   await processWorkbook('ise', storeSet, iseCopy, reconcilePeriods, summary);
   await processWorkbook('blitz', storeSet, blitzCopy, reconcilePeriods, summary);
 
-  const writesCachePath = path.join(OUT_DIR, 'D6D8_writes_cache.json');
+  const writesCachePath = path.join(OUT_DIR, `${RUN_LABEL}_writes_cache.json`);
   await fsp.writeFile(writesCachePath, JSON.stringify({
     generatedAt: new Date().toISOString(),
     periodRange: `${discovery.periodStart}..${PERIOD_END}`,
@@ -684,12 +720,13 @@ async function main() {
     ...(summary.workbooks.blitz?.siToProd || []),
   ];
 
-  const discrepancyPath = path.join(OUT_DIR, `D6D8_reconcile_discrepancies_${stamp}.json`);
+  const discrepancyPath = path.join(OUT_DIR, `${RUN_LABEL}_reconcile_discrepancies_${stamp}.json`);
   await fsp.writeFile(discrepancyPath, JSON.stringify(allDiscrepancies, null, 2));
-  console.log(`Discrepancies=${allDiscrepancies.length} -> ${discrepancyPath}`);
+  const prodToSiCount = (summary.workbooks.ise?.prodToSi?.length || 0) + (summary.workbooks.blitz?.prodToSi?.length || 0);
+  console.log(`Discrepancies=${allDiscrepancies.length} prodToSi=${prodToSiCount} siToProd=${allSiToProd.length} -> ${discrepancyPath}`);
 
-  if (!opts.skipProdToSi && (summary.workbooks.ise?.prodToSi?.length || summary.workbooks.blitz?.prodToSi?.length)) {
-    summary.prodToSiCloseout = await runProdToSiCloseout(OUT_DIR);
+  if (!opts.skipProdToSi && prodToSiCount) {
+    summary.prodToSiCloseout = await runProdToSiCloseout(OUT_DIR, discrepancyPath, opts);
   } else {
     summary.prodToSiCloseout = { ok: false, skipped: true };
   }
@@ -705,7 +742,10 @@ async function main() {
     summary.siToProdBackfill = { ok: false, skipped: true };
   }
 
-  const completedKeys = loadCompletedKeysFromProdToSi(OUT_DIR);
+  const completedKeys = new Set([
+    ...loadCompletedKeysFromProdToSi(OUT_DIR),
+    ...loadCompletedKeysFromSiToProd(OUT_DIR),
+  ]);
   const needsLoadedComments = loadNeedsLoadedComments(OUT_DIR);
 
   for (const kind of ['ise', 'blitz']) {
@@ -733,14 +773,14 @@ async function main() {
     }
   }
 
-  const csvPath = path.join(OUT_DIR, `D6D8_reconcile_discrepancies_${stamp}.csv`);
+  const csvPath = path.join(OUT_DIR, `${RUN_LABEL}_reconcile_discrepancies_${stamp}.csv`);
   const csvHeaders = [
     'district', 'workbookKind', 'rowIndex', 'store', 'periodWeek', 'categoryId', 'dbkey',
     'pogName', 'setType', 'proposedComplete', 'proposedComment', 'prodDone', 'siDone', 'siTaskId', 'bucket', 'bucketReason',
   ];
   await fsp.writeFile(csvPath, toCsv(allDiscrepancies, csvHeaders));
 
-  const summaryPath = path.join(OUT_DIR, `D6D8_reconcile_summary_${stamp}.json`);
+  const summaryPath = path.join(OUT_DIR, `${RUN_LABEL}_reconcile_summary_${stamp}.json`);
   summary.paths = { discrepancyPath, csvPath, summaryPath, discrepancyCount: allDiscrepancies.length };
   summary.finalOpenCount = finalDiscrepancies.length;
   await fsp.writeFile(summaryPath, JSON.stringify({
@@ -751,7 +791,7 @@ async function main() {
     },
   }, null, 2));
 
-  console.log('\n=== D6/D8 tracker reconcile complete ===');
+  console.log(`\n=== ${RUN_LABEL} tracker reconcile complete ===`);
   console.log(`Period: ${discovery.periodStart}..${PERIOD_END}`);
   console.log(`Tracker copies: ${iseCopy}`);
   console.log(`                ${blitzCopy}`);

@@ -16,13 +16,13 @@
 			"path": "../OneDrive/Documents/GitHub/the-dump-bin"
 		},
 		{
-			"path": "../district6"
-		},
-		{
 			"path": "../kompass-netcap"
 		},
 		{
 			"path": "../sas-retail-automator"
+		},
+		{
+			"path": "../D6Fuel"
 		}
 	],
 	"settings": {}
