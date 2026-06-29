@@ -3,9 +3,11 @@
 const express = require('express');
 const { addReplyTo } = require('../lib/resend-reply-to');
 
+const { retailOdysseyFrom } = require('../lib/email-from');
+
 const SUBJECT_PREFIX = '[FM391 P05W3 photos]';
 const DEFAULT_RECIPIENT = 'd6ewa.supervisor@gmail.com';
-const DEFAULT_FROM = 'FM391 Photos <fm391photos@retail-odyssey.com>';
+const DEFAULT_FROM = retailOdysseyFrom('FM391 Photos');
 const MAX_EMAIL_ATTACHMENT_BYTES = 18 * 1024 * 1024;
 const MAX_PHOTOS_PER_BATCH = 60;
 const STORE = 'FM391';

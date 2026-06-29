@@ -3,15 +3,16 @@
 /**
  * Shared Resend helpers for Checklanes / set-related emails.
  *
- * From:     checklanes@retail-odyssey.com (override via CHECKLANES_EMAIL_FROM)
+ * From:     info@retail-odyssey.com (override via CHECKLANES_EMAIL_FROM)
  * Reply-To: person who triggered the action
  * CC:       trigger person + ops (tyson) when not already the primary recipient
  */
 
 const { addReplyTo } = require('./resend-reply-to');
 
+const { retailOdysseyFrom } = require('./email-from');
 const CHECKLANES_FROM =
-  process.env.CHECKLANES_EMAIL_FROM || 'Checklanes <checklanes@retail-odyssey.com>';
+  process.env.CHECKLANES_EMAIL_FROM || retailOdysseyFrom('Checklanes');
 
 const CHECKLANES_OPS_EMAIL = (
   process.env.CHECKLANES_OPS_EMAIL ||

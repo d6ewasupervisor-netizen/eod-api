@@ -49,8 +49,9 @@ const OVERRIDE_APPROVER_EMAIL =
   process.env.SHIFT_REQUEST_APPROVER_EMAIL ||
   'tyson.gauthier@retailodyssey.com';
 
+const { retailOdysseyFrom } = require('./lib/email-from');
 const OVERRIDE_FROM_ADDRESS =
-  process.env.OVERRIDE_FROM_ADDRESS || 'shifts@retail-odyssey.com';
+  process.env.OVERRIDE_FROM_ADDRESS || retailOdysseyFrom('Retail Odyssey Shifts');
 
 const SAS_CUSTOMER_ID = 2;
 const SAS_PROGRAM_ID = 1;

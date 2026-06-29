@@ -17,7 +17,8 @@ if (!process.env.RESEND_API_KEY) {
 
 const resend = new Resend(process.env.RESEND_API_KEY || 'unset');
 
-const FROM = process.env.AUTH_EMAIL_FROM || 'The Dump Bin <noreply@retail-odyssey.com>';
+const { retailOdysseyFrom } = require('./email-from');
+const FROM = process.env.AUTH_EMAIL_FROM || retailOdysseyFrom('The Dump Bin');
 
 const MOBILE_LINK_INSTRUCTIONS_TEXT =
   'On a phone, do not tap the link — your mail app may open it in a mini browser where sign-in fails. '

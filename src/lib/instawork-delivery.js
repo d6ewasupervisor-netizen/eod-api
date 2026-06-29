@@ -2,7 +2,7 @@
  * InstaWork sign-out image delivery for cloud EOD API (mobile-safe).
  *
  * Priority (production uses email → Gmail poller → OneDrive):
- *   1. Email via Resend (defaults: instawork@retail-odyssey.com → d6ewa.supervisor@gmail.com)
+ *   1. Email via Resend (defaults: info@retail-odyssey.com → d6ewa.supervisor@gmail.com)
  *   2. SharePoint via Microsoft Graph when INSTAWORK_SP_* + AAD are configured
  *   3. Local disk INSTAWORK_SIGNOUT_ROOT when the path exists (dev only)
  */
@@ -15,6 +15,7 @@ const {
   pickExistingPeriodWeekFolderName,
 } = require('./fiscal-calendar');
 const { addReplyTo } = require('./resend-reply-to');
+const { retailOdysseyFrom } = require('./email-from');
 
 function graphEnv() {
   const tenant =
@@ -160,7 +161,7 @@ function parseEmailRecipients() {
 
 async function deliverViaEmail({ resend, fileName, periodWeekLabel, period, week, storeNumber, workDate, buffer, log, userEmail }) {
   const to = parseEmailRecipients();
-  const from = process.env.INSTAWORK_EMAIL_FROM || 'InstaWork <instawork@retail-odyssey.com>';
+  const from = process.env.INSTAWORK_EMAIL_FROM || retailOdysseyFrom('InstaWork');
   const subject = `[InstaWork sign-out] ${periodWeekLabel} FM${String(storeNumber).replace(/\D/g, '').padStart(3, '0')} ${workDate} ${fileName}`;
   const html = `<p>InstaWork sign-out sheet image attached.</p>
 <p><strong>Period / week:</strong> ${periodWeekLabel}<br/>

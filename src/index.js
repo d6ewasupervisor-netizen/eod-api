@@ -192,8 +192,10 @@ async function removeFromStoreData(storeNumber, { managerName, fredmeyerEmail } 
   return { managerNames, recipientEmails: existing.recipientEmails, fredmeyerEmails };
 }
 
-function buildFromAddress(storeNumber) {
-  return `EOD_FM${String(storeNumber).padStart(3, '0')}@retail-odyssey.com`;
+const { eodReportsFrom, retailOdysseyFrom } = require('./lib/email-from');
+
+function buildFromAddress(_storeNumber) {
+  return eodReportsFrom();
 }
 
 const SIGNOFF_IMAGE_EXTENSIONS = {
@@ -587,7 +589,7 @@ async function start() {
 
     try {
       const authStatusPayload = {
-        from: 'EOD System <noreply@retail-odyssey.com>',
+        from: retailOdysseyFrom('EOD System'),
         to: 'tyson.gauthier@retailodyssey.com',
         subject,
         html,
@@ -762,7 +764,7 @@ async function start() {
 
   // ─── KOMPASS Help Desk ticket email ────────────────────────────────────────
   // Sends a structured issue report to kompass@retailodyssey.com.
-  // From address: FM###_C###@retail-odyssey.com
+  // From address: info@retail-odyssey.com (see lib/email-from.js)
   // Reply-To: lead email (Alexandra Wright → personal alias)
   // CC: fixed team + shift lead + submitter (deduped)
   app.post('/send-helpdesk-ticket', storeConfirmation.requireDayConfirm, async (req, res) => {

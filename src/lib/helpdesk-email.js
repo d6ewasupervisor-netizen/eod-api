@@ -4,13 +4,14 @@
  * Helpers for the KOMPASS Help Desk ticket email flow.
  *
  * Sending pattern:
- *   From:     FM035_C1234@retail-odyssey.com
+ *   From:     info@retail-odyssey.com (see lib/email-from.js)
  *   To:       kompass@retailodyssey.com
  *   CC:       shift lead + initiator + fixed Retail Odyssey team
  *   Reply-To: lead email (special-cased for Alexandra Wright)
  */
 
 const { resolveResendReplyTo } = require('./resend-reply-to');
+const { retailOdysseyFrom } = require('./email-from');
 const { query } = require('./db');
 
 const HELPDESK_TO = 'kompass@retailodyssey.com';
@@ -61,9 +62,8 @@ function resolveHelpdeskRouting({ userName, userEmail, shiftLeadEmail, extraCc }
 // don't go to an FM inbox she cannot access.
 const ALEXANDRA_WRIGHT_REPLY_TO = 'a.wrigh1470@gmail.com';
 
-function buildHelpdeskFromAddress(storeNumber, categoryNumber) {
-  const store = String(storeNumber).padStart(3, '0');
-  return `FM${store}_C${categoryNumber}@retail-odyssey.com`;
+function buildHelpdeskFromAddress(_storeNumber, _categoryNumber) {
+  return retailOdysseyFrom('KOMPASS Help Desk');
 }
 
 function resolveHelpdeskReplyTo({ userName, userEmail } = {}) {

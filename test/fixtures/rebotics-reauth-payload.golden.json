@@ -2,7 +2,7 @@
   "transformSource": "pre-extraction",
   "pathThatFailed": "TEST_PATH",
   "payload": {
-    "from": "EOD System <noreply@retail-odyssey.com>",
+    "from": "EOD System <info@retail-odyssey.com>",
     "to": "tyson.gauthier@retailodyssey.com",
     "subject": "KOMPASS REBOTICS AUTH",
     "html": "<p>Auto-triggered by KOMPASS EOD Railway for Rebotics path: <code>TEST_PATH</code></p>\n        <p>Your local Gmail poller should run <code>morning-auth-rebotics.js</code> and push a fresh token.</p>",

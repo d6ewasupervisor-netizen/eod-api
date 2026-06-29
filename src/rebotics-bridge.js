@@ -5,6 +5,7 @@
 const crypto = require('crypto');
 const { requireAuth } = require('./auth-middleware');
 const { sendAuthAlertEmail } = require('./lib/auth-alert-email');
+const { retailOdysseyFrom } = require('./lib/email-from');
 
 const logger = {
   info: (...a) => console.log('[rebotics-bridge]', ...a),
@@ -195,7 +196,7 @@ async function triggerReboticsReauth(pathThatFailed, { force = false } = {}) {
   lastReauthTriggerAt = now;
   try {
     const reauthPayload = {
-      from: 'EOD System <noreply@retail-odyssey.com>',
+      from: retailOdysseyFrom('EOD System'),
       to: REAUTH_EMAIL_TO,
       subject: 'KOMPASS REBOTICS AUTH',
       html: `<p>Auto-triggered by KOMPASS EOD Railway for Rebotics path: <code>${(pathThatFailed || '').replace(/</g, '')}</code></p>

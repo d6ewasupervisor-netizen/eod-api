@@ -2,6 +2,7 @@
 
 const defaultAuthCore = require('./lib/trackers/grafana-auth-core');
 const { sendAuthAlertEmail } = require('./lib/auth-alert-email');
+const { retailOdysseyFrom } = require('./lib/email-from');
 
 const DEFAULT_HEARTBEAT_MS = 5 * 60 * 1000;
 const DEFAULT_COOLDOWN_MS = 10 * 60 * 1000;
@@ -104,7 +105,7 @@ function createGrafanaBridge({
 
   async function sendRecoveryFailureAlert(error) {
     const result = await sendAuthAlertEmail(currentResend, {
-      from: 'EOD System <noreply@retail-odyssey.com>',
+      from: retailOdysseyFrom('EOD System'),
       to: process.env.GRAFANA_REAUTH_NOTIFY_EMAIL
         || process.env.REBOTICS_REAUTH_NOTIFY_EMAIL
         || DEFAULT_ALERT_TO,
