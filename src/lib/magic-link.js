@@ -8,12 +8,34 @@ function hubBase() {
   return (process.env.FRONTEND_BASE_URL || 'https://the-dump-bin.com').replace(/\/+$/, '');
 }
 
+function allowedReturnHosts() {
+  const hosts = new Set();
+  for (const entry of (process.env.MAGIC_LINK_RETURN_HOSTS || '').split(',')) {
+    const h = entry.trim().toLowerCase();
+    if (h) hosts.add(h);
+  }
+  for (const entry of (process.env.ALLOWED_ORIGINS || '').split(',')) {
+    const raw = entry.trim();
+    if (!raw) continue;
+    try {
+      hosts.add(new URL(raw).host.toLowerCase());
+    } catch (_) {
+      /* ignore malformed origin entries */
+    }
+  }
+  return hosts;
+}
+
 function isChecklanesPath(pathname) {
   const path = (pathname || '/').toLowerCase();
   return path === '/checklanes' || path === '/checklanes/' || path.startsWith('/checklanes/');
 }
 
 function isAllowedDestinationUrl(url) {
+  const host = url.host.toLowerCase();
+  if (allowedReturnHosts().has(host)) {
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  }
   if (url.protocol !== 'https:') return false;
   if (url.host === 'checklanes.the-dump-bin.com') return true;
   if (url.host === 'the-dump-bin.com') {
