@@ -16,6 +16,7 @@ const DEFAULT_OVERSEER_EMAILS = [
   'seth.newman@retailodyssey.com',
   'mashabranner@retailodyssey.com',
   'richard.beck@fredmeyer.com',
+  'aiyana.natarisalazar@retailodyssey.com',
 ];
 
 const OVERSEER_WORKDAY_BY_EMAIL = new Map([
