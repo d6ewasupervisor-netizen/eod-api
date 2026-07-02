@@ -16,10 +16,10 @@ const router = express.Router();
 
 const limiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 5,
+  max: 12,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { ok: false, error: 'Too many requests. Try again later.' },
+  message: { ok: false, error: 'Too many sign-in link requests. Wait about an hour, or use the last link we emailed you.' },
 });
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

@@ -308,6 +308,7 @@ async function start() {
     'https://checklanes.the-dump-bin.com',
     'https://eod-api.the-dump-bin.com',
     'https://d6ewasupervisor-netizen.github.io',
+    'https://cpscheduler-production.up.railway.app',
   ];
   const configuredAllowedOrigins = (process.env.ALLOWED_ORIGINS || '')
     .split(',')
