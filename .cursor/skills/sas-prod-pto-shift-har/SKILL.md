@@ -1,9 +1,22 @@
 ---
 name: sas-prod-pto-shift-har
-description: Build and complete Fred Meyer PTO/admin shifts in SAS PROD (sick, holiday, vacation, bereavement, jury duty). Use when the user asks to create a PTO shift, sick day, vacation day, holiday admin shift, or non-billable store 999 shift for an employee and run it through Field Data Management to completion.
+description: Build and complete Fred Meyer PTO/admin shifts in SAS PROD (sick, holiday, vacation, bereavement, jury duty). Use when the user asks to create a single-employee PTO shift, sick day, vacation day, or non-billable store 999 shift for one employee and run it through Field Data Management to completion. For multi-person admin Holiday rosters (team Holiday, project 147), use sas-prod-shift-management-har instead.
 ---
 
 # SAS Prod PTO / Admin Shift (HAR)
+
+## PTO vs Admin Holiday (pick the right skill)
+
+| Scenario | Team | Skill |
+|----------|------|-------|
+| **Single employee** sick / vacation / bereavement / jury duty at store 999 | `989886` **PTO** | **This skill** — then Field Data start/complete |
+| **Multi-person roster** admin Holiday shift at store 999 (D1/D8 + named lead, mileage off) | `1081083` **Holiday** | **`sas-prod-shift-management-har`** → **Admin Holiday Shift (Project 147)** |
+
+Both use project `147` and store `999`. Do not use the PTO team or Field Data completion flow for a 14-person Holiday roster build.
+
+## Kompass in-progress roster (shift-completion)
+
+For **multi-employee PTO on an active in-progress visit** (Field Data Management → shift-completion roster, `.supervisorPunchBtn` EDIT buttons), use skill **`sas-shift-completion-pto-punch`** instead of this document. That flow is DOM-driven per employee index; this document covers **store 999 admin shift creation** and single-employee API PATCH shapes.
 
 ## Safety
 
@@ -73,21 +86,26 @@ GET /api/v1/projects/project-stores-autocomplete/?limit=1000&project=147
 POST /api/v1/team-scheduling/visits/
 ```
 
-Inferred body (confirmed by HAR response `26944919`):
+Inferred body (confirmed by HAR response `26944919`; visit POST fields corrected 2026-07-04 — bare `store`/`team` integers cause 500; missing `broker_company_id` causes `broker company id None`):
 
 ```json
 {
   "cycle": 242543,
-  "store": 3289133,
-  "team": 989886,
+  "store": { "id": 3289133 },
+  "team": { "id": 989886, "name": "PTO", "team_label": "Fred Meyer" },
   "scheduled_date": "2026-06-17",
+  "due_by": "2026-06-17",
   "shift_start_time": "07:00 AM",
   "shift_end_time": "03:00 PM",
   "scheduled_end_time": "15:00:00",
   "estimated_shift_hours": "8.00",
-  "current_status": "active"
+  "current_status": "active",
+  "timezone_store": "PDT",
+  "broker_company_id": "Fred Meyer"
 }
 ```
+
+Use `buildAdminHolidayVisitBody()` in `sas-prod-shift-management-har/scripts/sas-visit-create.js` with `team: { id: 989886, name: "PTO", team_label: "Fred Meyer" }` or the PTO script helpers. See `sas-prod-shift-management-har` **Creating A Visit** for the `broker_company_id` trap.
 
 If a visit already exists for store 999 + date + employee, do not duplicate — reuse or stop and report.
 

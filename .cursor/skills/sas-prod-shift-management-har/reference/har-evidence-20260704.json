@@ -1,0 +1,59 @@
+{
+  "sourceHar": "C:/Users/tgaut/Downloads/sas-har-20260704-132142.json",
+  "recordedAt": "2026-07-04T20:22:40Z",
+  "scenario": "Admin Holiday team visit for Fred Meyer InHouse NonBillable Admin (project 147, store 999)",
+  "project": { "id": 147, "name": "Fred Meyer InHouse NonBillable Admin", "programId": 92 },
+  "cycle": { "id": 243749, "name": "2026 Non-Billable Admin P6" },
+  "store": { "number": 999, "projectStoreId": 3289133, "accountStoreId": 246 },
+  "team": { "id": 1081083, "name": "Holiday", "teamLabel": "Fred Meyer" },
+  "visit": {
+    "id": 27019920,
+    "scheduledDate": "2026-07-04",
+    "shiftStartTime": "09:00 AM",
+    "shiftEndTime": "05:00 PM",
+    "scheduledEndTime": "17:00:00",
+    "estimatedShiftHours": "8.00"
+  },
+  "apiSequence": [
+    "GET /api/v1/programs/teams/?fields=id,name,team_label&program=92&project_id=147",
+    "GET /api/v1/projects/project-stores-autocomplete/?limit=1000&project=147",
+    "POST /api/v1/team-scheduling/visits/",
+    "POST /api/v1/team-scheduling/shifts/ (per roster member)"
+  ],
+  "visitPostBody": {
+    "cycle": 243749,
+    "store": { "id": 3289133 },
+    "team": { "id": 1081083, "name": "Holiday", "team_label": "Fred Meyer" },
+    "scheduled_date": "2026-07-04",
+    "due_by": "2026-07-04",
+    "shift_start_time": "09:00 AM",
+    "shift_end_time": "05:00 PM",
+    "scheduled_end_time": "17:00:00",
+    "estimated_shift_hours": "8.00",
+    "current_status": "active",
+    "timezone_store": "PDT",
+    "broker_company_id": "Fred Meyer"
+  },
+  "shiftPostBody": {
+    "home_to_store": false,
+    "store_to_store": false,
+    "store_to_home": false,
+    "calculate_mileage": false,
+    "visit": "<visitId>",
+    "employee": "<employeeId>",
+    "cycle": 243749,
+    "shift_start_time": "09:00 AM",
+    "shift_end_time": "05:00 PM",
+    "current_status": "active",
+    "rate_type": {},
+    "device_reimbursement": false,
+    "is_lead": "true|false"
+  },
+  "notes": [
+    "HAR recorder did not capture POST request body (empty postData). Body reconstructed from Angular AddNewTeamSchedulingModalController in bundled JS and confirmed live API 2026-07-04.",
+    "broker_company_id is the customer account NAME (Fred Meyer), not broker_company integer 2. Sending broker_company: 2 still fails with 'No account found for broker company id None'.",
+    "Kompass ISE (project 1) visits do not require broker_company_id. Project 147 / program 92 admin visits do.",
+    "Do not attach roster to an unrelated in-progress visit — create a dedicated visit shell first.",
+    "PTO single-employee flow (team 989886) is documented in sas-prod-pto-shift-har; multi-person Holiday roster uses this skill."
+  ]
+}
