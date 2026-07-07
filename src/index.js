@@ -373,6 +373,7 @@ async function start() {
     '/trackers/admin/',
     '/fm391-p05w3',
     '/fm391-p05w3/',
+    '/health',
   ];
   const PUBLIC_PREFIXES = [
     '/api/shift-request/',
@@ -492,6 +493,14 @@ async function start() {
   await extensionBridge.init(app, pool);
 
   app.get('/api/me', requireAuth, identityHandler);
+
+  app.get('/health', (_req, res) => {
+    res.json({
+      ok: true,
+      service: 'eod-api',
+      helpdeskEmailFormat: 2,
+    });
+  });
 
   // Initialize shift management endpoints
   await shiftManagement.initShiftRequestsTable(pool);
@@ -1009,8 +1018,14 @@ async function start() {
         logger.error({ error, storeNumber, issueTypeId }, 'Resend error sending EOD helpdesk report');
         return res.status(502).json({ success: false, error: error.message ?? String(error) });
       }
-      logger.info({ id: data?.id, storeNumber, issueTypeId, to: EOD_HELPDESK_TO }, 'EOD helpdesk report sent');
-      return res.json({ success: true, id: data?.id });
+      logger.info({
+        id: data?.id,
+        storeNumber,
+        issueTypeId,
+        subject,
+        to: EOD_HELPDESK_TO,
+      }, 'EOD helpdesk report sent');
+      return res.json({ success: true, id: data?.id, subject, helpdeskEmailFormat: 2 });
     } catch (err) {
       logger.error({ err, storeNumber }, 'Unexpected error sending EOD helpdesk report');
       return res.status(500).json({ success: false, error: err.message });
