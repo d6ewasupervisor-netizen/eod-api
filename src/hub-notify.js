@@ -19,6 +19,7 @@ const {
   resolveShiftLeadEmailForVisit,
 } = require('./lib/helpdesk-email');
 const { addReplyTo } = require('./lib/resend-reply-to');
+const { dispatchTrackedEmail } = require('./lib/resend-outbox');
 
 let _resend = null;
 
@@ -99,7 +100,12 @@ async function sendSectionReopenEmail({
     replyToExplicit: actor.email,
   });
 
-  const { data, error } = await _resend.emails.send(payload);
+  const { data, error } = await dispatchTrackedEmail(_resend, {
+    sourceType: 'hub-section-reopen',
+    sourceRef: visitIdNum,
+    sentByEmail: actor.email,
+    metadata: { visitId: visitIdNum, store: storeLabel, lane, dbkey },
+  }, payload);
   if (error) {
     console.error('[hub-notify] reopen email failed:', error.message || String(error));
     return { sent: false, error: error.message || String(error) };
@@ -230,7 +236,12 @@ async function sendNisVerifiedEmail({
   });
   if (resendAttachments) emailPayload.attachments = resendAttachments;
 
-  const { data, error } = await _resend.emails.send(emailPayload);
+  const { data, error } = await dispatchTrackedEmail(_resend, {
+    sourceType: 'hub-nis-verified',
+    sourceRef: visitIdNum,
+    sentByEmail: verifier.email,
+    metadata: { visitId: visitIdNum, dbkey, subject },
+  }, emailPayload);
   if (error) {
     console.error('[hub-notify] NIS verify email failed:', error.message || String(error));
     return { sent: false, error: error.message || String(error), subject };
@@ -361,7 +372,12 @@ async function sendHelpVerifiedEmail({
   addReplyTo(emailPayload, { explicit: replyTo, userEmail: raiserEmail });
   if (resendAttachments) emailPayload.attachments = resendAttachments;
 
-  const { data, error } = await _resend.emails.send(emailPayload);
+  const { data, error } = await dispatchTrackedEmail(_resend, {
+    sourceType: 'hub-helpdesk-verified',
+    sourceRef: visitIdNum,
+    sentByEmail: verifier.email,
+    metadata: { visitId: visitIdNum, dbkey, issueLabel, subject },
+  }, emailPayload);
   if (error) {
     console.error('[hub-notify] help verify email failed:', error.message || String(error));
     return { sent: false, error: error.message || String(error), subject };
@@ -450,7 +466,12 @@ async function sendProdDispatchReviewEmail({
   });
   if (resendAttachments) emailPayload.attachments = resendAttachments;
 
-  const { data, error } = await _resend.emails.send(emailPayload);
+  const { data, error } = await dispatchTrackedEmail(_resend, {
+    sourceType: 'hub-prod-dispatch',
+    sourceRef: visitIdNum,
+    sentByEmail: signedOffBy?.email,
+    metadata: { visitId: visitIdNum, dbkey: request.dbkey, subject },
+  }, emailPayload);
   if (error) {
     console.error('[hub-notify] PROD dispatch email failed:', error.message || String(error));
     return { sent: false, error: error.message || String(error), subject };

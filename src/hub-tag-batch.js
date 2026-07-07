@@ -16,6 +16,7 @@ const { writeAuditLog, parseVisitId } = require('./hub-auth');
 const { applyTransition } = require('./hub-state');
 const { broadcastVisit } = require('./hub-broadcast');
 const { buildSetRelatedEmailPayload, CHECKLANES_OPS_EMAIL } = require('./lib/checklanes-email');
+const { dispatchTrackedEmail } = require('./lib/resend-outbox');
 const {
   sortTagsByAisle,
   groupTagsByAisle,
@@ -299,15 +300,19 @@ async function deliverTagBatch(visitIdNum, actor, rows, designations, opts = {})
   const aisleSlug = aisleLabel ? `_${aisleLabel.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '')}` : '';
   const filename = `tag-batch_${storeLabel}_${visitIdNum}${aisleSlug}_${stamp}.pdf`;
 
-  const { data, error } = await _resend.emails.send(
-    buildSetRelatedEmailPayload({
+  const emailPayload = buildSetRelatedEmailPayload({
       to,
       subject,
       html,
       actorEmail: actor.email,
       attachments: [{ filename, content: pdfBuffer.toString('base64') }],
-    }),
-  );
+    });
+  const { data, error } = await dispatchTrackedEmail(_resend, {
+    sourceType: 'hub-tag-batch',
+    sourceRef: visitIdNum,
+    sentByEmail: actor.email,
+    metadata: { visitId: visitIdNum, store: storeLabel, count, subject },
+  }, emailPayload);
 
   if (error) {
     console.error('[hub-tag-batch] Resend error:', error.message || String(error));

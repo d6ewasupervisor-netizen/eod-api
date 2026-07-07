@@ -2,6 +2,7 @@
 
 const express = require('express');
 const { addReplyTo } = require('../lib/resend-reply-to');
+const { dispatchTrackedEmail } = require('../lib/resend-outbox');
 
 const { retailOdysseyFrom } = require('../lib/email-from');
 
@@ -150,7 +151,11 @@ function createFm391P05W3PhotosRouter({ resend, logger }) {
       };
       addReplyTo(payload, {});
 
-      const { data, error } = await resend.emails.send(payload);
+      const { data, error } = await dispatchTrackedEmail(resend, {
+        sourceType: 'fm391-p05w3-photos',
+        sourceRef: STORE,
+        metadata: { batchIndex, totalBatches, workDate, subject },
+      }, payload);
       if (error) throw new Error(error.message || String(error));
 
       logger.info(

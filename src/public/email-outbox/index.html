@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Email Outbox</title>
+  <link rel="stylesheet" href="/email-outbox/assets/email-outbox.css?v=20260707-1" />
+  <script src="/auth-gate.js"></script>
+</head>
+<body>
+  <main class="container">
+    <header class="header">
+      <div>
+        <h1>Email Outbox</h1>
+        <p>All outbound Resend emails across tools — delivery status and exact resend.</p>
+      </div>
+      <div class="header-actions">
+        <button type="button" id="syncBtn" class="secondary">Sync from Resend</button>
+        <button type="button" id="refreshBtn" class="secondary">Refresh</button>
+      </div>
+    </header>
+
+    <section class="card filters">
+      <form id="filterForm" class="filter-grid">
+        <label>Search
+          <input id="search" placeholder="subject, recipient, store…" />
+        </label>
+        <label>Status
+          <select id="status">
+            <option value="">Any</option>
+            <option value="sent">Sent</option>
+            <option value="failed">Failed</option>
+            <option value="pending">Pending</option>
+          </select>
+        </label>
+        <label>Delivery
+          <select id="deliveryStatus">
+            <option value="">Any</option>
+            <option value="delivered">Delivered</option>
+            <option value="sent">Sent (in flight)</option>
+            <option value="failed">Failed / bounced</option>
+            <option value="complained">Complained</option>
+          </select>
+        </label>
+        <label>Source system
+          <select id="sourceSystem">
+            <option value="">Any</option>
+          </select>
+        </label>
+        <label>Source type
+          <select id="sourceType">
+            <option value="">Any</option>
+          </select>
+        </label>
+        <div class="filter-actions">
+          <button type="submit">Apply</button>
+          <button type="button" id="clearFilters" class="secondary">Clear</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="layout">
+      <section class="card list-card">
+        <div class="list-meta">
+          <span id="listSummary">Loading…</span>
+          <div class="pager">
+            <button type="button" id="prevPage" class="secondary" disabled>Prev</button>
+            <span id="pageLabel">Page 1</span>
+            <button type="button" id="nextPage" class="secondary" disabled>Next</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Status</th>
+                <th>Delivery</th>
+                <th>Source</th>
+                <th>Subject</th>
+                <th>To</th>
+              </tr>
+            </thead>
+            <tbody id="emailRows">
+              <tr><td colspan="6" class="muted">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card detail-card" id="detailCard">
+        <h2>Details</h2>
+        <p class="muted" id="detailEmpty">Select an email to inspect or resend.</p>
+        <div id="detailBody" hidden>
+          <dl class="detail-grid" id="detailMeta"></dl>
+          <div class="detail-actions">
+            <button type="button" id="resendBtn">Resend exactly</button>
+            <button type="button" id="compactBtn" class="secondary">Compact (free space)</button>
+            <button type="button" id="deleteBtn" class="secondary danger">Delete</button>
+          </div>
+          <h3>Edit before resend</h3>
+          <form id="editForm" class="edit-form">
+            <label>Subject<input id="editSubject" /></label>
+            <label>To (comma-separated)<input id="editTo" /></label>
+            <label>CC (comma-separated)<input id="editCc" /></label>
+            <label>Delivery status
+              <select id="editDelivery">
+                <option value="">— unchanged —</option>
+                <option value="delivered">delivered</option>
+                <option value="sent">sent</option>
+                <option value="failed">failed</option>
+                <option value="complained">complained</option>
+              </select>
+            </label>
+            <button type="submit">Save edits</button>
+          </form>
+          <h3>HTML preview</h3>
+          <iframe id="htmlPreview" title="Email HTML preview" sandbox=""></iframe>
+          <h3>Attachments</h3>
+          <ul id="attachmentList" class="attachment-list"></ul>
+          <p id="detailError" class="error" hidden></p>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="/email-outbox/assets/email-outbox.js?v=20260707-1"></script>
+</body>
+</html>

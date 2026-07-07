@@ -16,6 +16,7 @@ const { getHeaders, sasGet, sasPatch, isSessionAlive } = require('./sas-bridge')
 const { requireRole } = require('./auth-middleware');
 const { looksLikeEmail } = require('./lib/resend-reply-to');
 const { buildSetRelatedEmailPayload } = require('./lib/checklanes-email');
+const { dispatchTrackedEmail } = require('./lib/resend-outbox');
 const { extractPlanogramMeta } = require('./lib/helpdesk-email');
 const { issueReviewToken } = require('./lib/decision-review-jwt');
 const { storesMatch } = require('../lib/sas-store-match');
@@ -109,7 +110,11 @@ async function sendEmail(resend, { to, subject, html, replyToOpts, actorEmail })
     actorEmail: actor,
     replyToExplicit: actor,
   });
-  const { data, error } = await resend.emails.send(payload);
+  const { data, error } = await dispatchTrackedEmail(resend, {
+    sourceType: 'shift-removal-request',
+    sentByEmail: actorEmail,
+    metadata: { to: Array.isArray(to) ? to : [to], subject },
+  }, payload);
   if (error) {
     logger.error('Email send failed:', error);
     throw new Error(error.message || String(error));

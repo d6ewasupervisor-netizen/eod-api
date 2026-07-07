@@ -12,6 +12,7 @@
 
 const { query } = require('./lib/db');
 const { buildSetRelatedEmailPayload } = require('./lib/checklanes-email');
+const { dispatchTrackedEmail } = require('./lib/resend-outbox');
 const {
   markVisitDirty,
   clearVisitDirty,
@@ -292,14 +293,17 @@ async function sendBackup(visitId, reason, { sentBy = 0 } = {}) {
   const jsonContent = Buffer.from(JSON.stringify(backup, null, 2)).toString('base64');
 
   try {
-    const { data, error } = await _resend.emails.send(
-      buildSetRelatedEmailPayload({
+    const emailPayload = buildSetRelatedEmailPayload({
         to,
         subject,
         html,
         attachments: [{ filename, content: jsonContent }],
-      }),
-    );
+      });
+    const { data, error } = await dispatchTrackedEmail(_resend, {
+      sourceType: 'hub-backup',
+      sourceRef: visitIdNum,
+      metadata: { visitId: visitIdNum, store: storeLabel, sequence: backup.sequence, subject },
+    }, emailPayload);
 
     if (error) {
       logger.error(`Resend error for visit ${visitIdNum}:`, error.message || String(error));

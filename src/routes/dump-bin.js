@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const { requireAuth, authenticateRequest } = require('../auth-middleware');
 const r2 = require('../lib/dump-bin-r2');
 const { addReplyTo } = require('../lib/resend-reply-to');
+const { dispatchTrackedEmail } = require('../lib/resend-outbox');
 
 const DUMP_DL_TYP = 'dump_dl';
 
@@ -236,7 +237,12 @@ function createDumpBinRouter({ resend, logger }) {
         attachments,
       };
       addReplyTo(printPayload, { userEmail });
-      const { data, error } = await resend.emails.send(printPayload);
+      const { data, error } = await dispatchTrackedEmail(resend, {
+        sourceType: 'dump-bin-print-at-store',
+        sourceRef: storeNumber,
+        sentByEmail: userEmail,
+        metadata: { storeNumber, fileCount: attachments.length, subject },
+      }, printPayload);
       if (error) {
         log.error('[dump-bin print-at-store] Resend rejected', {
           error,

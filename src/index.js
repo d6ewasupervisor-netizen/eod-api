@@ -58,6 +58,8 @@ const createDecideRouter = require('./routes/decide');
 const createDumpBinRouter = require('./routes/dump-bin');
 const { createFm391P05W3PhotosRouter } = require('./routes/fm391-p05w3-photos');
 const { createTrackersRouter } = require('./routes/trackers');
+const { createEmailOutboxRouter } = require('./routes/email-outbox');
+const { createEmailSender, setEmailSender, purgeEmailsOlderThan, retentionDays } = require('./lib/resend-outbox');
 const hubRoutes = require('./routes/hub-routes');
 const hubStoreRoutes = require('./routes/hub-store-routes');
 const { initHubBackup, startBackupIntervalJob } = require('./hub-backup');
@@ -293,6 +295,9 @@ async function start() {
   }
   logger.info(`Auth mode: ${AUTH_MODE}`);
 
+  const sendEmail = createEmailSender({ resend, pool });
+  setEmailSender(sendEmail);
+
   initHubBackup({ resend });
   initHubTagBatch({ resend });
   initHubNotify({ resend });
@@ -372,6 +377,9 @@ async function start() {
     '/trackers/',
     '/trackers/admin',
     '/trackers/admin/',
+    '/email-outbox',
+    '/email-outbox/',
+    '/auth-gate.js',
     '/fm391-p05w3',
     '/fm391-p05w3/',
     '/health',
@@ -388,6 +396,9 @@ async function start() {
     // Supervisor decide.html → read + POST decision (JWT in query/body).
     '/api/decide',
     '/trackers/assets/',
+    '/email-outbox/assets/',
+    '/api/email-outbox/ingest',
+    '/api/email-outbox/webhook',
     '/fm391-p05w3/assets/',
     '/api/fm391-p05w3/',
   ];
@@ -416,6 +427,7 @@ async function start() {
   app.use('/api/whoami', whoamiRouter);
   app.use('/api/weeks', weeksRouter);
   app.use('/api/trackers', createTrackersRouter({ pool }));
+  app.use('/api/email-outbox', createEmailOutboxRouter({ pool, resend, logger }));
   app.use('/api/hub', hubStoreRoutes);
   app.use('/api/hub', hubRoutes);
   app.use('/api/decide', createDecideRouter({ resend }));
@@ -436,6 +448,20 @@ async function start() {
   });
   app.get(['/trackers/admin', '/trackers/admin/'], (_req, res) => {
     res.sendFile(path.join(trackersDir, 'admin.html'));
+  });
+  const emailOutboxDir = path.join(__dirname, 'public', 'email-outbox');
+  app.use('/email-outbox/assets', express.static(path.join(emailOutboxDir, 'assets'), {
+    fallthrough: false,
+    maxAge: 0,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    },
+  }));
+  app.get(['/email-outbox', '/email-outbox/'], (_req, res) => {
+    res.sendFile(path.join(emailOutboxDir, 'index.html'));
+  });
+  app.get('/auth-gate.js', (_req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'auth-gate.js'));
   });
   const fm391Dir = path.join(__dirname, 'public', 'fm391-p05w3');
   app.use('/fm391-p05w3/assets', express.static(path.join(fm391Dir, 'assets'), { fallthrough: false }));
@@ -502,6 +528,8 @@ async function start() {
       helpdeskEmailFormat: 2,
       helpdeskTo: EOD_HELPDESK_TO,
       helpdeskCc: ['reporter', 'supervisor'],
+      emailOutbox: true,
+      emailOutboxRetentionDays: retentionDays(),
     });
   });
 
@@ -556,6 +584,20 @@ async function start() {
   });
 
   logger.info('2am sync cron scheduled (America/Los_Angeles)');
+
+  cron.schedule('30 3 * * *', async () => {
+    try {
+      const result = await purgeEmailsOlderThan(pool);
+      if (result.deleted > 0) {
+        logger.info(`Email outbox purge: deleted ${result.deleted} row(s) older than ${result.olderThanDays} days`);
+      }
+    } catch (err) {
+      logger.error('Email outbox purge failed:', err.message);
+    }
+  }, {
+    timezone: 'America/Los_Angeles',
+  });
+  logger.info(`Email outbox auto-purge scheduled daily 3:30am PT (retention ${retentionDays()} days)`);
 
   // ─── SAS AUTO-REFRESH CRON ─────────────────────────────────────────────────
   //
@@ -753,7 +795,12 @@ async function start() {
     addReplyTo(emailPayload, { userEmail });
 
     try {
-      const { data, error } = await resend.emails.send(emailPayload);
+      const { data, error } = await sendEmail({
+        sourceType: 'eod',
+        sourceRef: storeNumber,
+        sentByEmail: userEmail,
+        metadata: { storeNumber, checkInManager, checkOutManager },
+      }, emailPayload);
 
       if (error) {
         logger.error({ error, storeNumber }, 'Resend API error sending EOD email');
@@ -917,7 +964,12 @@ async function start() {
     addReplyTo(emailPayload, { explicit: replyTo, userEmail });
 
     try {
-      const { data, error } = await resend.emails.send(emailPayload);
+      const { data, error } = await sendEmail({
+        sourceType: 'helpdesk-ticket',
+        sourceRef: `${storeNumber}-${categoryNumber}`,
+        sentByEmail: userEmail,
+        metadata: { storeNumber, categoryNumber, issueTypeId },
+      }, emailPayload);
       if (error) {
         logger.error({ error, storeNumber, categoryNumber }, 'Resend error sending helpdesk ticket');
         return res.status(502).json({ success: false, error: error.message ?? String(error) });
@@ -1018,7 +1070,12 @@ async function start() {
     addReplyTo(emailPayload, { explicit: replyTo, userEmail });
 
     try {
-      const { data, error } = await resend.emails.send(emailPayload);
+      const { data, error } = await sendEmail({
+        sourceType: 'eod-helpdesk-report',
+        sourceRef: storeNumber,
+        sentByEmail: userEmail,
+        metadata: { storeNumber, issueTypeId, shiftVisitId, subject },
+      }, emailPayload);
       if (error) {
         logger.error({ error, storeNumber, issueTypeId }, 'Resend error sending EOD helpdesk report');
         return res.status(502).json({ success: false, error: error.message ?? String(error) });

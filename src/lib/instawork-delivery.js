@@ -15,6 +15,7 @@ const {
   pickExistingPeriodWeekFolderName,
 } = require('./fiscal-calendar');
 const { addReplyTo } = require('./resend-reply-to');
+const { dispatchTrackedEmail } = require('./resend-outbox');
 const { retailOdysseyFrom } = require('./email-from');
 
 function graphEnv() {
@@ -184,7 +185,12 @@ async function deliverViaEmail({ resend, fileName, periodWeekLabel, period, week
   };
   addReplyTo(payload, { userEmail });
 
-  const { data, error } = await resend.emails.send(payload);
+  const { data, error } = await dispatchTrackedEmail(resend, {
+    sourceType: 'instawork-signout',
+    sourceRef: storeNumber,
+    sentByEmail: userEmail,
+    metadata: { storeNumber, workDate, periodWeekLabel, fileName },
+  }, payload);
 
   if (error) {
     throw new Error(error.message || String(error));

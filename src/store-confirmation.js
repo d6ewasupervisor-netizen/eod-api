@@ -25,6 +25,7 @@
 
 const crypto = require('crypto');
 const { addReplyTo } = require('./lib/resend-reply-to');
+const { dispatchTrackedEmail } = require('./lib/resend-outbox');
 const { issueReviewToken } = require('./lib/decision-review-jwt');
 const { sasGet, isSessionAlive } = require('./sas-bridge');
 
@@ -350,7 +351,11 @@ async function sendEmail(resend, { to, subject, html, userEmail }) {
     html,
   };
   addReplyTo(payload, { userEmail });
-  const { data, error } = await resend.emails.send(payload);
+  const { data, error } = await dispatchTrackedEmail(resend, {
+    sourceType: 'store-override-request',
+    sentByEmail: userEmail,
+    metadata: { to: Array.isArray(to) ? to : [to], subject },
+  }, payload);
   if (error) {
     logger.error('Email send failed:', error);
     throw new Error(error.message || String(error));
