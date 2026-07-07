@@ -920,7 +920,7 @@ async function start() {
 
   // EOD app help desk reports — one email per issue to the configured inbox.
   // From: reports@retail-odyssey.com; Reply-To + CC: submitter (+ optional extras).
-  app.post('/send-eod-helpdesk-report', storeConfirmation.requireDayConfirm, async (req, res) => {
+  app.post('/send-eod-helpdesk-report', async (req, res) => {
     const {
       storeNumber,
       workDate,
