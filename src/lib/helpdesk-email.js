@@ -156,15 +156,35 @@ function buildHelpdeskSubject({ storeNumber, categoryNumber, dbkey, version, iss
  *   "8509659"                       → { dbkey: "8509659", version: null }
  *   null / ""                       → { dbkey: null, version: null }
  */
+function extractFootageFromPlanogram(planogramId) {
+  const s = String(planogramId || '').trim();
+  if (!s) return null;
+  const f = s.match(/_F(\d{3,5})_/);
+  if (f) {
+    const n = parseInt(f[1], 10);
+    return n ? `${n} ft` : null;
+  }
+  const l = s.match(/_L(\d{5})_/);
+  if (l) {
+    const n = parseInt(l[1], 10);
+    if (!n) return null;
+    const ft = n / 100;
+    const txt = Number.isInteger(ft) ? String(ft) : ft.toFixed(2).replace(/\.?0+$/, '');
+    return `${txt} ft`;
+  }
+  return null;
+}
+
 function extractPlanogramMeta(planogramId) {
-  if (!planogramId) return { dbkey: null, version: null };
+  if (!planogramId) return { dbkey: null, version: null, footage: null };
   const s = String(planogramId).trim();
+  const footage = extractFootageFromPlanogram(s);
   // Full POG ID: P##W##_<dbkey>_<version>_...
   const full = s.match(/^P\d+W\d+_(\d+)_([A-Z]\d+)/);
-  if (full) return { dbkey: full[1], version: full[2] };
+  if (full) return { dbkey: full[1], version: full[2], footage };
   // Bare numeric dbkey
-  if (/^\d+$/.test(s)) return { dbkey: s, version: null };
-  return { dbkey: null, version: null };
+  if (/^\d+$/.test(s)) return { dbkey: s, version: null, footage };
+  return { dbkey: null, version: null, footage };
 }
 
 const HELPDESK_DOC_MIME_TYPES = new Set([
@@ -398,6 +418,7 @@ module.exports = {
   resolveShiftLeadEmailForVisit,
   buildHelpdeskSubject,
   extractPlanogramMeta,
+  extractFootageFromPlanogram,
   buildHelpdeskHtml,
   buildHelpdeskAttachments,
   sanitizeHelpdeskFilename,

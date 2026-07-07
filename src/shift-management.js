@@ -423,7 +423,7 @@ function registerRoutes(app, resend, pool) {
           return !isMaint;
         })
         .map(r => {
-          const { dbkey, version } = extractPlanogramMeta(r.planogram_id);
+          const { dbkey, version, footage } = extractPlanogramMeta(r.planogram_id);
           return {
             id: r.id,
             name: r.name || '',
@@ -431,6 +431,7 @@ function registerRoutes(app, resend, pool) {
             planogramId: r.planogram_id || null,
             dbkey,
             version,
+            footage,
             resetType: r.reset_type || null,
           };
         })
