@@ -28,6 +28,16 @@ const {
   MAX_HELPDESK_PHOTOS,
   MAX_HELPDESK_DOCUMENTS,
 } = require('./lib/helpdesk-email');
+const {
+  EOD_HELPDESK_TO,
+  eodHelpdeskFromAddress,
+  buildEodHelpdeskSubject,
+  buildEodHelpdeskGreeting,
+  buildEodHelpdeskAttachments,
+  buildEodHelpdeskHtml,
+  buildEodHelpdeskCc,
+  resolveEodHelpdeskReplyTo,
+} = require('./lib/eod-helpdesk-email');
 
 // New email-link + admin routes (Phase A of the Cloudflare Access removal).
 // These are wired in unconditionally so they exist even while AUTH_MODE is
@@ -904,6 +914,102 @@ async function start() {
       return res.json({ success: true, id: data?.id });
     } catch (err) {
       logger.error({ err, storeNumber }, 'Unexpected error sending helpdesk ticket');
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // EOD app help desk reports — one email per issue to the configured inbox.
+  // From: reports@retail-odyssey.com; Reply-To + CC: submitter (+ optional extras).
+  app.post('/send-eod-helpdesk-report', storeConfirmation.requireDayConfirm, async (req, res) => {
+    const {
+      storeNumber,
+      workDate,
+      shiftLabel,
+      setLabel,
+      categoryNumber,
+      version,
+      issueTypeId,
+      issueTypeLabel,
+      issueDetails,
+      additionalDetails,
+      customIssue,
+      photos,
+      userName,
+      userEmail,
+      extraRecipients,
+      addRetailOdysseyTeam,
+    } = req.body;
+
+    if (!storeNumber || !issueTypeId || !issueTypeLabel) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: storeNumber, issueTypeId, issueTypeLabel',
+      });
+    }
+
+    const photoList = Array.isArray(photos) ? photos : [];
+    if (photoList.length > MAX_HELPDESK_PHOTOS) {
+      return res.status(400).json({
+        success: false,
+        error: `Maximum ${MAX_HELPDESK_PHOTOS} photos per report.`,
+      });
+    }
+
+    const from = eodHelpdeskFromAddress();
+    const subject = buildEodHelpdeskSubject({ storeNumber, categoryNumber, version, workDate });
+    const greeting = buildEodHelpdeskGreeting({
+      storeNumber,
+      issueTypeId,
+      setLabel,
+      issueDetails,
+      customIssue,
+    });
+    const cc = buildEodHelpdeskCc({ userEmail, extraRecipients, addRetailOdysseyTeam });
+    const replyTo = resolveEodHelpdeskReplyTo(userEmail);
+
+    let attachments;
+    try {
+      attachments = buildEodHelpdeskAttachments(photoList);
+      enforceAttachmentBudget(attachments);
+    } catch (attachErr) {
+      const status = attachErr.statusCode || 400;
+      return res.status(status).json({ success: false, error: attachErr.message });
+    }
+
+    const html = buildEodHelpdeskHtml({
+      greeting,
+      storeNumber,
+      workDate,
+      shiftLabel,
+      setLabel,
+      issueTypeLabel,
+      issueDetails,
+      additionalDetails,
+      userName,
+      userEmail,
+      photoCount: photoList.length,
+    });
+
+    const emailPayload = {
+      from,
+      to: [EOD_HELPDESK_TO],
+      cc,
+      subject,
+      html,
+      attachments,
+    };
+    addReplyTo(emailPayload, { explicit: replyTo, userEmail });
+
+    try {
+      const { data, error } = await resend.emails.send(emailPayload);
+      if (error) {
+        logger.error({ error, storeNumber, issueTypeId }, 'Resend error sending EOD helpdesk report');
+        return res.status(502).json({ success: false, error: error.message ?? String(error) });
+      }
+      logger.info({ id: data?.id, storeNumber, issueTypeId, to: EOD_HELPDESK_TO }, 'EOD helpdesk report sent');
+      return res.json({ success: true, id: data?.id });
+    } catch (err) {
+      logger.error({ err, storeNumber }, 'Unexpected error sending EOD helpdesk report');
       return res.status(500).json({ success: false, error: err.message });
     }
   });
