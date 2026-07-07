@@ -76,7 +76,20 @@ function applySession({ cookieHeader, csrfToken, source = 'unknown' }) {
   if (dbPool) startQueueWorker(dbPool);
 
   logger.info(`Session applied (source=${source}). Heartbeat + queue worker (re)started.`);
+  pushDistrict1Session().catch((err) => logger.error(`District 1 push: ${err.message}`));
   return sasSession;
+}
+
+async function pushDistrict1Session() {
+  const url = (process.env.DISTRICT1_RAILWAY_URL || '').replace(/\/+$/, '');
+  const secret = process.env.DISTRICT1_SESSION_PUSH_SECRET;
+  if (!url || !secret || !sasSession.alive) return;
+  await axios.post(
+    `${url}/internal/sas-session`,
+    { cookieHeader: sasSession.cookieHeader, csrfToken: sasSession.csrfToken },
+    { headers: { Authorization: `Bearer ${secret}` }, timeout: 15000, validateStatus: () => true },
+  );
+  logger.info('Session pushed to District 1 Calendar');
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -138,6 +151,18 @@ async function getDirectReports() {
 
 let heartbeatTimer = null;
 
+function formatHeartbeatError(err) {
+  const parts = [];
+  if (err?.message) parts.push(err.message);
+  if (err?.code) parts.push(`code=${err.code}`);
+  const cause = err?.cause;
+  if (cause) {
+    const causeDetail = cause.message || cause.code || String(cause);
+    parts.push(`cause=${causeDetail}`);
+  }
+  return parts.length ? parts.join('; ') : String(err);
+}
+
 function startHeartbeat() {
   if (heartbeatTimer) clearInterval(heartbeatTimer);
 
@@ -156,7 +181,7 @@ function startHeartbeat() {
         sasSession.alive = false;
       }
     } catch (err) {
-      logger.error(`Heartbeat failed: ${err.message}`);
+      logger.error(`Heartbeat failed: ${formatHeartbeatError(err)}`);
       sasSession.alive = false;
     }
   }, HEARTBEAT_INTERVAL_MS);
@@ -1230,6 +1255,23 @@ function registerRoutes(app, pool) {
       alive: sasSession.alive,
       receivedAt: sasSession.receivedAt,
       lastHeartbeat: sasSession.lastHeartbeat,
+    });
+  });
+
+  app.get('/internal/sas-session/export', (req, res) => {
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    const d1Secret = process.env.DISTRICT1_SESSION_PUSH_SECRET || '';
+    if (!token || (token !== AUTH_SECRET && (!d1Secret || token !== d1Secret))) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    }
+    if (!sasSession.alive) {
+      return res.status(503).json({ ok: false, error: 'SAS session not alive' });
+    }
+    return res.json({
+      ok: true,
+      cookieHeader: sasSession.cookieHeader,
+      csrfToken: sasSession.csrfToken,
+      receivedAt: sasSession.receivedAt,
     });
   });
 

@@ -8,6 +8,10 @@ function hubBase() {
   return (process.env.FRONTEND_BASE_URL || 'https://the-dump-bin.com').replace(/\/+$/, '');
 }
 
+function district1HubBase() {
+  return (process.env.DISTRICT1_FRONTEND_URL || 'https://d6ewasupervisor-netizen.github.io/district1').replace(/\/+$/, '');
+}
+
 function allowedReturnHosts() {
   const hosts = new Set();
   for (const entry of (process.env.MAGIC_LINK_RETURN_HOSTS || '').split(',')) {
@@ -43,6 +47,10 @@ function isAllowedDestinationUrl(url) {
     if (path === '/' || path === '/index.html') return true;
     return isChecklanesPath(path);
   }
+  if (url.host.endsWith('.github.io')) {
+    const path = (url.pathname || '/').toLowerCase();
+    return path.startsWith('/district1');
+  }
   return false;
 }
 
@@ -64,6 +72,16 @@ function buildDestinationUrl(token, returnTo) {
 }
 
 function wrapForExternalBrowser(destinationUrl) {
+  try {
+    const dest = new URL(destinationUrl);
+    if (dest.host.endsWith('.github.io') && dest.pathname.toLowerCase().startsWith('/district1')) {
+      const openUrl = new URL('/open-sign-in.html', `${district1HubBase()}/`);
+      openUrl.searchParams.set('to', destinationUrl);
+      return openUrl.toString();
+    }
+  } catch (_) {
+    /* fall through to hub open-sign-in */
+  }
   const openUrl = new URL('/open-sign-in.html', `${hubBase()}/`);
   openUrl.searchParams.set('to', destinationUrl);
   return openUrl.toString();
