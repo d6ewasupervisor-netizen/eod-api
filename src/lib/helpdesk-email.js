@@ -13,6 +13,7 @@
 const { resolveResendReplyTo } = require('./resend-reply-to');
 const { retailOdysseyFrom } = require('./email-from');
 const { query } = require('./db');
+const { loadEmployeeLookup, findEmployeeByHint } = require('./hub-supervisor-resolve');
 
 const HELPDESK_TO = 'kompass@retailodyssey.com';
 const HELPDESK_CC_FIXED = [
@@ -107,6 +108,52 @@ function buildHelpdeskCc(userEmail, extraEmails = []) {
     if (normalized) set.add(normalized);
   }
   return [...set];
+}
+
+async function resolveSupervisorEmailForReporter(userEmail, { shiftVisitId } = {}) {
+  const email = normalizeHelpdeskEmail(userEmail);
+  if (!email) return null;
+
+  const { rows } = await query(
+    `SELECT sup.email AS supervisor_email
+     FROM employees e
+     LEFT JOIN employees sup ON sup.workday_id = e.supervisor_id
+     WHERE LOWER(TRIM(e.email)) = $1
+     LIMIT 1`,
+    [email],
+  );
+  const direct = normalizeHelpdeskEmail(rows[0]?.supervisor_email);
+  if (direct) return direct;
+
+  const visitId = Number(shiftVisitId);
+  if (!Number.isFinite(visitId)) return null;
+
+  const { rows: schedRows } = await query(
+    `SELECT s.supervisor, s.visit_lead
+     FROM schedules s
+     WHERE s.visit_id = $1
+     ORDER BY s.scheduled_date DESC NULLS LAST
+     LIMIT 1`,
+    [visitId],
+  );
+  const sched = schedRows[0];
+  if (!sched) return null;
+
+  const lookup = await loadEmployeeLookup();
+  const fromSupervisor = sched.supervisor
+    ? findEmployeeByHint(sched.supervisor, lookup)?.email || null
+    : null;
+  if (fromSupervisor) return normalizeHelpdeskEmail(fromSupervisor);
+
+  const fromLead = sched.visit_lead
+    ? (() => {
+        const lead = findEmployeeByHint(sched.visit_lead, lookup);
+        if (!lead?.supervisorId) return null;
+        const sup = lookup.byWorkday.get(lead.supervisorId);
+        return sup?.email || null;
+      })()
+    : null;
+  return normalizeHelpdeskEmail(fromLead);
 }
 
 /**
@@ -504,6 +551,7 @@ module.exports = {
   resolveHelpdeskReplyTo,
   buildHelpdeskCc,
   resolveShiftLeadEmailForVisit,
+  resolveSupervisorEmailForReporter,
   buildHelpdeskSubject,
   extractPlanogramMeta,
   extractFootageFromPlanogram,

@@ -234,6 +234,7 @@ function remainderOfWeekWindow(fromIso) {
 module.exports = {
   hubOverseerEmails,
   loadEmployeeLookup,
+  findEmployeeByHint,
   resolveHubOverseerEmail,
   supervisorSortIndex,
   supervisorGroupKey,

@@ -27,6 +27,7 @@ const {
   enforceAttachmentBudget,
   MAX_HELPDESK_PHOTOS,
   MAX_HELPDESK_DOCUMENTS,
+  resolveSupervisorEmailForReporter,
 } = require('./lib/helpdesk-email');
 const {
   EOD_HELPDESK_TO,
@@ -499,6 +500,8 @@ async function start() {
       ok: true,
       service: 'eod-api',
       helpdeskEmailFormat: 2,
+      helpdeskTo: EOD_HELPDESK_TO,
+      helpdeskCc: ['reporter', 'supervisor'],
     });
   });
 
@@ -936,6 +939,7 @@ async function start() {
       workDate,
       shiftLabel,
       setLabel,
+      shiftVisitId,
       categoryNumber,
       categoryName,
       planogramId,
@@ -988,7 +992,8 @@ async function start() {
 
     const from = eodHelpdeskFromAddress();
     const subject = buildEodHelpdeskSubject(reportMeta);
-    const cc = buildEodHelpdeskCc({ userEmail, extraRecipients, addRetailOdysseyTeam });
+    const supervisorEmail = await resolveSupervisorEmailForReporter(userEmail, { shiftVisitId });
+    const cc = buildEodHelpdeskCc({ userEmail, supervisorEmail, extraRecipients, addRetailOdysseyTeam });
     const replyTo = resolveEodHelpdeskReplyTo(userEmail);
 
     let attachments;
@@ -1024,8 +1029,17 @@ async function start() {
         issueTypeId,
         subject,
         to: EOD_HELPDESK_TO,
+        cc,
+        supervisorEmail: supervisorEmail || null,
       }, 'EOD helpdesk report sent');
-      return res.json({ success: true, id: data?.id, subject, helpdeskEmailFormat: 2 });
+      return res.json({
+        success: true,
+        id: data?.id,
+        subject,
+        helpdeskEmailFormat: 2,
+        to: EOD_HELPDESK_TO,
+        cc,
+      });
     } catch (err) {
       logger.error({ err, storeNumber }, 'Unexpected error sending EOD helpdesk report');
       return res.status(500).json({ success: false, error: err.message });

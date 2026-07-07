@@ -41,6 +41,17 @@ test('buildEodHelpdeskSubject includes store, category, version, footage, report
   assert.equal(subject, 'FM657 C812 V866 F004 07/07/2026');
 });
 
+test('buildEodHelpdeskCc always includes reporter and supervisor', () => {
+  const { buildEodHelpdeskCc } = require('../src/lib/eod-helpdesk-email');
+  const cc = buildEodHelpdeskCc({
+    userEmail: 'lead@retailodyssey.com',
+    supervisorEmail: 'supervisor@retailodyssey.com',
+    extraRecipients: [],
+    addRetailOdysseyTeam: false,
+  });
+  assert.deepEqual(cc.sort(), ['lead@retailodyssey.com', 'supervisor@retailodyssey.com'].sort());
+});
+
 test('resolveEodHelpdeskReportMeta builds standardized body', () => {
   const meta = resolveEodHelpdeskReportMeta({
     storeNumber: '657',

@@ -3,7 +3,7 @@
 const { resolveResendReplyTo } = require('./resend-reply-to');
 const { extractPlanogramMeta, mergeHelpdeskSetMeta } = require('./helpdesk-email');
 
-const EOD_HELPDESK_TO = (process.env.EOD_HELPDESK_TO || 'tgauthier2011@gmail.com').trim();
+const EOD_HELPDESK_TO = (process.env.EOD_HELPDESK_TO || 'kompass@retailodyssey.com').trim();
 const EOD_HELPDESK_FROM = (process.env.EOD_HELPDESK_FROM || 'reports@retail-odyssey.com').trim();
 
 const RETAIL_ODYSSEY_TEAM_CC = [
@@ -169,10 +169,12 @@ function normalizeEmail(value) {
   return t || null;
 }
 
-function buildEodHelpdeskCc({ userEmail, extraRecipients, addRetailOdysseyTeam }) {
+function buildEodHelpdeskCc({ userEmail, supervisorEmail, extraRecipients, addRetailOdysseyTeam }) {
   const set = new Set();
   const initiator = normalizeEmail(userEmail);
   if (initiator) set.add(initiator);
+  const supervisor = normalizeEmail(supervisorEmail);
+  if (supervisor && supervisor !== initiator) set.add(supervisor);
   if (Array.isArray(extraRecipients)) {
     for (const addr of extraRecipients) {
       const n = normalizeEmail(addr);
