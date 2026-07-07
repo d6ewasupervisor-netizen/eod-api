@@ -150,41 +150,129 @@ function buildHelpdeskSubject({ storeNumber, categoryNumber, dbkey, version, iss
 }
 
 /**
- * Parse the dbkey and version token from a SAS planogram_id.
- * Examples:
- *   "P04W2_8509659_D701_L00000_..." → { dbkey: "8509659", version: "D701" }
- *   "8509659"                       → { dbkey: "8509659", version: null }
- *   null / ""                       → { dbkey: null, version: null }
+ * Parse SAS planogram_id tokens.
+ * Example: P06W3_8802771_D060_L00000_D03_C812_V866_F004_MX
+ *   → dbkey 8802771, category 812, version V866, footage F004 (display 4).
  */
+function formatFootageDisplayValue(footageToken) {
+  if (!footageToken) return null;
+  const token = String(footageToken).trim();
+  const m = token.match(/^([FDI])(\d+)$/i);
+  if (m) {
+    const n = parseInt(m[2], 10);
+    return n ? String(n) : null;
+  }
+  const digits = token.match(/(\d+)/);
+  if (digits) {
+    const n = parseInt(digits[1], 10);
+    return n ? String(n) : null;
+  }
+  return token;
+}
+
+function formatFootageLabel(footageToken) {
+  const display = formatFootageDisplayValue(footageToken);
+  if (!display || !footageToken) return null;
+  const kind = String(footageToken)[0].toUpperCase();
+  if (kind === 'F') return `${display} ft`;
+  if (kind === 'D') return `${display} doors`;
+  if (kind === 'I') return `${display} in`;
+  return display;
+}
+
+function extractFootageTokenFromPlanogram(planogramId) {
+  const parts = String(planogramId || '').trim().split('_').filter(Boolean);
+  if (parts.length < 2) return null;
+  const storeType = parts[parts.length - 1];
+  if (!/^[A-Z]{2}$/i.test(storeType)) return null;
+  return parts[parts.length - 2] || null;
+}
+
 function extractFootageFromPlanogram(planogramId) {
-  const s = String(planogramId || '').trim();
-  if (!s) return null;
-  const f = s.match(/_F(\d{3,5})_/);
-  if (f) {
-    const n = parseInt(f[1], 10);
-    return n ? `${n} ft` : null;
-  }
-  const l = s.match(/_L(\d{5})_/);
-  if (l) {
-    const n = parseInt(l[1], 10);
-    if (!n) return null;
-    const ft = n / 100;
-    const txt = Number.isInteger(ft) ? String(ft) : ft.toFixed(2).replace(/\.?0+$/, '');
-    return `${txt} ft`;
-  }
-  return null;
+  const token = extractFootageTokenFromPlanogram(planogramId);
+  return formatFootageLabel(token);
+}
+
+function normalizeCategoryNumber(value) {
+  if (value == null || value === '') return null;
+  const n = parseInt(String(value).replace(/\D/g, ''), 10);
+  return Number.isFinite(n) ? String(n) : String(value).trim();
 }
 
 function extractPlanogramMeta(planogramId) {
-  if (!planogramId) return { dbkey: null, version: null, footage: null };
+  const empty = {
+    dbkey: null,
+    categoryNumber: null,
+    version: null,
+    versionToken: null,
+    footageToken: null,
+    footage: null,
+    footageDisplay: null,
+  };
+  if (!planogramId) return empty;
   const s = String(planogramId).trim();
-  const footage = extractFootageFromPlanogram(s);
-  // Full POG ID: P##W##_<dbkey>_<version>_...
-  const full = s.match(/^P\d+W\d+_(\d+)_([A-Z]\d+)/);
-  if (full) return { dbkey: full[1], version: full[2], footage };
-  // Bare numeric dbkey
-  if (/^\d+$/.test(s)) return { dbkey: s, version: null, footage };
-  return { dbkey: null, version: null, footage };
+
+  let dbkey = null;
+  const head = s.match(/^P\d+W\d+_(\d+)_/i);
+  if (head) dbkey = head[1];
+  else if (/^\d+$/.test(s)) dbkey = s;
+
+  const catM = s.match(/_C(\d+)_/i);
+  const categoryNumber = catM ? normalizeCategoryNumber(catM[1]) : null;
+
+  const verM = s.match(/_V([A-Z0-9]+)_/i);
+  const versionToken = verM ? `V${verM[1]}` : null;
+  const version = verM ? verM[1] : null;
+
+  const footageToken = extractFootageTokenFromPlanogram(s);
+  const footageDisplay = formatFootageDisplayValue(footageToken);
+  const footage = formatFootageLabel(footageToken);
+
+  return {
+    dbkey,
+    categoryNumber,
+    version,
+    versionToken,
+    footageToken,
+    footage,
+    footageDisplay,
+  };
+}
+
+function parseCategoryNameFromSetLabel(setLabel) {
+  const raw = String(setLabel || '').trim();
+  if (!raw) return null;
+  const m = raw.match(/^\d+_(.+)$/);
+  return m ? m[1].trim() : raw;
+}
+
+function mergeHelpdeskSetMeta({
+  planogramId,
+  setLabel,
+  categoryNumber,
+  categoryName,
+  version,
+  dbkey,
+  footageToken,
+  parsed = {},
+}) {
+  const fromPog = planogramId ? extractPlanogramMeta(planogramId) : parsed;
+  const mergedCategory = normalizeCategoryNumber(categoryNumber) || fromPog.categoryNumber;
+  const mergedName = (categoryName || '').trim() || parseCategoryNameFromSetLabel(setLabel);
+  const mergedVersion = (version || '').trim().replace(/^V/i, '') || fromPog.version;
+  const versionToken = fromPog.versionToken
+    || (mergedVersion ? `V${mergedVersion}` : null);
+  const mergedFootageToken = footageToken || fromPog.footageToken;
+
+  return {
+    dbkey: (dbkey || '').trim() || fromPog.dbkey,
+    categoryNumber: mergedCategory,
+    categoryName: mergedName || null,
+    version: mergedVersion || null,
+    versionToken,
+    footageToken: mergedFootageToken || null,
+    footageDisplay: formatFootageDisplayValue(mergedFootageToken) || fromPog.footageDisplay,
+  };
 }
 
 const HELPDESK_DOC_MIME_TYPES = new Set([
@@ -419,6 +507,9 @@ module.exports = {
   buildHelpdeskSubject,
   extractPlanogramMeta,
   extractFootageFromPlanogram,
+  extractFootageTokenFromPlanogram,
+  formatFootageDisplayValue,
+  mergeHelpdeskSetMeta,
   buildHelpdeskHtml,
   buildHelpdeskAttachments,
   sanitizeHelpdeskFilename,

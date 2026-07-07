@@ -1,6 +1,7 @@
 'use strict';
 
 const { resolveResendReplyTo } = require('./resend-reply-to');
+const { extractPlanogramMeta, mergeHelpdeskSetMeta } = require('./helpdesk-email');
 
 const EOD_HELPDESK_TO = (process.env.EOD_HELPDESK_TO || 'tgauthier2011@gmail.com').trim();
 const EOD_HELPDESK_FROM = (process.env.EOD_HELPDESK_FROM || 'reports@retail-odyssey.com').trim();
@@ -35,36 +36,65 @@ function formatMmDdYyyy(isoOrUs) {
   return s || '';
 }
 
-function buildEodHelpdeskSubject({ storeNumber, categoryNumber, version, workDate }) {
-  const store = String(storeNumber).replace(/\D/g, '').replace(/^0+(?=\d)/, '').padStart(3, '0');
-  const parts = [`FM${store}`];
-  if (categoryNumber != null && String(categoryNumber).trim() !== '') {
-    parts.push(`C${String(categoryNumber).trim()}`);
-  }
-  if (version != null && String(version).trim() !== '') {
-    parts.push(`V${String(version).trim()}`);
-  }
-  parts.push(formatMmDdYyyy(workDate));
+function todayReportDateIso() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
+}
+
+function formatFmStore(storeNumber) {
+  const store = String(storeNumber || '').replace(/\D/g, '').replace(/^0+(?=\d)/, '').padStart(3, '0');
+  return `FM${store}`;
+}
+
+function buildEodHelpdeskSubject(meta) {
+  const parts = [formatFmStore(meta.storeNumber)];
+  if (meta.categoryNumber) parts.push(`C${meta.categoryNumber}`);
+  if (meta.versionToken) parts.push(meta.versionToken);
+  else if (meta.version) parts.push(`V${meta.version}`);
+  if (meta.footageToken) parts.push(String(meta.footageToken).toUpperCase());
+  parts.push(formatMmDdYyyy(meta.reportDate));
   return parts.join(' ');
 }
 
-function buildEodHelpdeskGreeting({ storeNumber, issueTypeId, setLabel, issueDetails, customIssue }) {
-  const store = String(storeNumber).replace(/\D/g, '').replace(/^0+(?=\d)/, '');
-  const setName = setLabel || customIssue || 'the reported set';
-  const templates = {
-    not_in_store: `Hello, store ${store} is missing the following set: ${setName}.`,
-    missing_fixture: `Hello, store ${store} is missing a fixture needed for set ${setName}.`,
-    reverse_flow: `Hello, the flow of set ${setName} at store ${store} is reversed compared to what is currently in the store.`,
-    incorrect_version: `Hello, store ${store} received the wrong planogram version for set ${setName}.`,
-    incorrect_footage: `Hello, set ${setName} at store ${store} is the wrong footage — the materials we received do not match what is in the store.`,
-    incorrect_planogram: `Hello, store ${store} received an incorrect planogram for set ${setName}.`,
-    obstruction: `Hello, set ${setName} at store ${store} is obstructed by a permanent store feature (pole, case, or similar).`,
-    missing_hardware: `Hello, store ${store} is missing hardware required for set ${setName}.`,
-    custom: `Hello, store ${store} has reported the following issue regarding ${setName}.`,
-  };
-  const base = templates[issueTypeId] || templates.custom;
-  const extra = (issueDetails || '').trim();
-  return extra ? `${base} ${extra}` : base;
+function buildEodHelpdeskBodyLines(meta) {
+  const categoryLine =
+    meta.categoryNumber && meta.categoryName
+      ? `${meta.categoryNumber} - ${meta.categoryName}`
+      : meta.categoryName || meta.categoryNumber || 'N/A';
+
+  const lines = [
+    `Date: ${formatMmDdYyyy(meta.reportDate)}`,
+    `Issue type: ${meta.issueTypeLabel || 'N/A'}`,
+    `Store: ${formatFmStore(meta.storeNumber)}`,
+    `Category: ${categoryLine}`,
+    `Version: ${meta.version || 'N/A'}`,
+    `Footage/Doors: ${meta.footageDisplay || 'N/A'}`,
+    `DBKey: ${meta.dbkey || 'N/A'}`,
+    `Pictures: ${meta.photoCount > 0 ? String(meta.photoCount) : 'N/A'}`,
+  ];
+
+  const details = (meta.issueDetails || '').trim();
+  if (details) lines.push(`Details: ${details}`);
+
+  return lines;
+}
+
+function buildEodHelpdeskPlainText(meta) {
+  const lines = buildEodHelpdeskBodyLines(meta);
+  const signature = [
+    '',
+    'Thank you for your assistance.',
+    '',
+    meta.userName || '',
+    'Retail Odyssey',
+    meta.userEmail || '',
+  ].filter((line, i) => i < 3 || line);
+
+  return [
+    'Hello, I would like to report the issue below:',
+    '',
+    ...lines,
+    ...signature,
+  ].join('\n');
 }
 
 function parseHelpdeskDataUrl(value, fallbackMime = 'image/jpeg') {
@@ -103,22 +133,13 @@ function escHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-function buildEodHelpdeskHtml({
-  greeting,
-  storeNumber,
-  workDate,
-  shiftLabel,
-  setLabel,
-  issueTypeLabel,
-  issueDetails,
-  additionalDetails,
-  userName,
-  userEmail,
-  photoCount,
-}) {
+function buildEodHelpdeskHtml(meta) {
+  const lines = buildEodHelpdeskBodyLines(meta);
+  const bodyHtml = lines.map((line) => escHtml(line)).join('<br>\n');
+
   const photosHtml =
-    photoCount > 0
-      ? Array.from({ length: photoCount })
+    meta.photoCount > 0
+      ? Array.from({ length: meta.photoCount })
           .map(
             (_, i) =>
               `<div style="margin-bottom:16px;"><img src="cid:eod_help_${i}" style="max-width:100%;border:1px solid #ddd;"></div>`,
@@ -129,23 +150,14 @@ function buildEodHelpdeskHtml({
   return `<!DOCTYPE html>
 <html>
 <body style="font-family:sans-serif;color:#222;max-width:700px;margin:0 auto;">
-<p>${escHtml(greeting)}</p>
-<p>
-  <strong>Store:</strong> FM${escHtml(String(storeNumber).padStart(3, '0'))}<br>
-  <strong>Date:</strong> ${escHtml(formatMmDdYyyy(workDate))}<br>
-  <strong>Shift:</strong> ${escHtml(shiftLabel || 'N/A')}<br>
-  <strong>Set:</strong> ${escHtml(setLabel || 'N/A')}<br>
-  <strong>Issue type:</strong> ${escHtml(issueTypeLabel || '')}<br>
-  <strong>Reported by:</strong> ${escHtml(userName || '')}${userEmail ? ` (${escHtml(userEmail)})` : ''}
-</p>
-${issueDetails ? `<p><strong>Details:</strong><br>${escHtml(issueDetails)}</p>` : ''}
-${additionalDetails ? `<p><strong>Additional notes:</strong><br>${escHtml(additionalDetails)}</p>` : ''}
-${photoCount > 0 ? `<p><strong>Photos (${photoCount}):</strong></p>${photosHtml}` : ''}
+<p>Hello, I would like to report the issue below:</p>
+<p>${bodyHtml}</p>
+${photosHtml ? `<p><strong>Attached photos:</strong></p>${photosHtml}` : ''}
 <p>Thank you for your assistance.</p>
 <p style="font-size:13px;color:#555;">
-  ${escHtml(userName || '')}<br>
+  ${escHtml(meta.userName || '')}<br>
   Retail Odyssey<br>
-  ${userEmail ? escHtml(userEmail) : ''}
+  ${meta.userEmail ? escHtml(meta.userEmail) : ''}
 </p>
 </body>
 </html>`;
@@ -177,15 +189,42 @@ function resolveEodHelpdeskReplyTo(userEmail) {
   return resolveResendReplyTo({ userEmail });
 }
 
+function resolveEodHelpdeskReportMeta(body) {
+  const parsed = body.planogramId ? extractPlanogramMeta(body.planogramId) : {};
+  const merged = mergeHelpdeskSetMeta({
+    planogramId: body.planogramId,
+    setLabel: body.setLabel,
+    categoryNumber: body.categoryNumber,
+    categoryName: body.categoryName,
+    version: body.version,
+    dbkey: body.dbkey,
+    footageToken: body.footageToken,
+    parsed,
+  });
+
+  return {
+    storeNumber: body.storeNumber,
+    reportDate: body.reportDate || todayReportDateIso(),
+    issueTypeLabel: body.issueTypeLabel,
+    issueDetails: body.issueDetails,
+    userName: body.userName,
+    userEmail: body.userEmail,
+    photoCount: Array.isArray(body.photos) ? body.photos.length : 0,
+    ...merged,
+  };
+}
+
 module.exports = {
   EOD_HELPDESK_TO,
   EOD_HELPDESK_FROM,
   eodHelpdeskFromAddress,
   buildEodHelpdeskSubject,
-  buildEodHelpdeskGreeting,
-  buildEodHelpdeskAttachments,
   buildEodHelpdeskHtml,
+  buildEodHelpdeskPlainText,
+  buildEodHelpdeskAttachments,
   buildEodHelpdeskCc,
   resolveEodHelpdeskReplyTo,
+  resolveEodHelpdeskReportMeta,
   formatMmDdYyyy,
+  todayReportDateIso,
 };

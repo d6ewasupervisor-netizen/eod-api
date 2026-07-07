@@ -32,11 +32,11 @@ const {
   EOD_HELPDESK_TO,
   eodHelpdeskFromAddress,
   buildEodHelpdeskSubject,
-  buildEodHelpdeskGreeting,
   buildEodHelpdeskAttachments,
   buildEodHelpdeskHtml,
   buildEodHelpdeskCc,
   resolveEodHelpdeskReplyTo,
+  resolveEodHelpdeskReportMeta,
 } = require('./lib/eod-helpdesk-email');
 
 // New email-link + admin routes (Phase A of the Cloudflare Access removal).
@@ -923,11 +923,16 @@ async function start() {
   app.post('/send-eod-helpdesk-report', async (req, res) => {
     const {
       storeNumber,
+      reportDate,
       workDate,
       shiftLabel,
       setLabel,
       categoryNumber,
+      categoryName,
+      planogramId,
       version,
+      dbkey,
+      footageToken,
       issueTypeId,
       issueTypeLabel,
       issueDetails,
@@ -955,15 +960,25 @@ async function start() {
       });
     }
 
-    const from = eodHelpdeskFromAddress();
-    const subject = buildEodHelpdeskSubject({ storeNumber, categoryNumber, version, workDate });
-    const greeting = buildEodHelpdeskGreeting({
+    const reportMeta = resolveEodHelpdeskReportMeta({
       storeNumber,
-      issueTypeId,
+      reportDate,
+      issueTypeLabel,
+      issueDetails: [issueDetails, additionalDetails, customIssue].filter(Boolean).join('\n'),
+      userName,
+      userEmail,
+      photos: photoList,
+      planogramId,
       setLabel,
-      issueDetails,
-      customIssue,
+      categoryNumber,
+      categoryName,
+      version,
+      dbkey,
+      footageToken,
     });
+
+    const from = eodHelpdeskFromAddress();
+    const subject = buildEodHelpdeskSubject(reportMeta);
     const cc = buildEodHelpdeskCc({ userEmail, extraRecipients, addRetailOdysseyTeam });
     const replyTo = resolveEodHelpdeskReplyTo(userEmail);
 
@@ -976,19 +991,7 @@ async function start() {
       return res.status(status).json({ success: false, error: attachErr.message });
     }
 
-    const html = buildEodHelpdeskHtml({
-      greeting,
-      storeNumber,
-      workDate,
-      shiftLabel,
-      setLabel,
-      issueTypeLabel,
-      issueDetails,
-      additionalDetails,
-      userName,
-      userEmail,
-      photoCount: photoList.length,
-    });
+    const html = buildEodHelpdeskHtml(reportMeta);
 
     const emailPayload = {
       from,
