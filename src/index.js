@@ -396,7 +396,6 @@ async function start() {
     // Supervisor decide.html → read + POST decision (JWT in query/body).
     '/api/decide',
     '/trackers/assets/',
-    '/email-outbox/assets/',
     '/api/email-outbox/ingest',
     '/api/email-outbox/webhook',
     '/fm391-p05w3/assets/',
@@ -449,16 +448,9 @@ async function start() {
   app.get(['/trackers/admin', '/trackers/admin/'], (_req, res) => {
     res.sendFile(path.join(trackersDir, 'admin.html'));
   });
-  const emailOutboxDir = path.join(__dirname, 'public', 'email-outbox');
-  app.use('/email-outbox/assets', express.static(path.join(emailOutboxDir, 'assets'), {
-    fallthrough: false,
-    maxAge: 0,
-    setHeaders: (res) => {
-      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-    },
-  }));
-  app.get(['/email-outbox', '/email-outbox/'], (_req, res) => {
-    res.sendFile(path.join(emailOutboxDir, 'index.html'));
+  app.get(['/email-outbox', '/email-outbox/'], (req, res) => {
+    const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(302, `https://the-dump-bin.com/email-outbox/${qs}`);
   });
   app.get('/auth-gate.js', (_req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'auth-gate.js'));
@@ -529,6 +521,7 @@ async function start() {
       helpdeskTo: EOD_HELPDESK_TO,
       helpdeskCc: ['reporter', 'supervisor'],
       emailOutbox: true,
+      emailOutboxUrl: 'https://the-dump-bin.com/email-outbox/',
       emailOutboxRetentionDays: retentionDays(),
     });
   });
