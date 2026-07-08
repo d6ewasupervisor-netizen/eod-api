@@ -46,11 +46,14 @@ function attachmentToStored(att) {
   } else if (typeof att.content === 'string') {
     contentBase64 = att.content;
   }
-  return {
+  const stored = {
     filename: String(att.filename),
     content_type: att.content_type || att.contentType || undefined,
     content_base64: contentBase64,
   };
+  const contentId = att.contentId || att.content_id;
+  if (contentId) stored.content_id = String(contentId);
+  return stored;
 }
 
 function attachmentsToStored(attachments) {
@@ -62,11 +65,16 @@ function attachmentsFromStored(attachments) {
   if (!Array.isArray(attachments)) return [];
   return attachments
     .filter((a) => a && a.filename && a.content_base64)
-    .map((a) => ({
-      filename: a.filename,
-      content: a.content_base64,
-      content_type: a.content_type,
-    }));
+    .map((a) => {
+      const restored = {
+        filename: a.filename,
+        content: a.content_base64,
+        content_type: a.content_type,
+      };
+      const contentId = a.content_id || a.contentId;
+      if (contentId) restored.contentId = String(contentId);
+      return restored;
+    });
 }
 
 function buildStoredPayload(payload) {

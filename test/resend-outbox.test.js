@@ -44,6 +44,24 @@ describe('resend-outbox payload roundtrip', () => {
     assert.equal(back[0].content, 'abc');
   });
 
+  it('preserves inline attachment contentId through outbox roundtrip', () => {
+    const stored = attachmentsToStored([
+      { filename: 'signoff_0.jpg', content: 'aW1hZ2U=', content_type: 'image/jpeg', contentId: 'signoff_0' },
+    ]);
+    assert.equal(stored[0].content_id, 'signoff_0');
+    const restored = attachmentsFromStored(stored);
+    assert.equal(restored[0].contentId, 'signoff_0');
+
+    const payload = payloadForResend(buildStoredPayload({
+      from: 'EOD <eod@example.com>',
+      to: ['lead@example.com'],
+      subject: 'Signoff',
+      html: '<img src="cid:signoff_0">',
+      attachments: [{ filename: 'signoff_0.jpg', content: 'aW1hZ2U=', content_type: 'image/jpeg', contentId: 'signoff_0' }],
+    }));
+    assert.equal(payload.attachments[0].contentId, 'signoff_0');
+  });
+
   it('retentionDays defaults to 30', () => {
     const prev = process.env.EMAIL_OUTBOX_RETENTION_DAYS;
     delete process.env.EMAIL_OUTBOX_RETENTION_DAYS;
