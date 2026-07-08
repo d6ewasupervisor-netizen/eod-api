@@ -80,6 +80,29 @@ function createDcScanBoardRouter({ resend }) {
     }
   });
 
+  router.post('/send-invite', async (req, res) => {
+    try {
+      if (!isSupervisorEmail(req.user?.email)) {
+        return res.status(403).json({ error: 'Supervisor access required.' });
+      }
+      const result = await notify.notifyVolunteerInvite(resend);
+      if (result?.error) {
+        return res.status(500).json({
+          error: result.error.message || 'Failed to send volunteer invite email.',
+        });
+      }
+      return res.json({
+        success: true,
+        message: 'Volunteer invite email sent.',
+        emailId: result?.data?.id || result?.recordId || null,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        error: err.message || 'Failed to send volunteer invite email.',
+      });
+    }
+  });
+
   router.post('/resync', async (req, res) => {
     try {
       const out = await board.resyncProd({ forceSas: true });
