@@ -285,11 +285,36 @@ function resolveProdForStorePledge(liveProd, storeId, pledge, weekMeta) {
   );
 }
 
-function pledgeIsBuilt(pledge, prodFormatted) {
+function isTerminalProdStatus(status) {
+  const s = String(status || '').toLowerCase();
+  return s === 'completed' || s === 'complete';
+}
+
+function isCancelledProdStatus(status) {
+  const s = String(status || '').toLowerCase();
+  return s === 'cancelled' || s === 'canceled';
+}
+
+/** True when live SAS PROD has a visit for this store/date (including completed). */
+function prodConfirmsInProd(prodFormatted, liveProd) {
+  if (!liveProd?.ok || !prodFormatted?.visitId) return false;
+  if (isCancelledProdStatus(prodFormatted.visitStatus)) return false;
+  if (isTerminalProdStatus(prodFormatted.visitStatus)) return true;
+  if (isTerminalProdStatus(prodFormatted.shiftStatus)) return true;
+  return Boolean(prodFormatted.shiftId);
+}
+
+function pledgeIsBuilt(pledge, prodFormatted, liveProd) {
   if (!pledge) return false;
-  if (pledge.buildStatus === 'built') return true;
-  if (pledge.sasVisitId && pledge.sasShiftId) return true;
-  return Boolean(prodFormatted?.visitId && prodFormatted?.shiftId);
+  return prodConfirmsInProd(prodFormatted, liveProd);
+}
+
+function storeProdStatus(prodFormatted, liveProd) {
+  if (!prodConfirmsInProd(prodFormatted, liveProd)) return null;
+  if (isTerminalProdStatus(prodFormatted.visitStatus) || isTerminalProdStatus(prodFormatted.shiftStatus)) {
+    return 'completed';
+  }
+  return 'built';
 }
 
 function buildPanel(scope, weekMeta, todayYmd, liveProd) {
@@ -307,19 +332,20 @@ function buildPanel(scope, weekMeta, todayYmd, liveProd) {
       ? resolveProdForStorePledge(liveProd, store.id, pledge, weekMeta)
       : null;
     const prodDisplay = prodForPledge || prod;
-    const built = pledgeIsBuilt(pledge, prodDisplay);
+    const built = pledgeIsBuilt(pledge, prodDisplay, liveProd);
+    const prodStatus = storeProdStatus(prodDisplay, liveProd);
 
     let status = 'open';
     if (pledge) {
       if (built) {
-        status = 'built';
+        status = prodStatus === 'completed' ? 'completed' : 'built';
       } else if (pledge.finalized) {
         status = 'finalized';
       } else {
         status = 'pledged';
       }
-    } else if (prod?.visitId && (prod?.shiftId || prod?.leadName)) {
-      status = 'scheduled';
+    } else if (prodConfirmsInProd(prod, liveProd)) {
+      status = prodStatus === 'completed' ? 'completed' : 'scheduled';
     }
 
     return {
@@ -337,7 +363,8 @@ function buildPanel(scope, weekMeta, todayYmd, liveProd) {
             email: pledge.email,
             scheduledDate: pledge.scheduledDate,
             pledgedAt: pledge.pledgedAt,
-            finalized: Boolean(pledge.finalized || built),
+            finalized: Boolean(pledge.finalized),
+            prodConfirmed: built,
             buildStatus: built ? 'built' : (pledge.buildStatus || 'pending'),
             sasVisitId: pledge.sasVisitId || prodDisplay?.visitId || null,
             sasShiftId: pledge.sasShiftId || prodDisplay?.shiftId || null,
@@ -347,20 +374,21 @@ function buildPanel(scope, weekMeta, todayYmd, liveProd) {
             source: pledge.source || 'claim',
             prod: prodDisplay,
           }
-        : prodDisplay?.leadName
+        : prodConfirmsInProd(prod, liveProd)
           ? {
               id: null,
-              name: prodDisplay.leadName,
-              email: volunteerEmailForEmployeeId(prodDisplay.leadEmployeeId),
-              scheduledDate: prodDisplay.scheduledDate,
-              finalized: true,
+              name: prod.leadName,
+              email: volunteerEmailForEmployeeId(prod.leadEmployeeId),
+              scheduledDate: prod.scheduledDate,
+              finalized: false,
+              prodConfirmed: true,
               buildStatus: 'built',
-              sasVisitId: prodDisplay.visitId,
-              sasShiftId: prodDisplay.shiftId,
-              sasStartTime: prodDisplay.shiftStartTime,
-              sasEndTime: prodDisplay.shiftEndTime,
+              sasVisitId: prod.visitId,
+              sasShiftId: prod.shiftId,
+              sasStartTime: prod.shiftStartTime,
+              sasEndTime: prod.shiftEndTime,
               source: 'prod',
-              prod: prodDisplay,
+              prod,
             }
           : null,
       pendingChange: pending
@@ -382,8 +410,10 @@ function buildPanel(scope, weekMeta, todayYmd, liveProd) {
     open: stores.filter((s) => s.status === 'open').length,
     pledged: stores.filter((s) => s.status === 'pledged').length,
     finalized: stores.filter((s) => s.status === 'finalized').length,
-    built: stores.filter((s) => s.status === 'built' || s.status === 'scheduled').length,
+    built: stores.filter((s) => s.status === 'built' || s.status === 'completed' || s.status === 'scheduled').length,
+    completed: stores.filter((s) => s.status === 'completed').length,
     scheduled: stores.filter((s) => s.status === 'scheduled').length,
+    inProd: stores.filter((s) => ['built', 'completed', 'scheduled'].includes(s.status)).length,
   };
   stats.remaining = stats.open;
 
@@ -417,10 +447,11 @@ function buildSnapshot() {
         p,
         p.scope === 'ongoing' ? ctx.ongoingWeek : ctx.thisWeek,
       );
-      const built = pledgeIsBuilt(p, prod);
+      const built = pledgeIsBuilt(p, prod, liveProd);
       return {
         ...p,
-        finalized: Boolean(p.finalized || built),
+        finalized: Boolean(p.finalized),
+        prodConfirmed: built,
         buildStatus: built ? 'built' : (p.buildStatus || 'pending'),
         prod,
       };
@@ -494,7 +525,8 @@ async function reconcileFromProd(liveProd) {
       if (!pledge) continue;
 
       const shiftId = prod.lead?.shiftId || pledge.sasShiftId;
-      if (!shiftId) continue;
+      const visitDone = isTerminalProdStatus(prod.visitStatus);
+      if (!shiftId && !visitDone) continue;
 
       if (pledge.buildStatus !== 'built') {
         pledge.buildStatus = 'built';
