@@ -788,6 +788,7 @@ async function start() {
       signoffPhotos,
       checkInManager,
       checkOutManager,
+      testMode,
     } = req.body;
 
     if (!storeNumber || !subject || !body || !recipients?.length) {
@@ -796,6 +797,13 @@ async function start() {
         error: 'Missing required fields: storeNumber, subject, body, recipients',
       });
     }
+
+    const EOD_TEST_RECIPIENT = 'tyson.gauthier@retailodyssey.com';
+    const isTestMode = Boolean(testMode);
+    const resolvedRecipients = isTestMode ? [EOD_TEST_RECIPIENT] : recipients;
+    const resolvedSubject = isTestMode && !/^\[TEST\]/i.test(String(subject))
+      ? `[TEST] ${subject}`
+      : subject;
 
     const from = buildFromAddress(storeNumber);
     const attachments = [];
@@ -817,8 +825,8 @@ async function start() {
 
     const emailPayload = {
       from,
-      to: Array.isArray(recipients) ? recipients : [recipients],
-      subject,
+      to: Array.isArray(resolvedRecipients) ? resolvedRecipients : [resolvedRecipients],
+      subject: resolvedSubject,
       html,
       attachments,
     };
@@ -827,36 +835,38 @@ async function start() {
 
     try {
       const { data, error } = await sendEmail({
-        sourceType: 'eod',
+        sourceType: isTestMode ? 'eod-test' : 'eod',
         sourceRef: storeNumber,
         sentByEmail: userEmail,
-        metadata: { storeNumber, checkInManager, checkOutManager },
+        metadata: { storeNumber, checkInManager, checkOutManager, testMode: isTestMode },
       }, emailPayload);
 
       if (error) {
-        logger.error({ error, storeNumber }, 'Resend API error sending EOD email');
+        logger.error({ error, storeNumber, testMode: isTestMode }, 'Resend API error sending EOD email');
         return res.status(502).json({ success: false, error: error.message ?? String(error) });
       }
 
-      logger.info({ id: data?.id, storeNumber, from }, 'EOD email sent');
+      logger.info({ id: data?.id, storeNumber, from, testMode: isTestMode }, 'EOD email sent');
 
-      logger.info('Attempting store data upsert for store:', storeNumber);
-      try {
-        const allRecipients = Array.isArray(recipients) ? recipients : [];
-        // Only save canonical @stores.fredmeyer.com addresses to the pool.
-        const fredmeyerEmails = allRecipients.filter(
-          (e) => typeof e === 'string' && e.toLowerCase().endsWith('@stores.fredmeyer.com')
-        );
-        await upsertStoreData(storeNumber, {
-          managerNames: [checkInManager, checkOutManager].filter(Boolean),
-          fredmeyerEmails,
-        });
-        logger.info('Store data upserted successfully for store:', storeNumber);
-      } catch (err) {
-        logger.error('Store data upsert failed:', err.message);
+      if (!isTestMode) {
+        logger.info('Attempting store data upsert for store:', storeNumber);
+        try {
+          const allRecipients = Array.isArray(recipients) ? recipients : [];
+          // Only save canonical @stores.fredmeyer.com addresses to the pool.
+          const fredmeyerEmails = allRecipients.filter(
+            (e) => typeof e === 'string' && e.toLowerCase().endsWith('@stores.fredmeyer.com')
+          );
+          await upsertStoreData(storeNumber, {
+            managerNames: [checkInManager, checkOutManager].filter(Boolean),
+            fredmeyerEmails,
+          });
+          logger.info('Store data upserted successfully for store:', storeNumber);
+        } catch (err) {
+          logger.error('Store data upsert failed:', err.message);
+        }
       }
 
-      return res.json({ success: true, id: data?.id });
+      return res.json({ success: true, id: data?.id, testMode: isTestMode });
     } catch (err) {
       logger.error({ err, storeNumber }, 'Unexpected error sending EOD email');
       return res.status(500).json({ success: false, error: err.message });
