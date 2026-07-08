@@ -1,0 +1,33 @@
+---
+description: DC Scan volunteer board — URLs, PROD sync, claimed vs In PROD, deploy order
+alwaysApply: false
+globs:
+  - src/lib/dc-scan-*.js
+  - src/routes/dc-scan-board.js
+  - scripts/send-dc-scan-volunteer-invite.js
+---
+
+# DC Scan volunteer board
+
+Skill: `.cursor/skills/dc-scan-volunteer-board/SKILL.md` (read before edits).
+
+## URLs
+
+- UI: `https://the-dump-bin.com/dc-scan/` (`the-dump-bin/dc-scan/index.html`)
+- API: `https://eod-api.the-dump-bin.com/api/dc-scan/`
+- eod-api `/dc-scan` only **redirects** to dump-bin — do not treat `src/public/dc-scan/` as canonical.
+
+## Claimed ≠ In PROD
+
+- **In PROD** / **Completed** badges require `liveProd.ok` and `prodConfirmsInProd()` — not stored `sasVisitId`, not seed `buildStatus`.
+- Completed SAS visit/shift status counts as PROD-confirmed.
+
+## SAS PROD sync
+
+- `sasBridge.init()` **before** `initDcScanBoard()` and `startDcScanProdSync()`.
+- Poll uses `dc-scan-sas-sync.js`; resync via `POST /api/dc-scan/resync`.
+- Store matching: `lib/sas-store-match.js` only — never trust `store_number=` API filter alone.
+
+## Deploy
+
+Push **both** `eod-api` and `the-dump-bin` before Railway/Pages redeploy. Manual Railway redeploy does not ship uncommitted local changes.
