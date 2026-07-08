@@ -7,7 +7,7 @@ const {
   findProdVisitInWeek,
   volunteerEmailForEmployeeId,
 } = require('./dc-scan-sas-prod');
-const { getLiveProd, startDcScanProdSync } = require('./dc-scan-sas-sync');
+const { getLiveProd, startDcScanProdSync, runSync } = require('./dc-scan-sas-sync');
 const {
   STORES,
   VOLUNTEERS,
@@ -438,6 +438,7 @@ function buildSnapshot() {
       syncedAt: liveProd?.syncedAt || null,
       error: liveProd?.error || null,
       visitCount: (liveProd?.visits || []).length,
+      sas: liveProd?.sas || null,
     },
     volunteers: VOLUNTEERS.map((v) => ({
       name: v.preferredName || v.name,
@@ -538,11 +539,25 @@ async function init(dbPool) {
   if (seedIfNeeded(ctx)) {
     await persist();
   }
+  return broadcast();
+}
+
+function startProdSync() {
   startDcScanProdSync({
     broadcast: () => broadcast(),
     reconcileFromProd,
   });
-  return broadcast();
+}
+
+async function resyncProd({ forceSas = true } = {}) {
+  const out = await runSync({ refreshSas: true, forceSas });
+  return {
+    snapshot: buildSnapshot(),
+    prod: getLiveProd(),
+    sas: out.sas,
+    busy: out.busy,
+    error: out.error || null,
+  };
 }
 
 function requireActor(email) {
@@ -861,6 +876,8 @@ function subscribe(res) {
 
 module.exports = {
   init,
+  startProdSync,
+  resyncProd,
   buildSnapshot,
   broadcast,
   addPledge,

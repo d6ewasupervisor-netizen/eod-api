@@ -62,6 +62,7 @@ const { createEmailOutboxRouter } = require('./routes/email-outbox');
 const {
   createDcScanBoardRouter,
   initDcScanBoard,
+  startDcScanProdSync,
 } = require('./routes/dc-scan-board');
 const { createEmailSender, setEmailSender, purgeEmailsOlderThan, retentionDays, syncFromResendApi, dispatchTrackedEmail } = require('./lib/resend-outbox');
 const hubRoutes = require('./routes/hub-routes');
@@ -473,11 +474,13 @@ async function start() {
     const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
     res.redirect(302, `https://the-dump-bin.com/dc-scan/${qs}`);
   });
-  await initDcScanBoard(pool);
-  app.use('/api/dc-scan', createDcScanBoardRouter({ resend }));
 
-  // Initialize SAS bridge (session receiver, upload queue, worker)
+  // Initialize SAS bridge before DC Scan PROD sync (sync needs live session).
   await sasBridge.init(app, pool);
+
+  await initDcScanBoard(pool);
+  startDcScanProdSync();
+  app.use('/api/dc-scan', createDcScanBoardRouter({ resend }));
 
   await reboticsBridge.init(app, pool, { resend });
 
