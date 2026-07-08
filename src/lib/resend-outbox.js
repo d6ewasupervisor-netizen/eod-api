@@ -314,6 +314,22 @@ function createEmailSender({ resend, pool }) {
   };
 }
 
+const LIST_SORT_COLUMNS = {
+  createdAt: 'created_at',
+  subject: 'subject',
+  status: 'status',
+  deliveryStatus: 'delivery_status',
+  sourceSystem: 'source_system',
+  sourceType: 'source_type',
+  to: "array_to_string(to_addresses, ',')",
+};
+
+function resolveListSort(sortBy, sortDir) {
+  const col = LIST_SORT_COLUMNS[sortBy] || LIST_SORT_COLUMNS.createdAt;
+  const dir = String(sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  return { col, dir, sortBy: LIST_SORT_COLUMNS[sortBy] ? sortBy : 'createdAt' };
+}
+
 async function listEmails(pool, {
   page = 1,
   pageSize = 50,
@@ -324,6 +340,8 @@ async function listEmails(pool, {
   search,
   since,
   until,
+  sortBy,
+  sortDir,
 }) {
   const client = pool || { query };
   const limit = Math.min(Math.max(Number(pageSize) || 50, 1), 200);
@@ -373,12 +391,13 @@ async function listEmails(pool, {
     values,
   );
   const total = countRes.rows[0]?.total || 0;
+  const { col: sortCol, dir: sortOrder, sortBy: resolvedSortBy } = resolveListSort(sortBy, sortDir);
   values.push(limit, offset);
   const { rows } = await client.query(
     `SELECT *
      FROM sent_emails
      ${whereSql}
-     ORDER BY created_at DESC
+     ORDER BY ${sortCol} ${sortOrder} NULLS LAST, id DESC
      LIMIT $${idx++} OFFSET $${idx}`,
     values,
   );
@@ -386,6 +405,8 @@ async function listEmails(pool, {
     total,
     page: Number(page) || 1,
     pageSize: limit,
+    sortBy: resolvedSortBy,
+    sortDir: sortOrder.toLowerCase(),
     items: rows.map(rowToListItem),
   };
 }
@@ -750,6 +771,8 @@ module.exports = {
   attachmentsToStored,
   attachmentsFromStored,
   mapResendEventToDelivery,
+  resolveListSort,
+  LIST_SORT_COLUMNS,
   sendViaOutbox,
   createEmailSender,
   listEmails,

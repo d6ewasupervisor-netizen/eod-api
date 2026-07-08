@@ -80,6 +80,8 @@ function createEmailOutboxRouter({ pool, resend, logger = console }) {
         search: req.query.search,
         since: req.query.since,
         until: req.query.until,
+        sortBy: req.query.sortBy,
+        sortDir: req.query.sortDir,
       });
       return res.json({ ok: true, ...data });
     } catch (err) {

@@ -110,8 +110,13 @@ async function verifyCfAccess(req, res) {
 // ─── session verifier ────────────────────────────────────────────────────────
 function readBearer(req) {
   const auth = req.headers.authorization || '';
-  if (!auth.toLowerCase().startsWith('bearer ')) return '';
-  return auth.slice(7).trim();
+  if (auth.toLowerCase().startsWith('bearer ')) {
+    return auth.slice(7).trim();
+  }
+  // EventSource cannot set Authorization headers; SSE clients pass access_token.
+  const q = req.query && req.query.access_token;
+  if (q && typeof q === 'string') return q.trim();
+  return '';
 }
 
 async function verifySession(req, res) {

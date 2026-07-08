@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e13">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>DC Scan Signup — Live Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0e13;
+  --bg-elevated: #111820;
+  --card: #151d28;
+  --card-border: #243044;
+  --text: #f0f4f8;
+  --text-secondary: #a8b8cc;
+  --muted: #6b7d94;
+  --accent: #4da6ff;
+  --green: #00e87a;
+  --green-bg: rgba(0,232,122,0.12);
+  --amber: #ffcc00;
+  --amber-bg: rgba(255,204,0,0.12);
+  --orange: #ff8c42;
+  --red: #ff4757;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  min-height: 100dvh;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+.wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: calc(16px + var(--safe-top)) 14px calc(88px + var(--safe-bottom));
+}
+.top-bar {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.top-bar h1 { font-size: clamp(1.35rem, 5vw, 1.65rem); font-weight: 800; letter-spacing: -0.02em; }
+.top-bar p { color: var(--text-secondary); font-size: 13px; margin-top: 4px; max-width: 36rem; }
+.live-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--card); border: 1px solid var(--card-border);
+  border-radius: 999px; padding: 8px 14px; font-size: 13px; font-weight: 600;
+  flex-shrink: 0;
+}
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.live-pill.connected .live-dot {
+  background: var(--green);
+  box-shadow: 0 0 10px rgba(0,232,122,0.7);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.urgent {
+  background: linear-gradient(135deg, rgba(255,140,66,0.18), rgba(255,71,87,0.10));
+  border: 1px solid rgba(255,140,66,0.45);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+.urgent strong { color: var(--orange); }
+.signed-in {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+  background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-sm);
+  padding: 12px 14px; margin-bottom: 16px; font-size: 13px; color: var(--text-secondary);
+}
+.signed-in strong { word-break: break-all; color: var(--text); }
+.signed-in button, .unclaim-btn, .btn-secondary {
+  padding: 10px 14px; border-radius: 8px; border: 1px solid var(--card-border);
+  background: var(--bg-elevated); color: var(--text-secondary);
+  font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer;
+  min-height: 44px; touch-action: manipulation;
+}
+.section { margin-bottom: 22px; }
+.section-head {
+  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  align-items: end; margin-bottom: 12px;
+}
+.section-head h2 { font-size: clamp(1.1rem, 4.2vw, 1.25rem); font-weight: 800; }
+.section-head .meta { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.stats {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px;
+}
+.stat {
+  background: var(--card); border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm); padding: 12px 8px; text-align: center;
+  min-width: 0;
+}
+.stat .num { font-size: clamp(1.25rem, 5vw, 1.65rem); font-weight: 800; line-height: 1.1; }
+.stat .lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; font-weight: 700; }
+.stat.open .num { color: var(--amber); }
+.stat.pledged .num { color: var(--accent); }
+.stat.done .num { color: var(--green); }
+.grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px; margin-bottom: 14px;
+}
+.store-card {
+  background: var(--card); border: 1px solid var(--card-border);
+  border-radius: var(--radius); padding: 14px;
+  min-width: 0;
+}
+.store-card.open { border-style: dashed; }
+.store-card.pledged { border-color: rgba(77,166,255,0.4); }
+.store-card.finalized { border-color: rgba(255,204,0,0.4); background: var(--amber-bg); }
+.store-card.built { border-color: rgba(0,232,122,0.45); background: var(--green-bg); }
+.store-card .fm { font-size: 18px; font-weight: 800; }
+.store-card .loc { font-size: 12px; color: var(--muted); margin: 2px 0 10px; }
+.badge {
+  display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 4px 8px; border-radius: 6px;
+}
+.badge.open { background: var(--bg-elevated); color: var(--muted); }
+.badge.pledged { background: rgba(77,166,255,0.15); color: var(--accent); }
+.badge.finalized { background: var(--amber-bg); color: var(--amber); }
+.badge.built { background: var(--green-bg); color: var(--green); }
+.store-card .who { font-size: 13px; color: var(--text-secondary); margin-top: 10px; line-height: 1.45; word-break: break-word; }
+.panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.panel {
+  background: var(--card); border: 1px solid var(--card-border);
+  border-radius: var(--radius); padding: 16px;
+}
+.panel h3 { font-size: 16px; font-weight: 800; margin-bottom: 6px; }
+.panel .sub { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+label { display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+input, select, textarea {
+  width: 100%; max-width: 100%; padding: 12px 14px; border-radius: var(--radius-sm);
+  border: 1px solid var(--card-border); background: var(--bg-elevated);
+  color: var(--text); font-size: 16px; font-family: inherit; margin-bottom: 12px;
+  min-height: 48px; -webkit-appearance: none; appearance: none;
+}
+textarea { min-height: 84px; resize: vertical; }
+.btn {
+  width: 100%; padding: 14px; border: none; border-radius: var(--radius-sm);
+  background: var(--accent); color: #fff; font-size: 15px; font-weight: 800;
+  font-family: inherit; cursor: pointer; min-height: 48px; touch-action: manipulation;
+}
+.btn.green { background: var(--green); color: #04140c; }
+.btn:disabled { background: #1e2c3e; color: #5a7088; cursor: not-allowed; }
+.msg { font-size: 13px; margin-top: 10px; padding: 10px 12px; border-radius: var(--radius-sm); display: none; }
+.msg.show { display: block; }
+.msg.ok { background: var(--green-bg); color: var(--green); border: 1px solid rgba(0,232,122,0.3); }
+.msg.err { background: rgba(255,71,87,0.12); color: var(--red); border: 1px solid rgba(255,71,87,0.3); }
+.pledge-list { list-style: none; }
+.pledge-list li {
+  padding: 12px 0; border-bottom: 1px solid var(--card-border);
+  font-size: 14px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  align-items: center;
+}
+.pledge-list .store { font-weight: 700; color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+.denied { opacity: 0.55; }
+.hidden { display: none !important; }
+.mobile-nav {
+  display: none;
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 40;
+  padding: 8px 10px calc(8px + var(--safe-bottom));
+  background: rgba(10,14,19,0.94);
+  border-top: 1px solid var(--card-border);
+  backdrop-filter: blur(10px);
+  gap: 8px;
+}
+.mobile-nav button {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  touch-action: manipulation;
+}
+.mobile-nav button:active { border-color: var(--accent); color: var(--accent); }
+
+@media (max-width: 800px) {
+  .panels { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .wrap { padding-left: 12px; padding-right: 12px; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .store-card { padding: 12px; }
+  .store-card .fm { font-size: 16px; }
+  .panel { padding: 14px; }
+  .live-pill { width: 100%; justify-content: center; }
+  .signed-in { align-items: stretch; }
+  .signed-in button { width: 100%; }
+  .mobile-nav { display: flex; }
+  .pledge-list li { flex-direction: column; align-items: stretch; }
+  .pledge-list .unclaim-btn { width: 100%; }
+}
+@media (max-width: 380px) {
+  .grid { grid-template-columns: 1fr; }
+  .stat .lbl { font-size: 9px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="app" hidden>
+  <div class="top-bar">
+    <div>
+      <h1>DC Scan signup board</h1>
+      <p>Project 8081 · RO8 DC Scans · live claims for this week and going forward</p>
+    </div>
+    <div class="live-pill" id="live-pill">
+      <span class="live-dot"></span>
+      <span id="live-label">Connecting…</span>
+    </div>
+  </div>
+
+  <div class="urgent">
+    <strong>Need coverage this week.</strong>
+    Please claim remaining P06W3 stores and begin as early as <strong>today</strong>.
+    Scans can run anytime Wed 9:00 AM – Fri 5:00 PM. After that, lock your ongoing stores for next week and beyond.
+  </div>
+
+  <div class="signed-in">
+    <span>Signed in as <strong id="me-email">—</strong></span>
+    <button type="button" id="sign-out-btn">Sign out</button>
+  </div>
+
+  <section class="section" id="this-week-section">
+    <div class="section-head">
+      <div>
+        <h2>This week</h2>
+        <div class="meta" id="this-week-meta">—</div>
+      </div>
+    </div>
+    <div class="stats" id="this-week-stats"></div>
+    <div class="grid" id="this-week-grid"></div>
+  </section>
+
+  <section class="section" id="ongoing-section">
+    <div class="section-head">
+      <div>
+        <h2>Going forward (semi-permanent)</h2>
+        <div class="meta" id="ongoing-meta">—</div>
+      </div>
+    </div>
+    <div class="stats" id="ongoing-stats"></div>
+    <div class="grid" id="ongoing-grid"></div>
+  </section>
+
+  <div class="panels">
+    <div class="panel">
+      <h3>Claim a store</h3>
+      <p class="sub">Open stores only. You can claim more than one. Choosing a day is required (Wed–Fri).</p>
+      <form id="claim-form">
+        <label for="claim-scope">Panel</label>
+        <select id="claim-scope" required>
+          <option value="thisWeek">This week (urgent)</option>
+          <option value="ongoing">Going forward</option>
+        </select>
+        <label for="claim-store">Store</label>
+        <select id="claim-store" required><option value="">Select…</option></select>
+        <label for="claim-date">Scan day</label>
+        <select id="claim-date" required><option value="">Select…</option></select>
+        <button type="submit" class="btn" id="claim-btn">I will complete this store</button>
+        <div class="msg" id="claim-msg"></div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h3>My selections</h3>
+      <p class="sub">Release/swap needs supervisor approval. When your list is right, finalize — that locks picks and builds SAS shifts for you.</p>
+      <ul class="pledge-list" id="my-list"></ul>
+      <button type="button" class="btn green" id="finalize-btn" disabled>Confirm / Finalize my selections</button>
+      <div class="msg" id="finalize-msg"></div>
+
+      <div id="change-box" class="hidden" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--card-border)">
+        <h3 style="margin-bottom:8px">Request release / swap</h3>
+        <input type="hidden" id="change-pledge-id" />
+        <label for="change-type">Request type</label>
+        <select id="change-type">
+          <option value="release">Release store</option>
+          <option value="swap">Swap to another store</option>
+        </select>
+        <div id="swap-fields" class="hidden">
+          <label for="swap-store">Swap to store</label>
+          <select id="swap-store"></select>
+          <label for="swap-date">Swap to date</label>
+          <select id="swap-date"></select>
+        </div>
+        <label for="change-note">Note</label>
+        <textarea id="change-note" placeholder="Why the change?"></textarea>
+        <button type="button" class="btn" id="change-submit">Send for approval</button>
+        <button type="button" class="btn-secondary" id="change-cancel" style="width:100%;margin-top:8px">Cancel</button>
+        <div class="msg" id="change-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="mobile-nav" aria-label="Quick jump">
+    <button type="button" data-jump="this-week-section">This week</button>
+    <button type="button" data-jump="ongoing-section">Going forward</button>
+    <button type="button" data-jump="claim-form">Claim</button>
+    <button type="button" data-jump="finalize-btn">My picks</button>
+  </nav>
+</div>
+
+<script src="/auth-gate.js"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  let snapshot = null;
+  let me = null;
+  let es = null;
+
+  function showMsg(el, text, ok) {
+    el.textContent = text || '';
+    el.className = 'msg show ' + (ok ? 'ok' : 'err');
+  }
+  function clearMsg(el) {
+    el.className = 'msg';
+    el.textContent = '';
+  }
+
+  function fmtDate(ymd) {
+    if (!ymd) return '—';
+    const [y, m, d] = ymd.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  function statusBadge(status) {
+    const label = status === 'built' ? 'Built'
+      : status === 'finalized' ? 'Finalized'
+      : status === 'pledged' ? 'Claimed'
+      : 'Open';
+    return '<span class="badge ' + status + '">' + label + '</span>';
+  }
+
+  function renderStats(el, stats) {
+    el.innerHTML = [
+      ['open', stats.open, 'Open'],
+      ['pledged', stats.pledged, 'Claimed'],
+      ['done', (stats.finalized || 0) + (stats.built || 0), 'Locked'],
+      ['', stats.remaining, 'Left'],
+    ].map(([cls, num, lbl]) =>
+      '<div class="stat ' + cls + '"><div class="num">' + num + '</div><div class="lbl">' + lbl + '</div></div>'
+    ).join('');
+  }
+
+  function renderGrid(el, panel) {
+    el.innerHTML = panel.stores.map((s) => {
+      const who = s.pledge
+        ? ('<div class="who"><strong>' + escapeHtml(s.pledge.name) + '</strong><br/>' +
+           fmtDate(s.pledge.scheduledDate) +
+           (s.pendingChange ? '<br/><em>change pending</em>' : '') +
+           (s.pledge.buildStatus === 'error' ? '<br/><span style="color:#ff4757">Build error</span>' : '') +
+           '</div>')
+        : '';
+      return '<div class="store-card ' + s.status + '">' +
+        '<div class="fm">' + escapeHtml(s.label) + '</div>' +
+        '<div class="loc">' + escapeHtml(s.city) + ', ' + escapeHtml(s.state) + '</div>' +
+        statusBadge(s.status) + who + '</div>';
+    }).join('');
+  }
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[c]);
+  }
+
+  function panelForScope(scope) {
+    return scope === 'ongoing' ? snapshot.ongoing : snapshot.thisWeek;
+  }
+
+  function refreshClaimOptions() {
+    const scope = $('claim-scope').value;
+    const panel = panelForScope(scope);
+    const storeSel = $('claim-store');
+    const dateSel = $('claim-date');
+    const openStores = panel.stores.filter((s) => s.status === 'open');
+    storeSel.innerHTML = '<option value="">Select…</option>' +
+      openStores.map((s) => '<option value="' + s.id + '">' + s.label + ' — ' + s.city + '</option>').join('');
+    dateSel.innerHTML = '<option value="">Select…</option>' +
+      (panel.allowedDates || []).map((d) => '<option value="' + d + '">' + fmtDate(d) + '</option>').join('');
+  }
+
+  function renderMyList() {
+    const email = (me && me.email || '').toLowerCase();
+    const mine = (snapshot.pledges || []).filter((p) => String(p.email).toLowerCase() === email);
+    const list = $('my-list');
+    if (!mine.length) {
+      list.innerHTML = '<li class="denied">No claims yet.</li>';
+      $('finalize-btn').disabled = true;
+      return;
+    }
+    list.innerHTML = mine.map((p) => {
+      const locked = p.finalized || p.buildStatus === 'built';
+      return '<li>' +
+        '<div><span class="store">FM ' + escapeHtml(p.storeId) + '</span> · ' +
+        escapeHtml(p.scope) + ' · ' + fmtDate(p.scheduledDate) +
+        (locked ? ' · <em>locked</em>' : '') +
+        '</div>' +
+        (locked
+          ? ''
+          : '<button type="button" class="unclaim-btn" data-pledge="' + escapeHtml(p.id) + '">Release / swap</button>') +
+        '</li>';
+    }).join('');
+    $('finalize-btn').disabled = mine.every((p) => p.finalized || p.buildStatus === 'built');
+    list.querySelectorAll('[data-pledge]').forEach((btn) => {
+      btn.addEventListener('click', () => openChange(btn.getAttribute('data-pledge')));
+    });
+  }
+
+  function openChange(pledgeId) {
+    const p = (snapshot.pledges || []).find((x) => x.id === pledgeId);
+    if (!p) return;
+    $('change-pledge-id').value = pledgeId;
+    $('change-type').value = 'release';
+    $('change-note').value = '';
+    $('change-box').classList.remove('hidden');
+    updateSwapFields(p);
+    clearMsg($('change-msg'));
+  }
+
+  function updateSwapFields(pledge) {
+    const isSwap = $('change-type').value === 'swap';
+    $('swap-fields').classList.toggle('hidden', !isSwap);
+    if (!isSwap || !pledge) return;
+    const panel = panelForScope(pledge.scope);
+    const open = panel.stores.filter((s) => s.status === 'open');
+    $('swap-store').innerHTML = open.map((s) =>
+      '<option value="' + s.id + '">' + s.label + ' — ' + s.city + '</option>'
+    ).join('') || '<option value="">No open stores</option>';
+    $('swap-date').innerHTML = (panel.allowedDates || []).map((d) =>
+      '<option value="' + d + '"' + (d === pledge.scheduledDate ? ' selected' : '') + '>' + fmtDate(d) + '</option>'
+    ).join('');
+  }
+
+  function applySnapshot(snap) {
+    snapshot = snap;
+    try { localStorage.setItem('dc_scan_snapshot', JSON.stringify(snap)); } catch (_) {}
+    $('this-week-meta').textContent = snap.thisWeek.weekKey + ' · ' +
+      fmtDate(snap.thisWeek.startDate) + ' – ' + fmtDate(snap.thisWeek.endDate) +
+      ' · deadline Fri 5 PM';
+    $('ongoing-meta').textContent = snap.ongoing.weekKey + ' · ' +
+      fmtDate(snap.ongoing.startDate) + ' – ' + fmtDate(snap.ongoing.endDate) +
+      ' · claim your semi-permanent stores';
+    renderStats($('this-week-stats'), snap.thisWeek.stats);
+    renderStats($('ongoing-stats'), snap.ongoing.stats);
+    renderGrid($('this-week-grid'), snap.thisWeek);
+    renderGrid($('ongoing-grid'), snap.ongoing);
+    refreshClaimOptions();
+    renderMyList();
+  }
+
+  async function api(path, opts) {
+    const res = await window.dumpBinAuthFetch('/api/dc-scan' + path, opts || {});
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    return data;
+  }
+
+  function connectSse() {
+    if (es) { try { es.close(); } catch (_) {} }
+    const tok = localStorage.getItem('dumpBinSession') || localStorage.getItem('eodSession') || '';
+    const apiBase = (window.dumpBinAuth && window.dumpBinAuth.API_BASE) || '';
+    const url = apiBase + '/api/dc-scan/events?access_token=' + encodeURIComponent(tok);
+    es = new EventSource(url);
+    es.addEventListener('snapshot', (ev) => {
+      try {
+        applySnapshot(JSON.parse(ev.data));
+        $('live-pill').classList.add('connected');
+        $('live-label').textContent = 'Live';
+      } catch (_) {}
+    });
+    es.onerror = () => {
+      $('live-pill').classList.remove('connected');
+      $('live-label').textContent = 'Reconnecting…';
+    };
+  }
+
+  async function boot() {
+    await (window.dumpBinAuthReady || Promise.resolve());
+    const meRes = await window.dumpBinAuthFetch('/api/me');
+    const meData = await meRes.json();
+    if (!meRes.ok) throw new Error(meData.error || 'Not signed in');
+    me = meData;
+    $('me-email').textContent = me.email || '—';
+    $('app').hidden = false;
+
+    try {
+      const cached = localStorage.getItem('dc_scan_snapshot');
+      if (cached) applySnapshot(JSON.parse(cached));
+    } catch (_) {}
+
+    const data = await api('/');
+    applySnapshot(data.snapshot);
+    connectSse();
+  }
+
+  $('claim-scope').addEventListener('change', refreshClaimOptions);
+  $('claim-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearMsg($('claim-msg'));
+    if (!navigator.onLine) return showMsg($('claim-msg'), 'You appear offline.', false);
+    try {
+      $('claim-btn').disabled = true;
+      const data = await api('/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope: $('claim-scope').value,
+          storeId: $('claim-store').value,
+          scheduledDate: $('claim-date').value,
+        }),
+      });
+      applySnapshot(data.snapshot);
+      showMsg($('claim-msg'), data.message || 'Claimed.', true);
+    } catch (err) {
+      showMsg($('claim-msg'), err.message, false);
+    } finally {
+      $('claim-btn').disabled = false;
+    }
+  });
+
+  $('finalize-btn').addEventListener('click', async () => {
+    clearMsg($('finalize-msg'));
+    if (!confirm('Lock your selections and build SAS visits/shifts for your stores now?')) return;
+    try {
+      $('finalize-btn').disabled = true;
+      const data = await api('/finalize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      applySnapshot(data.snapshot);
+      showMsg($('finalize-msg'), data.message || 'Finalized.', !data.buildError);
+    } catch (err) {
+      showMsg($('finalize-msg'), err.message, false);
+      $('finalize-btn').disabled = false;
+    }
+  });
+
+  $('change-type').addEventListener('change', () => {
+    const pid = $('change-pledge-id').value;
+    const p = (snapshot.pledges || []).find((x) => x.id === pid);
+    updateSwapFields(p);
+  });
+  $('change-cancel').addEventListener('click', () => {
+    $('change-box').classList.add('hidden');
+  });
+  $('change-submit').addEventListener('click', async () => {
+    clearMsg($('change-msg'));
+    try {
+      const body = {
+        pledgeId: $('change-pledge-id').value,
+        type: $('change-type').value,
+        note: $('change-note').value,
+      };
+      if (body.type === 'swap') {
+        body.swapToStoreId = $('swap-store').value;
+        body.swapToDate = $('swap-date').value;
+      }
+      const data = await api('/change-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      applySnapshot(data.snapshot);
+      showMsg($('change-msg'), data.message || 'Sent.', true);
+      $('change-box').classList.add('hidden');
+    } catch (err) {
+      showMsg($('change-msg'), err.message, false);
+    }
+  });
+
+  $('sign-out-btn').addEventListener('click', () => {
+    try {
+      localStorage.removeItem('dumpBinSession');
+      localStorage.removeItem('eodSession');
+    } catch (_) {}
+    location.href = 'https://the-dump-bin.com/signin.html?next=' + encodeURIComponent(location.href);
+  });
+
+  document.querySelectorAll('.mobile-nav [data-jump]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-jump');
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (typeof el.focus === 'function') {
+        try { el.focus({ preventScroll: true }); } catch (_) {}
+      }
+    });
+  });
+
+  boot().catch((err) => {
+    console.error(err);
+    alert(err.message || 'Failed to load board');
+  });
+})();
+</script>
+</body>
+</html>

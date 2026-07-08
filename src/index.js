@@ -59,7 +59,11 @@ const createDumpBinRouter = require('./routes/dump-bin');
 const { createFm391P05W3PhotosRouter } = require('./routes/fm391-p05w3-photos');
 const { createTrackersRouter } = require('./routes/trackers');
 const { createEmailOutboxRouter } = require('./routes/email-outbox');
-const { createEmailSender, setEmailSender, purgeEmailsOlderThan, retentionDays } = require('./lib/resend-outbox');
+const {
+  createDcScanBoardRouter,
+  initDcScanBoard,
+} = require('./routes/dc-scan-board');
+const { createEmailSender, setEmailSender, purgeEmailsOlderThan, retentionDays, syncFromResendApi, dispatchTrackedEmail } = require('./lib/resend-outbox');
 const hubRoutes = require('./routes/hub-routes');
 const hubStoreRoutes = require('./routes/hub-store-routes');
 const { initHubBackup, startBackupIntervalJob } = require('./hub-backup');
@@ -382,6 +386,8 @@ async function start() {
     '/auth-gate.js',
     '/fm391-p05w3',
     '/fm391-p05w3/',
+    '/dc-scan',
+    '/dc-scan/',
     '/health',
   ];
   const PUBLIC_PREFIXES = [
@@ -400,6 +406,7 @@ async function start() {
     '/api/email-outbox/webhook',
     '/fm391-p05w3/assets/',
     '/api/fm391-p05w3/',
+    '/dc-scan/assets/',
   ];
   const PUBLIC_REGEXES = [
     /^\/api\/signoff-photos\/[^\/]+\/image\/?$/,
@@ -461,6 +468,20 @@ async function start() {
     res.sendFile(path.join(fm391Dir, 'index.html'));
   });
   app.use('/api/fm391-p05w3', createFm391P05W3PhotosRouter({ resend, logger }));
+
+  const dcScanDir = path.join(__dirname, 'public', 'dc-scan');
+  app.use('/dc-scan/assets', express.static(path.join(dcScanDir, 'assets'), {
+    fallthrough: false,
+    maxAge: 0,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    },
+  }));
+  app.get(['/dc-scan', '/dc-scan/'], (_req, res) => {
+    res.sendFile(path.join(dcScanDir, 'index.html'));
+  });
+  await initDcScanBoard(pool);
+  app.use('/api/dc-scan', createDcScanBoardRouter({ resend }));
 
   // Initialize SAS bridge (session receiver, upload queue, worker)
   await sasBridge.init(app, pool);
@@ -592,6 +613,20 @@ async function start() {
   });
   logger.info(`Email outbox auto-purge scheduled daily 3:30am PT (retention ${retentionDays()} days)`);
 
+  cron.schedule('15 * * * *', async () => {
+    try {
+      const result = await syncFromResendApi(resend, pool, { limit: 100, maxPages: 10 });
+      if (result.imported > 0 || result.updated > 0) {
+        logger.info(`Email outbox Resend sync: imported ${result.imported}, updated ${result.updated}`);
+      }
+    } catch (err) {
+      logger.error('Email outbox Resend sync failed:', err.message);
+    }
+  }, {
+    timezone: 'America/Los_Angeles',
+  });
+  logger.info('Hourly Resend API sync scheduled for email outbox (America/Los_Angeles)');
+
   // ─── SAS AUTO-REFRESH CRON ─────────────────────────────────────────────────
   //
   // Re-mint the SAS session every 4 hours regardless of user activity.
@@ -653,7 +688,14 @@ async function start() {
         html,
       };
       addReplyTo(authStatusPayload, {});
-      await resend.emails.send(authStatusPayload);
+      const { error } = await dispatchTrackedEmail(resend, {
+        sourceSystem: 'eod-api',
+        sourceType: 'sas-auth-status',
+        metadata: { authStatus: status },
+      }, authStatusPayload);
+      if (error) {
+        throw new Error(error.message || String(error));
+      }
       console.log(`[auth-status] ${status} notification email sent`);
       return res.json({ success: true, notified: true });
     } catch (err) {

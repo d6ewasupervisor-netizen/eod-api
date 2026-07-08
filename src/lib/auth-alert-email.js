@@ -1,6 +1,7 @@
 'use strict';
 
 const { addReplyTo } = require('./resend-reply-to');
+const { dispatchTrackedEmail } = require('./resend-outbox');
 
 async function sendAuthAlertEmail(resend, {
   from,
@@ -17,7 +18,14 @@ async function sendAuthAlertEmail(resend, {
   try {
     const payload = { from, to, subject, html };
     addReplyTo(payload, replyToOptions);
-    await resend.emails.send(payload);
+    const { error } = await dispatchTrackedEmail(resend, {
+      sourceSystem: 'eod-api',
+      sourceType: 'auth-alert',
+      metadata: { loggerLabel },
+    }, payload);
+    if (error) {
+      return { ok: false, error: error.message || String(error), loggerLabel };
+    }
     return { ok: true };
   } catch (error) {
     return {

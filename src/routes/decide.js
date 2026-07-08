@@ -16,6 +16,10 @@ const {
   loadBayPhotoPayload,
   applyProdDispatchDecision,
 } = require('../hub-prod-dispatch');
+const board = require('../lib/dc-scan-board');
+const { notifyChangeResolved } = require('../lib/dc-scan-notify');
+
+const DC_SCAN_REQUEST_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 function iso(ms) {
   return new Date(ms).toISOString();
@@ -25,6 +29,7 @@ function mapType(param) {
   if (param === 'store') return 'store';
   if (param === 'shift') return 'shift';
   if (param === 'prod') return 'prod';
+  if (param === 'dcscan') return 'dcscan';
   return null;
 }
 
@@ -160,6 +165,41 @@ function createDecideRouter({ resend }) {
         });
       }
 
+      if (t === 'dcscan') {
+        const r = board.getChangeRequest(id);
+        if (!r) {
+          return res.status(404).json({ ok: false, error: 'not_found' });
+        }
+        const created = new Date(r.requestedAt).getTime();
+        const requestCutoff = created + DC_SCAN_REQUEST_EXPIRY_MS;
+        let status = r.status;
+        if (status === 'pending' && Date.now() > requestCutoff) {
+          status = 'expired';
+        }
+        const expiresMs = Math.min(jwtExpMs(verified), requestCutoff);
+        const reasonParts = [
+          `Type: ${r.type}`,
+          r.note ? `Note: ${r.note}` : null,
+          r.type === 'swap'
+            ? `Swap to FM ${r.swapToStoreId} on ${r.swapToDate}`
+            : null,
+        ].filter(Boolean);
+        return res.json({
+          ok: true,
+          status,
+          requestedBy: r.requestedByEmail,
+          storeNumber: r.storeId,
+          date: r.scheduledDate,
+          reason: reasonParts.join(' · '),
+          memberName: r.requestedByName || null,
+          requestedAt: r.requestedAt,
+          expiresAt: iso(expiresMs),
+          changeType: r.type,
+          swapToStoreId: r.swapToStoreId || null,
+          swapToDate: r.swapToDate || null,
+        });
+      }
+
       if (t !== 'shift') {
         return res.status(400).json({ ok: false, error: 'invalid_type' });
       }
@@ -244,6 +284,23 @@ function createDecideRouter({ resend }) {
         }
         if (!out.ok) {
           return res.status(500).json({ ok: false, error: out.error || 'server' });
+        }
+        return res.json({ ok: true, status: out.status });
+      }
+
+      if (t === 'dcscan') {
+        const out = await board.applyChangeDecision(id, decision, verified.approverEmail);
+        if (!out.ok && out.error === 'not_found') {
+          return res.status(404).json({ ok: false, error: 'not_found' });
+        }
+        if (!out.ok) {
+          return res.status(500).json({ ok: false, error: out.error || 'server' });
+        }
+        if (out.request) {
+          notifyChangeResolved(resend, {
+            request: out.request,
+            status: out.status,
+          }).catch((err) => console.error('[decide dcscan notify]', err.message));
         }
         return res.json({ ok: true, status: out.status });
       }

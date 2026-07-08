@@ -8,6 +8,7 @@ const {
   attachmentsToStored,
   attachmentsFromStored,
   mapResendEventToDelivery,
+  resolveListSort,
 } = require('../src/lib/resend-outbox');
 
 describe('resend-outbox payload roundtrip', () => {
@@ -49,5 +50,18 @@ describe('resend-outbox payload roundtrip', () => {
     const { retentionDays } = require('../src/lib/resend-outbox');
     assert.equal(retentionDays(), 30);
     if (prev) process.env.EMAIL_OUTBOX_RETENTION_DAYS = prev;
+  });
+
+  it('resolveListSort whitelists columns and defaults safely', () => {
+    assert.deepEqual(resolveListSort('subject', 'asc'), {
+      col: 'subject',
+      dir: 'ASC',
+      sortBy: 'subject',
+    });
+    assert.deepEqual(resolveListSort('bad-column', 'up'), {
+      col: 'created_at',
+      dir: 'DESC',
+      sortBy: 'createdAt',
+    });
   });
 });

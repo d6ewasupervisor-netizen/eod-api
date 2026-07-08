@@ -25,6 +25,7 @@ function ensureSecret() {
 function normalizeDecisionType(decisionType) {
   if (decisionType === 'shift') return 'shift';
   if (decisionType === 'prod') return 'prod';
+  if (decisionType === 'dcscan') return 'dcscan';
   return 'store';
 }
 
