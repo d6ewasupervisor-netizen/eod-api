@@ -3,7 +3,7 @@
 const { issueReviewToken } = require('./decision-review-jwt');
 const { retailOdysseyFrom } = require('./email-from');
 const { dispatchTrackedEmail } = require('./resend-outbox');
-const { VOLUNTEERS, DEFAULT_SUPERVISOR_EMAIL, normalizeEmail } = require('./dc-scan-inventory');
+const { VOLUNTEERS, DEFAULT_SUPERVISOR_EMAIL, normalizeEmail, supervisorEmails } = require('./dc-scan-inventory');
 
 const DUMP_BIN_SITE = (process.env.DUMP_BIN_SITE || 'https://the-dump-bin.com').replace(
   /\/$/,
