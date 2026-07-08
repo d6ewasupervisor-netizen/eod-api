@@ -30,6 +30,7 @@ const VOLUNTEERS = [
     name: 'Ruth Northcutt',
     displayName: 'Ruth Northcutt M',
     email: 'ruth.northcutt@sasretailservices.com',
+    alternateEmails: ['ruth.northcutt@advantagesolutions.net'],
     workdayId: '800258911',
     employeeId: 76141,
   },
@@ -52,8 +53,23 @@ const VOLUNTEERS = [
 
 const DEFAULT_SUPERVISOR_EMAIL = 'tyson.gauthier@retailodyssey.com';
 
+/** Emails granted via supervisor-approved DC Scan access requests. */
+const grantedVolunteerEmails = new Set();
+
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+function emailsForVolunteer(volunteer) {
+  const out = new Set();
+  if (!volunteer) return out;
+  const primary = normalizeEmail(volunteer.email);
+  if (primary) out.add(primary);
+  for (const alt of volunteer.alternateEmails || []) {
+    const em = normalizeEmail(alt);
+    if (em) out.add(em);
+  }
+  return out;
 }
 
 function normalizeStoreId(raw) {
@@ -73,7 +89,20 @@ function volunteerEmails() {
     .split(',')
     .map(normalizeEmail)
     .filter(Boolean);
-  return new Set([...VOLUNTEERS.map((v) => normalizeEmail(v.email)), ...extra]);
+  const fromVolunteers = VOLUNTEERS.flatMap((v) => [...emailsForVolunteer(v)]);
+  return new Set([...fromVolunteers, ...extra, ...grantedVolunteerEmails]);
+}
+
+function addGrantedVolunteerEmail(email) {
+  const em = normalizeEmail(email);
+  if (em) grantedVolunteerEmails.add(em);
+}
+
+function setGrantedVolunteerEmails(emails) {
+  grantedVolunteerEmails.clear();
+  for (const email of emails || []) {
+    addGrantedVolunteerEmail(email);
+  }
 }
 
 function supervisorEmails() {
@@ -102,7 +131,11 @@ function isSupervisorEmail(email) {
 
 function findVolunteerByEmail(email) {
   const em = normalizeEmail(email);
-  return VOLUNTEERS.find((v) => normalizeEmail(v.email) === em) || null;
+  return VOLUNTEERS.find((v) => emailsForVolunteer(v).has(em)) || null;
+}
+
+function canParticipateInDcScan(email) {
+  return isVolunteerEmail(email) || isSupervisorEmail(email);
 }
 
 function pacificYmd(date = new Date()) {
@@ -242,6 +275,10 @@ module.exports = {
   supervisorEmails,
   isVolunteerEmail,
   isSupervisorEmail,
+  canParticipateInDcScan,
+  emailsForVolunteer,
+  addGrantedVolunteerEmail,
+  setGrantedVolunteerEmails,
   findVolunteerByEmail,
   pacificYmd,
   weekdayShortPacific,

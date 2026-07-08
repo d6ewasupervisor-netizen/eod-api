@@ -1,29 +1,91 @@
 'use strict';
 
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const board = require('../lib/dc-scan-board');
 const notify = require('../lib/dc-scan-notify');
 const { buildFinalizedPledges } = require('../lib/dc-scan-sas-build');
 const {
+  newRequestId,
+  createDcScanAccessRequest,
+  getPendingDcScanAccessRequestForEmail,
+} = require('../lib/dc-scan-access-db');
+const {
   isVolunteerEmail,
   isSupervisorEmail,
+  canParticipateInDcScan,
   normalizeEmail,
   volunteerEmails,
   supervisorEmails,
+  findVolunteerByEmail,
 } = require('../lib/dc-scan-inventory');
+
+const accessRequestLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many access requests. Try again later.' },
+});
 
 function createDcScanBoardRouter({ resend }) {
   const router = express.Router();
 
-  router.get('/approved-users', (req, res) => {
+  router.get('/approved-users', async (req, res) => {
+    const email = normalizeEmail(req.user?.email);
+    let pendingAccessRequest = false;
+    try {
+      pendingAccessRequest = Boolean(await getPendingDcScanAccessRequestForEmail(email));
+    } catch (_) {}
     res.json({
       ok: true,
       approvedEmails: [...volunteerEmails()].sort(),
       supervisorEmails: [...supervisorEmails()].sort(),
-      me: normalizeEmail(req.user?.email),
-      isVolunteer: isVolunteerEmail(req.user?.email),
-      isSupervisor: isSupervisorEmail(req.user?.email),
+      me: email,
+      isVolunteer: isVolunteerEmail(email),
+      isSupervisor: isSupervisorEmail(email),
+      canParticipate: canParticipateInDcScan(email),
+      pendingAccessRequest,
     });
+  });
+
+  router.post('/access-request', accessRequestLimiter, async (req, res) => {
+    try {
+      const email = normalizeEmail(req.user?.email);
+      if (!email) {
+        return res.status(401).json({ error: 'Signed-in email is required.' });
+      }
+      if (canParticipateInDcScan(email)) {
+        return res.status(400).json({ error: 'Your account already has DC Scan access.' });
+      }
+
+      const pending = await getPendingDcScanAccessRequestForEmail(email);
+      if (pending) {
+        return res.json({
+          success: true,
+          message: 'Your access request is already pending supervisor approval.',
+          pending: true,
+        });
+      }
+
+      const volunteer = findVolunteerByEmail(email);
+      const rawName = req.body?.name ? String(req.body.name) : '';
+      const name = (rawName.trim() || volunteer?.name || email.split('@')[0]).slice(0, 200);
+      const reason = String(req.body?.reason || '').trim().slice(0, 1000) || null;
+
+      const id = newRequestId();
+      const record = await createDcScanAccessRequest({ id, name, email, reason });
+      await notify.notifyDcScanAccessRequest(resend, { record });
+
+      return res.json({
+        success: true,
+        message: 'Access request sent. Your supervisor will review it shortly.',
+        pending: true,
+      });
+    } catch (err) {
+      console.error('[dc-scan] access-request', err);
+      return res.status(500).json({ error: err.message || 'Could not submit access request.' });
+    }
   });
 
   router.get('/', (req, res) => {

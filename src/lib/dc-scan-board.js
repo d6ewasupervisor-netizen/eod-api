@@ -17,6 +17,7 @@ const {
   isVolunteerEmail,
   isSupervisorEmail,
   findVolunteerByEmail,
+  setGrantedVolunteerEmails,
   weekContext,
   wedThuFriDates,
   thisWeekSlotId,
@@ -26,6 +27,7 @@ const {
   pacificYmd,
   weekdayShortPacific,
 } = require('./dc-scan-inventory');
+const { loadGrantedVolunteerEmails } = require('./dc-scan-access-db');
 
 const bus = new EventEmitter();
 bus.setMaxListeners(200);
@@ -566,6 +568,11 @@ async function reconcileFromProd(liveProd) {
 async function init(dbPool) {
   pool = dbPool;
   await ensureTable();
+  try {
+    setGrantedVolunteerEmails(await loadGrantedVolunteerEmails());
+  } catch (err) {
+    console.warn('[dc-scan] could not load volunteer grants:', err.message);
+  }
   state = await loadState();
   const ctx = weekContext(new Date());
   if (seedIfNeeded(ctx)) {

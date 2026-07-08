@@ -233,6 +233,108 @@ async function notifyFinalize(resend, { email, name, pledges, buildResults }) {
   }).catch((err) => console.error('[dc-scan-notify] finalize user', err.message));
 }
 
+function buildDcScanAccessDecisionUrl(id, action, approverEmail) {
+  const { computeDecisionToken } = require('../routes/dc-scan-access-decision');
+  const fallback = process.env.RAILWAY_PUBLIC_DOMAIN
+    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+    : 'https://eod-api.the-dump-bin.com';
+  const base = (process.env.BACKEND_BASE_URL || fallback).replace(/\/+$/, '');
+  const token = computeDecisionToken(id, action, approverEmail);
+  return `${base}/api/dc-scan-access-requests/${encodeURIComponent(id)}/${action}?token=${token}&by=${encodeURIComponent(approverEmail)}`;
+}
+
+async function notifyDcScanAccessRequest(resend, { record }) {
+  const approvers = [...supervisorEmails()];
+  for (const approver of approvers) {
+    const reasonRow = record.reason
+      ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:13px;vertical-align:top;">Note</td>
+             <td style="padding:6px 0 6px 16px;font-size:14px;">${esc(record.reason)}</td></tr>`
+      : '';
+    const approveUrl = buildDcScanAccessDecisionUrl(record.id, 'approve', approver);
+    const denyUrl = buildDcScanAccessDecisionUrl(record.id, 'deny', approver);
+    const html = `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f4f6fa;padding:32px 16px;">
+      <div style="background:#fff;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.08);padding:32px;max-width:520px;margin:0 auto;border:1px solid #e5e7eb;">
+        <h2 style="margin:0 0 4px;color:#1a3a6e;font-size:18px;">DC Scan volunteer access request</h2>
+        <p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Someone signed in to The Dump Bin but is not on the DC Scan volunteer list yet.</p>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+          <tr>
+            <td style="padding:6px 0;color:#6b7280;font-size:13px;vertical-align:top;">Name</td>
+            <td style="padding:6px 0 6px 16px;font-size:14px;font-weight:600;">${esc(record.name || '—')}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#6b7280;font-size:13px;vertical-align:top;">Email</td>
+            <td style="padding:6px 0 6px 16px;font-size:14px;">${esc(record.email)}</td>
+          </tr>
+          ${reasonRow}
+        </table>
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="padding-right:8px;">
+              <a href="${esc(approveUrl)}"
+                 style="display:block;background:#15803d;color:#fff;text-align:center;padding:14px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">
+                ✓ Approve
+              </a>
+            </td>
+            <td style="padding-left:8px;">
+              <a href="${esc(denyUrl)}"
+                 style="display:block;background:#b91c1c;color:#fff;text-align:center;padding:14px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">
+                ✗ Deny
+              </a>
+            </td>
+          </tr>
+        </table>
+        <p style="margin-top:16px;color:#9ca3af;font-size:12px;">
+          Approve adds this person to the DC Scan volunteer list. They can refresh the board to claim stores.
+        </p>
+      </div></div>`;
+    const text = [
+      'DC Scan volunteer access request',
+      '',
+      `Name: ${record.name || '—'}`,
+      `Email: ${record.email}`,
+      record.reason ? `Note: ${record.reason}` : '',
+      '',
+      `Approve: ${approveUrl}`,
+      `Deny: ${denyUrl}`,
+    ].filter((line) => line !== null).join('\n');
+
+    await sendMail(resend, {
+      to: approver,
+      subject: `[DC Scan] Access request: ${record.name || record.email} (${record.email})`,
+      html,
+      text,
+      tag: 'dc-scan-access-request',
+      replyTo: record.email,
+    }).catch((err) => console.error('[dc-scan-notify] access request', err.message));
+  }
+}
+
+async function notifyDcScanAccessResolved(resend, { record, action }) {
+  const approved = action === 'approve';
+  const greeting = record.name ? `Hi ${esc(record.name)},` : 'Hello,';
+  const html = approved
+    ? `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 16px;color:#1f2937;">
+        <h2 style="color:#1a3a6e;margin:0 0 16px;">${greeting}</h2>
+        <p style="margin:0 0 12px;">Your DC Scan volunteer access request was approved. Refresh the board and claim your stores.</p>
+        <p style="margin:0;"><a href="${esc(DASHBOARD_URL)}">Open DC Scan board</a></p>
+      </div>`
+    : `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 16px;color:#1f2937;">
+        <h2 style="color:#1a3a6e;margin:0 0 16px;">${greeting}</h2>
+        <p style="margin:0 0 12px;">Your DC Scan volunteer access request was reviewed and was not approved at this time.</p>
+        <p style="margin:0;color:#6b7280;font-size:14px;">If you believe this is an error, contact your supervisor directly.</p>
+      </div>`;
+  await sendMail(resend, {
+    to: record.email,
+    subject: approved ? '[DC Scan] Access approved — you can claim stores' : '[DC Scan] Access request update',
+    html,
+    text: approved
+      ? `Your DC Scan access was approved. Open ${DASHBOARD_URL}`
+      : 'Your DC Scan access request was not approved.',
+    tag: approved ? 'dc-scan-access-approved' : 'dc-scan-access-denied',
+  }).catch((err) => console.error('[dc-scan-notify] access resolved', err.message));
+}
+
 module.exports = {
   approverEmail,
   notifyClaim,
@@ -240,6 +342,8 @@ module.exports = {
   notifyChangeResolved,
   notifyFinalize,
   notifyVolunteerInvite,
+  notifyDcScanAccessRequest,
+  notifyDcScanAccessResolved,
   buildVolunteerInviteContent,
   volunteerInviteFrom,
   DASHBOARD_URL,
