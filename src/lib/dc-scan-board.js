@@ -3,6 +3,12 @@
 const { EventEmitter } = require('events');
 const crypto = require('crypto');
 const {
+  findProdVisit,
+  findProdVisitInWeek,
+  volunteerEmailForEmployeeId,
+} = require('./dc-scan-sas-prod');
+const { getLiveProd, startDcScanProdSync } = require('./dc-scan-sas-sync');
+const {
   STORES,
   VOLUNTEERS,
   normalizeEmail,
@@ -232,7 +238,37 @@ function validateScheduledDate(ymd, allowedDates, todayYmd) {
   return date;
 }
 
-function buildPanel(scope, weekMeta, todayYmd) {
+function prodSummaryForStore(storeId, scope, weekMeta, liveProd) {
+  if (!liveProd?.ok) return null;
+  if (scope === 'thisWeek') {
+    return findProdVisitInWeek(liveProd, storeId, weekMeta.startDate, weekMeta.endDate);
+  }
+  return findProdVisitInWeek(liveProd, storeId, weekMeta.startDate, weekMeta.endDate);
+}
+
+function formatProdSchedule(prod) {
+  if (!prod) return null;
+  const parts = [];
+  if (prod.shiftStartTime) {
+    parts.push(prod.shiftStartTime);
+    if (prod.shiftEndTime) parts.push('–', prod.shiftEndTime);
+  }
+  return {
+    scheduledDate: prod.scheduledDate,
+    shiftStartTime: prod.shiftStartTime,
+    shiftEndTime: prod.shiftEndTime,
+    scheduleLabel: parts.join(' ').trim() || null,
+    visitId: prod.visitId,
+    visitStatus: prod.visitStatus,
+    shiftId: prod.lead?.shiftId || null,
+    shiftStatus: prod.lead?.shiftStatus || null,
+    leadName: prod.lead?.name || null,
+    leadEmployeeId: prod.lead?.employeeId || null,
+    shiftCount: prod.shiftCount || 0,
+  };
+}
+
+function buildPanel(scope, weekMeta, todayYmd, liveProd) {
   const allowedDates = wedThuFriDates(weekMeta.startDate, weekMeta.endDate);
   const stores = STORES.map((store) => {
     const slotId =
@@ -241,12 +277,26 @@ function buildPanel(scope, weekMeta, todayYmd) {
         : ongoingSlotId(weekMeta.weekKey, store.id);
     const pledge = activePledgeForSlot(slotId);
     const pending = pendingChangeForSlot(slotId);
+    const prodRaw = prodSummaryForStore(store.id, scope, weekMeta, liveProd);
+    const prod = formatProdSchedule(prodRaw);
+    const prodForPledge = pledge
+      ? formatProdSchedule(findProdVisit(liveProd, store.id, pledge.scheduledDate))
+      : null;
+    const prodDisplay = prodForPledge || prod;
+
     let status = 'open';
     if (pledge) {
-      if (pledge.buildStatus === 'built') status = 'built';
-      else if (pledge.finalized) status = 'finalized';
-      else status = 'pledged';
+      if (pledge.buildStatus === 'built' || (prodForPledge?.shiftId && prodForPledge?.visitId)) {
+        status = 'built';
+      } else if (pledge.finalized) {
+        status = 'finalized';
+      } else {
+        status = 'pledged';
+      }
+    } else if (prod?.visitId && prod?.leadName) {
+      status = 'scheduled';
     }
+
     return {
       id: store.id,
       label: store.label,
@@ -254,6 +304,7 @@ function buildPanel(scope, weekMeta, todayYmd) {
       state: store.state,
       slotId,
       status,
+      prod,
       pledge: pledge
         ? {
             id: pledge.id,
@@ -263,12 +314,30 @@ function buildPanel(scope, weekMeta, todayYmd) {
             pledgedAt: pledge.pledgedAt,
             finalized: Boolean(pledge.finalized),
             buildStatus: pledge.buildStatus || 'pending',
-            sasVisitId: pledge.sasVisitId || null,
-            sasShiftId: pledge.sasShiftId || null,
+            sasVisitId: pledge.sasVisitId || prodForPledge?.visitId || null,
+            sasShiftId: pledge.sasShiftId || prodForPledge?.shiftId || null,
+            sasStartTime: pledge.sasStartTime || prodForPledge?.shiftStartTime || null,
+            sasEndTime: pledge.sasEndTime || prodForPledge?.shiftEndTime || null,
             sasError: pledge.sasError || null,
             source: pledge.source || 'claim',
+            prod: prodForPledge,
           }
-        : null,
+        : prodDisplay?.leadName
+          ? {
+              id: null,
+              name: prodDisplay.leadName,
+              email: volunteerEmailForEmployeeId(prodDisplay.leadEmployeeId),
+              scheduledDate: prodDisplay.scheduledDate,
+              finalized: true,
+              buildStatus: 'built',
+              sasVisitId: prodDisplay.visitId,
+              sasShiftId: prodDisplay.shiftId,
+              sasStartTime: prodDisplay.shiftStartTime,
+              sasEndTime: prodDisplay.shiftEndTime,
+              source: 'prod',
+              prod: prodDisplay,
+            }
+          : null,
       pendingChange: pending
         ? {
             id: pending.id,
@@ -288,7 +357,8 @@ function buildPanel(scope, weekMeta, todayYmd) {
     open: stores.filter((s) => s.status === 'open').length,
     pledged: stores.filter((s) => s.status === 'pledged').length,
     finalized: stores.filter((s) => s.status === 'finalized').length,
-    built: stores.filter((s) => s.status === 'built').length,
+    built: stores.filter((s) => s.status === 'built' || s.status === 'scheduled').length,
+    scheduled: stores.filter((s) => s.status === 'scheduled').length,
   };
   stats.remaining = stats.open;
 
@@ -309,16 +379,30 @@ function buildPanel(scope, weekMeta, todayYmd) {
 
 function buildSnapshot() {
   const ctx = weekContext(new Date());
-  const thisWeek = buildPanel('thisWeek', ctx.thisWeek, ctx.todayYmd);
-  const ongoing = buildPanel('ongoing', ctx.ongoingWeek, ctx.todayYmd);
+  const liveProd = getLiveProd();
+  const thisWeek = buildPanel('thisWeek', ctx.thisWeek, ctx.todayYmd, liveProd);
+  const ongoing = buildPanel('ongoing', ctx.ongoingWeek, ctx.todayYmd, liveProd);
   const pledges = activePledges()
     .slice()
-    .sort((a, b) => String(a.storeId).localeCompare(String(b.storeId)));
+    .sort((a, b) => String(a.storeId).localeCompare(String(b.storeId)))
+    .map((p) => ({
+      ...p,
+      prod: formatProdSchedule(findProdVisit(liveProd, p.storeId, p.scheduledDate)),
+    }));
 
   return {
     updatedAt: state.updatedAt,
     nowMs: Date.now(),
     todayYmd: ctx.todayYmd,
+    prod: {
+      ok: Boolean(liveProd?.ok),
+      sessionAlive: Boolean(liveProd?.sessionAlive),
+      projectId: liveProd?.projectId || 8081,
+      cycleId: liveProd?.cycleId || null,
+      syncedAt: liveProd?.syncedAt || null,
+      error: liveProd?.error || null,
+      visitCount: (liveProd?.visits || []).length,
+    },
     volunteers: VOLUNTEERS.map((v) => ({
       name: v.preferredName || v.name,
       email: v.email,
@@ -355,6 +439,57 @@ function broadcast() {
   return snapshot;
 }
 
+async function reconcileFromProd(liveProd) {
+  if (!liveProd?.ok || !liveProd.visits?.length) return { changed: false };
+  return queueMutation(async () => {
+    let changed = false;
+    for (const prod of liveProd.visits) {
+      if (!prod.lead?.shiftId || !prod.visitId) continue;
+
+      const slotId = thisWeekSlotId(prod.storeId);
+      const pledge = activePledges().find(
+        (p) =>
+          p.slotId === slotId ||
+          (p.storeId === prod.storeId && p.scheduledDate === prod.scheduledDate),
+      );
+
+      if (!pledge) continue;
+
+      if (pledge.buildStatus !== 'built') {
+        pledge.buildStatus = 'built';
+        pledge.builtAt = pledge.builtAt || new Date().toISOString();
+        changed = true;
+      }
+      if (!pledge.finalized) {
+        pledge.finalized = true;
+        changed = true;
+      }
+      if (pledge.sasVisitId !== prod.visitId) {
+        pledge.sasVisitId = prod.visitId;
+        changed = true;
+      }
+      if (pledge.sasShiftId !== prod.lead.shiftId) {
+        pledge.sasShiftId = prod.lead.shiftId;
+        changed = true;
+      }
+      if (prod.shiftStartTime && pledge.sasStartTime !== prod.shiftStartTime) {
+        pledge.sasStartTime = prod.shiftStartTime;
+        changed = true;
+      }
+      if (prod.shiftEndTime && pledge.sasEndTime !== prod.shiftEndTime) {
+        pledge.sasEndTime = prod.shiftEndTime;
+        changed = true;
+      }
+      if (pledge.sasError) {
+        pledge.sasError = null;
+        changed = true;
+      }
+    }
+    if (changed) await persist();
+    return { changed };
+  });
+}
+
 async function init(dbPool) {
   pool = dbPool;
   await ensureTable();
@@ -363,6 +498,10 @@ async function init(dbPool) {
   if (seedIfNeeded(ctx)) {
     await persist();
   }
+  startDcScanProdSync({
+    broadcast: () => broadcast(),
+    reconcileFromProd,
+  });
   return broadcast();
 }
 
@@ -689,6 +828,7 @@ module.exports = {
   applyChangeDecision,
   finalizeSelections,
   markPledgeBuildResult,
+  reconcileFromProd,
   getChangeRequest,
   subscribe,
   activePledges,
