@@ -296,13 +296,30 @@ function drawPins(doc, orderedStores, projection, mapBox) {
     .clip();
   orderedStores.forEach((store, index) => {
     const p = projectToMap(store, projection, mapBox);
-    const r = 12;
+    const label = String(store.store);
+    const r = label.length >= 3 ? 18 : 16;
+    const fontSize = label.length >= 3 ? 8 : 9;
+
     doc.circle(p.x, p.y, r + 2).fill('#ffffff');
     doc.circle(p.x, p.y, r).fill('#b91c1c');
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9)
-      .text(String(index + 1), p.x - r, p.y - 5, { width: r * 2, align: 'center' });
-    doc.fillColor('#111827').font('Helvetica-Bold').fontSize(8)
-      .text(`#${store.store}`, p.x + 14, p.y - 7, { width: 58, height: 12, ellipsis: true });
+
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(fontSize);
+    const storeTextHeight = doc.heightOfString(label, { width: r * 2 });
+    doc.text(label, p.x - r, p.y - storeTextHeight / 2, { width: r * 2, align: 'center' });
+
+    const orderLabel = String(index + 1);
+    const orderR = 10;
+    const orderFontSize = 9;
+    const orderCy = p.y - r - 8 - orderR;
+
+    doc.circle(p.x, orderCy, orderR + 1.5).fill('#ffffff');
+    doc.circle(p.x, orderCy, orderR).fill('#15803d');
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(orderFontSize);
+    const orderTextHeight = doc.heightOfString(orderLabel, { width: orderR * 2 });
+    doc.text(orderLabel, p.x - orderR, orderCy - orderTextHeight / 2, {
+      width: orderR * 2,
+      align: 'center',
+    });
   });
   doc.restore();
 }
