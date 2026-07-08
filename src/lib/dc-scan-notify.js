@@ -14,7 +14,7 @@ const DUMP_BIN_SITE = (process.env.DUMP_BIN_SITE || 'https://the-dump-bin.com').
 );
 const DASHBOARD_URL =
   process.env.DC_SCAN_DASHBOARD_URL ||
-  'https://eod-api.the-dump-bin.com/dc-scan/';
+  'https://the-dump-bin.com/dc-scan/';
 
 function approverEmail() {
   return (

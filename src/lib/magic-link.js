@@ -35,6 +35,11 @@ function isChecklanesPath(pathname) {
   return path === '/checklanes' || path === '/checklanes/' || path.startsWith('/checklanes/');
 }
 
+function isDcScanPath(pathname) {
+  const path = (pathname || '/').toLowerCase();
+  return path === '/dc-scan' || path === '/dc-scan/' || path.startsWith('/dc-scan/');
+}
+
 function isAllowedDestinationUrl(url) {
   const host = url.host.toLowerCase();
   if (allowedReturnHosts().has(host)) {
@@ -45,7 +50,7 @@ function isAllowedDestinationUrl(url) {
   if (url.host === 'the-dump-bin.com') {
     const path = (url.pathname || '/').toLowerCase();
     if (path === '/' || path === '/index.html') return true;
-    return isChecklanesPath(path);
+    return isChecklanesPath(path) || isDcScanPath(path);
   }
   if (url.host.endsWith('.github.io')) {
     const path = (url.pathname || '/').toLowerCase();

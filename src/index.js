@@ -469,16 +469,9 @@ async function start() {
   });
   app.use('/api/fm391-p05w3', createFm391P05W3PhotosRouter({ resend, logger }));
 
-  const dcScanDir = path.join(__dirname, 'public', 'dc-scan');
-  app.use('/dc-scan/assets', express.static(path.join(dcScanDir, 'assets'), {
-    fallthrough: false,
-    maxAge: 0,
-    setHeaders: (res) => {
-      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-    },
-  }));
-  app.get(['/dc-scan', '/dc-scan/'], (_req, res) => {
-    res.sendFile(path.join(dcScanDir, 'index.html'));
+  app.get(['/dc-scan', '/dc-scan/'], (req, res) => {
+    const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(302, `https://the-dump-bin.com/dc-scan/${qs}`);
   });
   await initDcScanBoard(pool);
   app.use('/api/dc-scan', createDcScanBoardRouter({ resend }));
