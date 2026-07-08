@@ -268,6 +268,30 @@ function formatProdSchedule(prod) {
   };
 }
 
+function resolveProdForStorePledge(liveProd, storeId, pledge, weekMeta) {
+  if (!liveProd?.ok) return null;
+  if (pledge?.sasVisitId) {
+    const byId = (liveProd.visits || []).find(
+      (v) => Number(v.visitId) === Number(pledge.sasVisitId),
+    );
+    if (byId) return formatProdSchedule(byId);
+  }
+  if (pledge?.scheduledDate) {
+    const exact = formatProdSchedule(findProdVisit(liveProd, storeId, pledge.scheduledDate));
+    if (exact?.visitId) return exact;
+  }
+  return formatProdSchedule(
+    findProdVisitInWeek(liveProd, storeId, weekMeta.startDate, weekMeta.endDate),
+  );
+}
+
+function pledgeIsBuilt(pledge, prodFormatted) {
+  if (!pledge) return false;
+  if (pledge.buildStatus === 'built') return true;
+  if (pledge.sasVisitId && pledge.sasShiftId) return true;
+  return Boolean(prodFormatted?.visitId && prodFormatted?.shiftId);
+}
+
 function buildPanel(scope, weekMeta, todayYmd, liveProd) {
   const allowedDates = wedThuFriDates(weekMeta.startDate, weekMeta.endDate);
   const stores = STORES.map((store) => {
@@ -280,20 +304,21 @@ function buildPanel(scope, weekMeta, todayYmd, liveProd) {
     const prodRaw = prodSummaryForStore(store.id, scope, weekMeta, liveProd);
     const prod = formatProdSchedule(prodRaw);
     const prodForPledge = pledge
-      ? formatProdSchedule(findProdVisit(liveProd, store.id, pledge.scheduledDate))
+      ? resolveProdForStorePledge(liveProd, store.id, pledge, weekMeta)
       : null;
     const prodDisplay = prodForPledge || prod;
+    const built = pledgeIsBuilt(pledge, prodDisplay);
 
     let status = 'open';
     if (pledge) {
-      if (pledge.buildStatus === 'built' || (prodForPledge?.shiftId && prodForPledge?.visitId)) {
+      if (built) {
         status = 'built';
       } else if (pledge.finalized) {
         status = 'finalized';
       } else {
         status = 'pledged';
       }
-    } else if (prod?.visitId && prod?.leadName) {
+    } else if (prod?.visitId && (prod?.shiftId || prod?.leadName)) {
       status = 'scheduled';
     }
 
@@ -312,15 +337,15 @@ function buildPanel(scope, weekMeta, todayYmd, liveProd) {
             email: pledge.email,
             scheduledDate: pledge.scheduledDate,
             pledgedAt: pledge.pledgedAt,
-            finalized: Boolean(pledge.finalized),
-            buildStatus: pledge.buildStatus || 'pending',
-            sasVisitId: pledge.sasVisitId || prodForPledge?.visitId || null,
-            sasShiftId: pledge.sasShiftId || prodForPledge?.shiftId || null,
-            sasStartTime: pledge.sasStartTime || prodForPledge?.shiftStartTime || null,
-            sasEndTime: pledge.sasEndTime || prodForPledge?.shiftEndTime || null,
+            finalized: Boolean(pledge.finalized || built),
+            buildStatus: built ? 'built' : (pledge.buildStatus || 'pending'),
+            sasVisitId: pledge.sasVisitId || prodDisplay?.visitId || null,
+            sasShiftId: pledge.sasShiftId || prodDisplay?.shiftId || null,
+            sasStartTime: pledge.sasStartTime || prodDisplay?.shiftStartTime || null,
+            sasEndTime: pledge.sasEndTime || prodDisplay?.shiftEndTime || null,
             sasError: pledge.sasError || null,
             source: pledge.source || 'claim',
-            prod: prodForPledge,
+            prod: prodDisplay,
           }
         : prodDisplay?.leadName
           ? {
@@ -385,10 +410,21 @@ function buildSnapshot() {
   const pledges = activePledges()
     .slice()
     .sort((a, b) => String(a.storeId).localeCompare(String(b.storeId)))
-    .map((p) => ({
-      ...p,
-      prod: formatProdSchedule(findProdVisit(liveProd, p.storeId, p.scheduledDate)),
-    }));
+    .map((p) => {
+      const prod = resolveProdForStorePledge(
+        liveProd,
+        p.storeId,
+        p,
+        p.scope === 'ongoing' ? ctx.ongoingWeek : ctx.thisWeek,
+      );
+      const built = pledgeIsBuilt(p, prod);
+      return {
+        ...p,
+        finalized: Boolean(p.finalized || built),
+        buildStatus: built ? 'built' : (p.buildStatus || 'pending'),
+        prod,
+      };
+    });
 
   return {
     updatedAt: state.updatedAt,
@@ -444,16 +480,20 @@ async function reconcileFromProd(liveProd) {
   return queueMutation(async () => {
     let changed = false;
     for (const prod of liveProd.visits) {
-      if (!prod.lead?.shiftId || !prod.visitId) continue;
+      if (!prod.visitId) continue;
 
       const slotId = thisWeekSlotId(prod.storeId);
       const pledge = activePledges().find(
         (p) =>
           p.slotId === slotId ||
-          (p.storeId === prod.storeId && p.scheduledDate === prod.scheduledDate),
+          (p.storeId === prod.storeId && p.scheduledDate === prod.scheduledDate) ||
+          (p.sasVisitId && Number(p.sasVisitId) === Number(prod.visitId)),
       );
 
       if (!pledge) continue;
+
+      const shiftId = prod.lead?.shiftId || pledge.sasShiftId;
+      if (!shiftId) continue;
 
       if (pledge.buildStatus !== 'built') {
         pledge.buildStatus = 'built';
@@ -468,8 +508,8 @@ async function reconcileFromProd(liveProd) {
         pledge.sasVisitId = prod.visitId;
         changed = true;
       }
-      if (pledge.sasShiftId !== prod.lead.shiftId) {
-        pledge.sasShiftId = prod.lead.shiftId;
+      if (pledge.sasShiftId !== shiftId) {
+        pledge.sasShiftId = shiftId;
         changed = true;
       }
       if (prod.shiftStartTime && pledge.sasStartTime !== prod.shiftStartTime) {
