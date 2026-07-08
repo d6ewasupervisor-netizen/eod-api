@@ -117,6 +117,10 @@ function seedIfNeeded(ctx) {
       name: 'Wolf',
       scheduledDate: ctx.todayYmd,
       note: 'Pre-seeded: Wolf already on store 31 today',
+      finalized: true,
+      sasVisitId: 27034474,
+      sasShiftId: 44474494,
+      buildStatus: 'built',
     },
     {
       storeId: '53',
@@ -124,6 +128,7 @@ function seedIfNeeded(ctx) {
       name: 'James Duchene',
       scheduledDate: ctx.todayYmd,
       note: 'Pre-seeded: James already on store 53 today',
+      finalized: true,
       sasVisitId: 27034491,
       sasShiftId: 44474532,
       buildStatus: 'built',
@@ -134,7 +139,11 @@ function seedIfNeeded(ctx) {
   for (const seed of seeds) {
     const slotId = thisWeekSlotId(seed.storeId);
     if (!slotId) continue;
-    if (state.pledges.some((p) => p.slotId === slotId && !p.releasedAt)) continue;
+    const existing = state.pledges.find((p) => p.slotId === slotId && !p.releasedAt);
+    if (existing) {
+      if (syncPledgeToBuiltSeed(existing, seed)) changed = true;
+      continue;
+    }
     state.pledges.push({
       id: pledgeId(),
       slotId,
@@ -147,13 +156,45 @@ function seedIfNeeded(ctx) {
       pledgedAt: new Date().toISOString(),
       source: 'seed',
       note: seed.note,
-      finalized: false,
+      finalized: Boolean(seed.finalized),
       buildStatus: seed.buildStatus || 'pending',
       sasVisitId: seed.sasVisitId || null,
       sasShiftId: seed.sasShiftId || null,
       sasError: null,
       releasedAt: null,
+      builtAt: seed.buildStatus === 'built' ? new Date().toISOString() : null,
     });
+    changed = true;
+  }
+  return changed;
+}
+
+function syncPledgeToBuiltSeed(pledge, seed) {
+  if (seed.buildStatus !== 'built') return false;
+  let changed = false;
+  if (pledge.buildStatus !== 'built') {
+    pledge.buildStatus = 'built';
+    pledge.builtAt = pledge.builtAt || new Date().toISOString();
+    changed = true;
+  }
+  if (seed.finalized && !pledge.finalized) {
+    pledge.finalized = true;
+    changed = true;
+  }
+  if (seed.sasVisitId && pledge.sasVisitId !== seed.sasVisitId) {
+    pledge.sasVisitId = seed.sasVisitId;
+    changed = true;
+  }
+  if (seed.sasShiftId && pledge.sasShiftId !== seed.sasShiftId) {
+    pledge.sasShiftId = seed.sasShiftId;
+    changed = true;
+  }
+  if (pledge.sasError) {
+    pledge.sasError = null;
+    changed = true;
+  }
+  if (seed.note && pledge.note !== seed.note) {
+    pledge.note = seed.note;
     changed = true;
   }
   return changed;
