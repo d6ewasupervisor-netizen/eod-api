@@ -1035,11 +1035,7 @@ function registerRoutes(app, pool) {
         return res.json({ categoryResetId: null, images: [] });
       }
 
-      const images = (maintenance.state?.after?.images || []).map(img => ({
-        id: img.id,
-        url: img.url,
-        source: 'prod',
-      }));
+      const images = (maintenance.state?.after?.images || []).map(mapSasMaintenanceImage);
 
       return res.json({ categoryResetId: maintenance.id, images });
     } catch (err) {
@@ -1068,11 +1064,7 @@ function registerRoutes(app, pool) {
         return res.json({ categoryResetId: null, images: [] });
       }
 
-      const images = (maintenance.state?.before?.images || []).map(img => ({
-        id: img.id,
-        url: img.url,
-        source: 'prod',
-      }));
+      const images = (maintenance.state?.before?.images || []).map(mapSasMaintenanceImage);
 
       return res.json({ categoryResetId: maintenance.id, images });
     } catch (err) {
@@ -1110,17 +1102,9 @@ function registerRoutes(app, pool) {
       };
 
       if (maintenance) {
-        const beforeImages = (maintenance.state?.before?.images || []).map(img => ({
-          id: img.id,
-          url: img.url,
-          source: 'prod',
-        }));
+        const beforeImages = (maintenance.state?.before?.images || []).map(mapSasMaintenanceImage);
 
-        const afterImages = (maintenance.state?.after?.images || []).map(img => ({
-          id: img.id,
-          url: img.url,
-          source: 'prod',
-        }));
+        const afterImages = (maintenance.state?.after?.images || []).map(mapSasMaintenanceImage);
 
         result.maintenance = {
           categoryResetId: maintenance.id,
@@ -1329,6 +1313,43 @@ async function uploadCategoryResetPhoto(visitId, resetId, photoBase64, slot, fil
   return uploadPhoto(visitId, resetId, photoBase64, slot, filename, filetype);
 }
 
+/** Prefer full-resolution SAS maintenance URLs over thumbnail variants when available. */
+function pickBestSasMaintenanceImageUrl(img) {
+  if (!img || typeof img !== 'object') return '';
+  const candidates = [
+    img.original_url,
+    img.originalUrl,
+    img.full_url,
+    img.fullUrl,
+    img.large_url,
+    img.largeUrl,
+    img.url,
+  ].filter((u) => typeof u === 'string' && u.trim());
+  if (!candidates.length) return '';
+
+  const score = (url) => {
+    const lower = url.toLowerCase();
+    let s = 0;
+    if (lower.includes('thumbnail') || lower.includes('/tmb/')) s -= 100;
+    if (lower.includes('medium_thumbnail') || lower.includes('medium_')) s -= 50;
+    if (lower.includes('/media/image_')) s += 20;
+    if (lower.includes('cloudfront.net')) s += 10;
+    return s + Math.min(url.length, 240) / 240;
+  };
+
+  return candidates.slice().sort((a, b) => score(b) - score(a))[0];
+}
+
+function mapSasMaintenanceImage(img) {
+  return {
+    id: img.id,
+    url: pickBestSasMaintenanceImageUrl(img),
+    width: img.width || img.image_width || null,
+    height: img.height || img.image_height || null,
+    source: 'prod',
+  };
+}
+
 module.exports = {
   init,
   getHeaders,
@@ -1337,4 +1358,6 @@ module.exports = {
   isSessionAlive: () => sasSession.alive,
   applySession,
   uploadCategoryResetPhoto,
+  pickBestSasMaintenanceImageUrl,
+  mapSasMaintenanceImage,
 };
