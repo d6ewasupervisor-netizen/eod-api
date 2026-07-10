@@ -64,7 +64,7 @@ Stores: **19, 28, 31, 53, 215, 459, 682** (exact match only — see `sas-exact-s
 4. **Completed** visits/shifts in SAS count as PROD-confirmed (FM 31 may show Completed).
 5. **Finalize** locks picks and runs `dc-scan-sas-build` (staggered RO8 visits/shifts).
 6. **Reschedule (self-serve):** volunteer changes Wed–Fri day via `POST /api/dc-scan/reschedule` → patches SAS `scheduled_date` + `due_by`; **Cc Tyson**.
-7. **Back out (dropout):** emails other volunteers with `?takeOffer=` deep link; **holds SAS shift** until a teammate takes it → reassign lead + remove dropper (`dc-scan-sas-mutate.js`).
+7. **Back out (dropout):** emails other volunteers (Cc supervisor) with `?offer=` deep link that **only prefills** the Open coverage confirm panel — **never auto-assigns**. Human must click **Confirm — assign me as lead** on the dashboard → then reassign lead + remove dropper (`dc-scan-sas-mutate.js`). Email security bots following links must not mutate SAS.
 8. **Store swap** still needs supervisor approval via `decide.html` (`type=dcscan`).
 9. Auth: Dump Bin magic-link JWT (`auth-gate.js`); **DC Scan volunteer allowlist** in `dc-scan-inventory.js` (separate from Dump Bin sign-in).
 10. **Email aliases:** `alternateEmails` on roster entries; `DC_SCAN_VOLUNTEER_EMAILS` env; `dc_scan_volunteer_grants` after supervisor approval.

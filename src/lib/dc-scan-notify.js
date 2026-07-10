@@ -148,22 +148,25 @@ async function notifyDropoutOffer(resend, { request, pledge }) {
     console.warn('[dc-scan-notify] dropout: no teammates to notify');
     return null;
   }
-  const claimUrl = `${DASHBOARD_URL}?takeOffer=${encodeURIComponent(request.id)}`;
+  // Prefill-only deep link: opens dashboard with the offer selected.
+  // Assignment requires an explicit Confirm click on the board (email bots must not mutate).
+  const claimUrl = `${DASHBOARD_URL}?offer=${encodeURIComponent(request.id)}`;
   const subject = `[DC Scan] Open shift — FM ${request.storeId} on ${request.scheduledDate} needs coverage`;
   const html = `
     <div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.55;color:#1a1a1a;max-width:640px;">
       <p><strong>${esc(request.requestedByName)}</strong> needs to back out of
       <strong>FM ${esc(request.storeId)}</strong> on <strong>${esc(request.scheduledDate)}</strong>.</p>
-      <p>The shift is <strong>on hold</strong> in SAS until someone on the team takes it.
-      If you can cover it, click below to open the board and assign yourself as lead.</p>
+      <p>The shift is <strong>on hold</strong> in SAS until someone on the team takes it.</p>
+      <p>Click below to open the board with this shift ready. You still need to press
+      <strong>Confirm — assign me as lead</strong> on the dashboard — the email link alone does nothing.</p>
       ${request.note ? `<p>Note: ${esc(request.note)}</p>` : ''}
       <p style="margin:24px 0;">
         <a href="${esc(claimUrl)}"
            style="display:inline-block;background:#0d4f8b;color:#fff;padding:14px 22px;border-radius:8px;text-decoration:none;font-weight:700;">
-          I can take this shift
+          Open board to review this shift
         </a>
       </p>
-      <p style="font-size:13px;color:#555;">Or open the board and use <em>Take open shift</em> under Open coverage:
+      <p style="font-size:13px;color:#555;">Tyson is copied on this thread. Board:
       <a href="${esc(DASHBOARD_URL)}">${esc(DASHBOARD_URL)}</a></p>
     </div>`;
   return sendMail(resend, {
@@ -173,8 +176,9 @@ async function notifyDropoutOffer(resend, { request, pledge }) {
     html,
     text: [
       `${request.requestedByName} backed out of FM ${request.storeId} on ${request.scheduledDate}.`,
-      `Take it: ${claimUrl}`,
+      `Open board (review only — confirm on dashboard to take it): ${claimUrl}`,
       `Board: ${DASHBOARD_URL}`,
+      'Tyson is copied on this email.',
     ].join('\n'),
     tag: 'dc-scan-dropout-offer',
   });

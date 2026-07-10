@@ -4,7 +4,7 @@
 
 - **Reschedule / back out** must stay available after finalize (do not hide behind `!finalized`).
 - Reschedule = self-serve Wed–Fri; patches SAS `scheduled_date` + `due_by`; Cc supervisor.
-- Back out (`dropout`) = email teammates with `?takeOffer=` link; **do not** delete SAS shift until someone takes it.
+- Back out (`dropout`) = email teammates (Cc supervisor) with `?offer=` link that **only prefills** the confirm panel. **Never** auto-call `/take-offer` from a GET/deep link — email security scanners follow links. Human must click **Confirm — assign me as lead**. Hold SAS until then.
 - Store swap still goes through supervisor `decide.html`.
 
 ## Claimed is not In PROD
