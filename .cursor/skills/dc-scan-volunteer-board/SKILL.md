@@ -4,9 +4,10 @@ description: >-
   Build and operate the live DC Scan volunteer signup board (SAS PROD project
   8081 / RO8 DC Scans): dual-panel claims, Dump Bin auth, SAS PROD live sync,
   finalize→SAS build, decide.html release/swap approvals, Resend notifications,
-  and volunteer onboarding email. Use when the user mentions DC Scan, dc-scan,
-  project 8081, RO8 DC Scans, P06W3 volunteer board, or FM 19/28/31/53/215/459/682
-  signup.
+  volunteer onboarding email, volunteer allowlist/email aliases, and supervisor
+  access-request approvals. Use when the user mentions DC Scan, dc-scan,
+  project 8081, RO8 DC Scans, P06W3 volunteer board, DC Scan allowlist,
+  volunteer access request, or FM 19/28/31/53/215/459/682 signup.
 ---
 
 # DC Scan volunteer board
@@ -29,14 +30,18 @@ Extends the generic [shift_volunteer](../../../../.cursor/skills/shift_volunteer
 | Role | Repo | Path |
 |------|------|------|
 | Inventory, volunteers, fiscal weeks | eod-api | `src/lib/dc-scan-inventory.js` |
+| Access grants + requests DB | eod-api | `src/lib/dc-scan-access-db.js` |
 | Postgres state, snapshot, SSE | eod-api | `src/lib/dc-scan-board.js` |
 | SAS PROD fetch (project 8081) | eod-api | `src/lib/dc-scan-sas-prod.js` |
 | PROD poll + SAS session refresh | eod-api | `src/lib/dc-scan-sas-sync.js` |
 | Finalize → create visits/shifts | eod-api | `src/lib/dc-scan-sas-build.js` |
+| Reschedule / reassign lead in PROD | eod-api | `src/lib/dc-scan-sas-mutate.js` |
 | Resend notifications | eod-api | `src/lib/dc-scan-notify.js` |
 | API routes | eod-api | `src/routes/dc-scan-board.js` |
+| Access approve/deny (email links) | eod-api | `src/routes/dc-scan-access-decision.js` |
 | decide.html integration | eod-api | `src/routes/decide.js` (`type=dcscan`) |
 | Dashboard HTML | the-dump-bin | `dc-scan/index.html` |
+| UI skill + black-screen fixes | the-dump-bin | `.cursor/skills/dc-scan-volunteer-board/` |
 | Auth gate | the-dump-bin | `auth-gate.js` (shared) |
 | Volunteer invite script | eod-api | `scripts/send-dc-scan-volunteer-invite.js` |
 
@@ -44,7 +49,7 @@ Extends the generic [shift_volunteer](../../../../.cursor/skills/shift_volunteer
 
 | Person | Email | SAS employeeId |
 |--------|-------|----------------|
-| Ruth Northcutt | ruth.northcutt@sasretailservices.com | 76141 |
+| Ruth Northcutt | ruth.northcutt@sasretailservices.com (+ `ruth.northcutt@advantagesolutions.net`) | 76141 |
 | James Duchene | james.duchene@retailodyssey.com | 394407 |
 | Wolf (Aiyana Natarisalazar) | aiyana.natarisalazar@retailodyssey.com | 155473 |
 | Supervisor | tyson.gauthier@retailodyssey.com | — |
@@ -58,8 +63,18 @@ Stores: **19, 28, 31, 53, 215, 459, 682** (exact match only — see `sas-exact-s
 3. **Claimed ≠ In PROD.** Badge **In PROD** / **Completed** only when live SAS sync confirms the visit (`prod.ok`). Stored `sasVisitId` / seed data alone is **not** enough.
 4. **Completed** visits/shifts in SAS count as PROD-confirmed (FM 31 may show Completed).
 5. **Finalize** locks picks and runs `dc-scan-sas-build` (staggered RO8 visits/shifts).
-6. **Release/swap** → `decide.html` / `POST /api/decide` with `type=dcscan`; supervisor approves via email link.
-7. Auth: Dump Bin magic-link JWT (`auth-gate.js`); allowlists in `dc-scan-inventory.js`.
+6. **Reschedule (self-serve):** volunteer changes Wed–Fri day via `POST /api/dc-scan/reschedule` → patches SAS `scheduled_date` + `due_by`; **Cc Tyson**.
+7. **Back out (dropout):** emails other volunteers with `?takeOffer=` deep link; **holds SAS shift** until a teammate takes it → reassign lead + remove dropper (`dc-scan-sas-mutate.js`).
+8. **Store swap** still needs supervisor approval via `decide.html` (`type=dcscan`).
+9. Auth: Dump Bin magic-link JWT (`auth-gate.js`); **DC Scan volunteer allowlist** in `dc-scan-inventory.js` (separate from Dump Bin sign-in).
+10. **Email aliases:** `alternateEmails` on roster entries; `DC_SCAN_VOLUNTEER_EMAILS` env; `dc_scan_volunteer_grants` after supervisor approval.
+11. **Access requests:** signed-in non-volunteers → `POST /api/dc-scan/access-request` → supervisor email → approve adds grant.
+
+## Volunteer allowlist vs Dump Bin auth
+
+Dump Bin corporate domains let users **sign in**. DC Scan has a **second** allowlist for **claiming**. Read [access-and-allowlist.md](access-and-allowlist.md) before unblocking volunteers.
+
+Supervisor notification setup: [supervisor-notify.md](supervisor-notify.md).
 
 ## Startup order (mandatory)
 
@@ -81,9 +96,14 @@ If PROD sync starts before `sasBridge.init()`, the banner stays **PROD pending**
 | GET | `/api/dc-scan/` | JWT | Snapshot |
 | GET | `/api/dc-scan/events` | JWT (`access_token` query) | SSE |
 | POST | `/api/dc-scan/claim` | volunteer | Claim store + date |
-| POST | `/api/dc-scan/change-request` | volunteer | Release or swap request |
+| POST | `/api/dc-scan/reschedule` | volunteer | Self-serve day change + SAS date patch; Cc supervisor |
+| POST | `/api/dc-scan/change-request` | volunteer | `dropout` (teammate offer) or `swap` (supervisor approve) |
+| POST | `/api/dc-scan/take-offer` | volunteer | Accept open dropout; reassign SAS lead |
+| POST | `/api/dc-scan/cancel-offer` | volunteer | Cancel own open dropout offer |
 | POST | `/api/dc-scan/finalize` | volunteer | Lock + SAS build |
 | POST | `/api/dc-scan/resync` | JWT | Force SAS refresh + PROD fetch (no page reload) |
+| GET | `/api/dc-scan/approved-users` | JWT | `canParticipate`, `pendingAccessRequest` |
+| POST | `/api/dc-scan/access-request` | JWT | Request DC Scan volunteer access (emails supervisor) |
 | POST | `/api/dc-scan/send-invite` | **supervisor** | Email volunteers dashboard + instructions |
 
 ## PROD sync
@@ -101,6 +121,7 @@ If PROD sync starts before `sasBridge.init()`, the banner stays **PROD pending**
 | Claim | DC Scan Board default | approver |
 | Change request | DC Scan Board default | approver + decide link |
 | Finalize | DC Scan Board default | approver + volunteer |
+| **Access request** | DC Scan Board default | `supervisorEmails()` (set `DC_SCAN_APPROVER_EMAIL` on Railway) |
 
 Send onboarding email:
 
@@ -114,7 +135,7 @@ node scripts/send-dc-scan-volunteer-invite.js
 
 Or after deploy, supervisor-signed `POST /api/dc-scan/send-invite`.
 
-Env overrides: `DC_SCAN_FROM_ADDRESS`, `DC_SCAN_DASHBOARD_URL`, `DC_SCAN_APPROVER_EMAIL`.
+Env overrides: `DC_SCAN_FROM_ADDRESS`, `DC_SCAN_DASHBOARD_URL`, **`DC_SCAN_APPROVER_EMAIL`** (required on Railway: `tyson.gauthier@retailodyssey.com`).
 
 ## Deploy checklist
 
@@ -122,6 +143,7 @@ Env overrides: `DC_SCAN_FROM_ADDRESS`, `DC_SCAN_DASHBOARD_URL`, `DC_SCAN_APPROVE
 DC Scan deploy:
 - [ ] Push eod-api to GitHub main (Railway auto-deploy or manual redeploy from dashboard)
 - [ ] Push the-dump-bin to GitHub main (GitHub Pages)
+- [ ] Confirm DC_SCAN_APPROVER_EMAIL=tyson.gauthier@retailodyssey.com on Railway
 - [ ] Confirm SAS creds on Railway (SAS_USER, SAS_PASS, SAS_TOTP_SECRET)
 - [ ] Hard-refresh https://the-dump-bin.com/dc-scan/
 - [ ] Resync SAS PROD — banner should show visit count
@@ -138,6 +160,9 @@ Read [gotchas.md](gotchas.md) before changing status logic, PROD sync, or deploy
 
 ## Additional resources
 
+- Volunteer allowlist + access requests: [access-and-allowlist.md](access-and-allowlist.md)
+- Supervisor email / notify: [supervisor-notify.md](supervisor-notify.md)
+- UI boot / black screen: `the-dump-bin/.cursor/skills/dc-scan-volunteer-board/ui-troubleshooting.md`
 - Pain points: [gotchas.md](gotchas.md)
 - Env vars, status matrix, seeds: [reference.md](reference.md)
 - Generic volunteer-board pattern: `~/.cursor/skills/shift_volunteer/SKILL.md`

@@ -6,6 +6,10 @@ const board = require('../lib/dc-scan-board');
 const notify = require('../lib/dc-scan-notify');
 const { buildFinalizedPledges } = require('../lib/dc-scan-sas-build');
 const {
+  rescheduleVisitDates,
+  reassignVisitLead,
+} = require('../lib/dc-scan-sas-mutate');
+const {
   newRequestId,
   createDcScanAccessRequest,
   getPendingDcScanAccessRequestForEmail,
@@ -118,18 +122,79 @@ function createDcScanBoardRouter({ resend }) {
     }
   });
 
+  router.post('/reschedule', async (req, res) => {
+    try {
+      const email = req.user?.email;
+      const { pledgeId, scheduledDate, note } = req.body || {};
+      const out = await board.reschedulePledge({
+        email,
+        pledgeId,
+        scheduledDate,
+        note,
+      });
+
+      let sasError = null;
+      if (out.pledge.sasVisitId) {
+        try {
+          await rescheduleVisitDates({
+            visitId: out.pledge.sasVisitId,
+            storeId: out.pledge.storeId,
+            newDate: out.scheduledDate,
+          });
+        } catch (err) {
+          sasError = err.message || 'SAS date update failed';
+          console.error('[dc-scan] reschedule SAS', err);
+        }
+      }
+
+      notify
+        .notifyReschedule(resend, {
+          pledge: out.pledge,
+          previousDate: out.previousDate,
+          scheduledDate: out.scheduledDate,
+          actorEmail: normalizeEmail(email),
+        })
+        .catch(() => {});
+
+      return res.json({
+        success: !sasError,
+        message: sasError
+          ? `Board date updated to ${out.scheduledDate}, but SAS PROD update failed: ${sasError}`
+          : `Rescheduled FM ${out.pledge.storeId} to ${out.scheduledDate}. Tyson was copied.`,
+        snapshot: board.buildSnapshot(),
+        pledge: out.pledge,
+        sasError,
+      });
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Reschedule failed' });
+    }
+  });
+
   router.post('/change-request', async (req, res) => {
     try {
       const email = req.user?.email;
       const { pledgeId, type, note, swapToStoreId, swapToDate } = req.body || {};
+      const changeType = type === 'dropout' ? 'dropout' : type;
       const { snapshot, request, pledge } = await board.requestChange({
         email,
         pledgeId,
-        type,
+        type: changeType,
         note,
         swapToStoreId,
         swapToDate,
       });
+
+      if (request.type === 'dropout') {
+        await notify.notifyDropoutOffer(resend, { request, pledge });
+        return res.json({
+          success: true,
+          message:
+            'Teammates were emailed. Your shift is on hold until someone takes it — nothing was removed from SAS yet.',
+          snapshot,
+          request,
+        });
+      }
+
       await notify.notifyChangeRequest(resend, { request, pledge });
       return res.json({
         success: true,
@@ -139,6 +204,74 @@ function createDcScanBoardRouter({ resend }) {
       });
     } catch (err) {
       return res.status(400).json({ error: err.message || 'Change request failed' });
+    }
+  });
+
+  router.post('/take-offer', async (req, res) => {
+    try {
+      const email = req.user?.email;
+      const { requestId } = req.body || {};
+      const out = await board.acceptOpenOffer({ email, requestId });
+
+      let sasError = null;
+      if (out.previous.sasVisitId && out.previous.employeeId && out.taker?.employeeId) {
+        try {
+          const sas = await reassignVisitLead({
+            visitId: out.previous.sasVisitId,
+            storeId: out.pledge.storeId,
+            fromEmployeeId: out.previous.employeeId,
+            toEmployeeId: out.taker.employeeId,
+            shiftId: out.previous.sasShiftId,
+            scheduledDate: out.pledge.scheduledDate,
+          });
+          if (sas.newShiftId) {
+            await board.markPledgeBuildResult(out.pledge.id, {
+              ok: true,
+              visitId: out.previous.sasVisitId,
+              shiftId: sas.newShiftId,
+            });
+          }
+        } catch (err) {
+          sasError = err.message || 'SAS lead reassignment failed';
+          console.error('[dc-scan] take-offer SAS', err);
+        }
+      }
+
+      notify
+        .notifyOfferTaken(resend, {
+          request: out.request,
+          pledge: out.pledge,
+          previous: out.previous,
+        })
+        .catch(() => {});
+
+      return res.json({
+        success: !sasError,
+        message: sasError
+          ? `You are assigned on the board, but SAS PROD reassignment failed: ${sasError}`
+          : `You are now lead for FM ${out.pledge.storeId} on ${out.pledge.scheduledDate}.`,
+        snapshot: board.buildSnapshot(),
+        pledge: out.pledge,
+        sasError,
+      });
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Could not take open shift' });
+    }
+  });
+
+  router.post('/cancel-offer', async (req, res) => {
+    try {
+      const email = req.user?.email;
+      const { requestId } = req.body || {};
+      const { snapshot, request } = await board.cancelOpenOffer({ email, requestId });
+      return res.json({
+        success: true,
+        message: 'Open shift offer cancelled. You remain assigned.',
+        snapshot,
+        request,
+      });
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Could not cancel offer' });
     }
   });
 

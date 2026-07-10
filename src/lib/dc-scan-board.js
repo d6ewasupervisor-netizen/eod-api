@@ -483,15 +483,35 @@ function buildSnapshot() {
     thisWeek,
     ongoing,
     pledges,
+    openOffers: (state.changeRequests || [])
+      .filter((r) => r.status === 'pending' && r.type === 'dropout')
+      .map((r) => ({
+        id: r.id,
+        type: r.type,
+        pledgeId: r.pledgeId,
+        slotId: r.slotId,
+        storeId: r.storeId,
+        scope: r.scope,
+        weekKey: r.weekKey,
+        scheduledDate: r.scheduledDate,
+        requestedByEmail: r.requestedByEmail,
+        requestedByName: r.requestedByName,
+        note: r.note || '',
+        requestedAt: r.requestedAt,
+        sasVisitId: r.sasVisitId || null,
+        sasShiftId: r.sasShiftId || null,
+      })),
     changeRequests: (state.changeRequests || [])
       .filter((r) => r.status === 'pending')
       .map((r) => ({
         id: r.id,
         type: r.type,
+        pledgeId: r.pledgeId,
         slotId: r.slotId,
         storeId: r.storeId,
         scope: r.scope,
         weekKey: r.weekKey,
+        scheduledDate: r.scheduledDate,
         requestedByEmail: r.requestedByEmail,
         requestedByName: r.requestedByName,
         note: r.note || '',
@@ -673,6 +693,61 @@ async function addPledge({ email, scope, storeId, scheduledDate, forceName }) {
   });
 }
 
+function weekMetaForPledge(pledge, ctx = weekContext(new Date())) {
+  return pledge.scope === 'ongoing' ? ctx.ongoingWeek : ctx.thisWeek;
+}
+
+function allowedDatesForPledge(pledge, ctx = weekContext(new Date())) {
+  const weekMeta = weekMetaForPledge(pledge, ctx);
+  return wedThuFriDates(weekMeta.startDate, weekMeta.endDate);
+}
+
+function dateFloorForPledge(pledge, ctx = weekContext(new Date())) {
+  const weekMeta = weekMetaForPledge(pledge, ctx);
+  return pledge.scope === 'thisWeek' ? ctx.todayYmd : weekMeta.startDate;
+}
+
+async function reschedulePledge({ email, pledgeId: pid, scheduledDate, note }) {
+  return queueMutation(async () => {
+    const em = requireActor(email);
+    const id = String(pid || '').trim();
+    if (!id) throw new Error('Missing pledge id.');
+
+    const pledge = activePledges().find((p) => p.id === id);
+    if (!pledge) throw new Error('Commitment not found. It may already be released.');
+    if (normalizeEmail(pledge.email) !== em && !isSupervisorEmail(em)) {
+      throw new Error('You can only reschedule your own commitments.');
+    }
+    if (pendingChangeForSlot(pledge.slotId)) {
+      throw new Error('A change request is already pending for this store. Cancel or wait before rescheduling.');
+    }
+
+    const ctx = weekContext(new Date());
+    const allowed = allowedDatesForPledge(pledge, ctx);
+    const nextDate = validateScheduledDate(
+      scheduledDate,
+      allowed,
+      dateFloorForPledge(pledge, ctx),
+    );
+    if (nextDate === pledge.scheduledDate) {
+      throw new Error('Pick a different day than the one already assigned.');
+    }
+
+    const previousDate = pledge.scheduledDate;
+    pledge.scheduledDate = nextDate;
+    pledge.note = String(note || '').trim().slice(0, 500) || pledge.note || null;
+    pledge.updatedAt = new Date().toISOString();
+
+    await persist();
+    return {
+      snapshot: broadcast(),
+      pledge,
+      previousDate,
+      scheduledDate: nextDate,
+    };
+  });
+}
+
 async function requestChange({
   email,
   pledgeId: pid,
@@ -685,7 +760,8 @@ async function requestChange({
     const em = requireActor(email);
     const id = String(pid || '').trim();
     if (!id) throw new Error('Missing pledge id.');
-    const changeType = type === 'swap' ? 'swap' : 'release';
+    const changeType =
+      type === 'swap' ? 'swap' : type === 'dropout' ? 'dropout' : 'release';
 
     const pledge = activePledges().find((p) => p.id === id);
     if (!pledge) throw new Error('Commitment not found. It may already be released.');
@@ -705,10 +781,7 @@ async function requestChange({
         throw new Error('Pick a different store to swap into.');
       }
       const ctx = weekContext(new Date());
-      const weekMeta =
-        pledge.scope === 'ongoing'
-          ? ctx.ongoingWeek
-          : ctx.thisWeek;
+      const weekMeta = weekMetaForPledge(pledge, ctx);
       const targetSlot =
         pledge.scope === 'ongoing'
           ? ongoingSlotId(weekMeta.weekKey, swapStore)
@@ -717,12 +790,11 @@ async function requestChange({
       if (taken) {
         throw new Error(`FM ${swapStore} is already claimed by ${taken.name}.`);
       }
-      const allowed = wedThuFriDates(weekMeta.startDate, weekMeta.endDate);
-      const dateFloor = pledge.scope === 'thisWeek' ? ctx.todayYmd : weekMeta.startDate;
+      const allowed = allowedDatesForPledge(pledge, ctx);
       swapDate = validateScheduledDate(
         swapToDate || pledge.scheduledDate,
         allowed,
-        dateFloor,
+        dateFloorForPledge(pledge, ctx),
       );
     }
 
@@ -741,12 +813,119 @@ async function requestChange({
       note: String(note || '').trim().slice(0, 500),
       swapToStoreId: swapStore,
       swapToDate: swapDate,
+      sasVisitId: pledge.sasVisitId || null,
+      sasShiftId: pledge.sasShiftId || null,
       requestedAt: new Date().toISOString(),
       resolvedAt: null,
       resolvedBy: null,
     };
 
+    // Dropout: hold the shift — do not release or mutate SAS until a teammate takes it.
+    if (changeType === 'dropout') {
+      pledge.pendingDropoutRequestId = req.id;
+    }
+
     state.changeRequests.push(req);
+    await persist();
+    return { snapshot: broadcast(), request: req, pledge };
+  });
+}
+
+/**
+ * Teammate accepts an open dropout offer: becomes lead; original volunteer is released.
+ */
+async function acceptOpenOffer({ email, requestId: rid }) {
+  return queueMutation(async () => {
+    const em = requireActor(email);
+    if (!isVolunteerEmail(em) && !isSupervisorEmail(em)) {
+      throw new Error('Only DC Scan volunteers can take an open shift.');
+    }
+
+    const req = (state.changeRequests || []).find((r) => r.id === String(rid || ''));
+    if (!req || req.type !== 'dropout') {
+      throw new Error('Open shift offer not found.');
+    }
+    if (req.status !== 'pending') {
+      throw new Error(`This offer is already ${req.status}.`);
+    }
+    if (normalizeEmail(req.requestedByEmail) === em) {
+      throw new Error('You cannot take your own dropped shift.');
+    }
+
+    const pledge = activePledges().find((p) => p.id === req.pledgeId);
+    if (!pledge) {
+      req.status = 'cancelled';
+      req.resolvedAt = new Date().toISOString();
+      await persist();
+      throw new Error('That shift is no longer on the board.');
+    }
+
+    const fromEmail = normalizeEmail(pledge.email);
+    const fromName = pledge.name;
+    const fromVolunteer = findVolunteerByEmail(fromEmail);
+    const toVolunteer = findVolunteerByEmail(em);
+    if (!toVolunteer?.employeeId) {
+      throw new Error('Your account is missing a SAS employee mapping. Contact Tyson.');
+    }
+
+    const now = new Date().toISOString();
+    const previous = {
+      email: fromEmail,
+      name: fromName,
+      employeeId: fromVolunteer?.employeeId || null,
+      sasVisitId: pledge.sasVisitId || req.sasVisitId || null,
+      sasShiftId: pledge.sasShiftId || req.sasShiftId || null,
+    };
+
+    pledge.email = em;
+    pledge.name = displayNameForEmail(em);
+    pledge.source = 'offer-take';
+    pledge.pledgedAt = now;
+    pledge.finalized = true;
+    pledge.buildStatus = previous.sasVisitId ? 'built' : 'queued';
+    pledge.pendingDropoutRequestId = null;
+    pledge.note = `Took open shift from ${fromName}`;
+    pledge.updatedAt = now;
+
+    req.status = 'taken';
+    req.resolvedAt = now;
+    req.resolvedBy = em;
+    req.takenByEmail = em;
+    req.takenByName = pledge.name;
+
+    await persist();
+    return {
+      snapshot: broadcast(),
+      request: req,
+      pledge,
+      previous,
+      taker: toVolunteer,
+    };
+  });
+}
+
+async function cancelOpenOffer({ email, requestId: rid }) {
+  return queueMutation(async () => {
+    const em = requireActor(email);
+    const req = (state.changeRequests || []).find((r) => r.id === String(rid || ''));
+    if (!req || req.type !== 'dropout') {
+      throw new Error('Open shift offer not found.');
+    }
+    if (req.status !== 'pending') {
+      throw new Error(`This offer is already ${req.status}.`);
+    }
+    if (normalizeEmail(req.requestedByEmail) !== em && !isSupervisorEmail(em)) {
+      throw new Error('Only the person who dropped the shift (or a supervisor) can cancel the offer.');
+    }
+
+    const now = new Date().toISOString();
+    req.status = 'cancelled';
+    req.resolvedAt = now;
+    req.resolvedBy = em;
+
+    const pledge = activePledges().find((p) => p.id === req.pledgeId);
+    if (pledge) pledge.pendingDropoutRequestId = null;
+
     await persist();
     return { snapshot: broadcast(), request: req, pledge };
   });
@@ -920,7 +1099,10 @@ module.exports = {
   buildSnapshot,
   broadcast,
   addPledge,
+  reschedulePledge,
   requestChange,
+  acceptOpenOffer,
+  cancelOpenOffer,
   applyChangeDecision,
   finalizeSelections,
   markPledgeBuildResult,
@@ -931,4 +1113,5 @@ module.exports = {
   displayNameForEmail,
   getStore,
   parseSlotId,
+  allowedDatesForPledge,
 };

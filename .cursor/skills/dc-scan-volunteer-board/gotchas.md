@@ -1,5 +1,12 @@
 # DC Scan board — gotchas
 
+## Modify / release UI
+
+- **Reschedule / back out** must stay available after finalize (do not hide behind `!finalized`).
+- Reschedule = self-serve Wed–Fri; patches SAS `scheduled_date` + `due_by`; Cc supervisor.
+- Back out (`dropout`) = email teammates with `?takeOffer=` link; **do not** delete SAS shift until someone takes it.
+- Store swap still goes through supervisor `decide.html`.
+
 ## Claimed is not In PROD
 
 **Never** mark a store **Built** / **In PROD** from:
@@ -55,7 +62,34 @@ Store **28** must not match **281**, **128**, etc.
 - Volunteers sign in via Dump Bin magic link (`/signin.html?next=/dc-scan/`).
 - API calls use `dumpBinAuthFetch` → JWT on `Authorization` header.
 - SSE uses `?access_token=` on `/api/dc-scan/events`.
-- Allowlist is code + `DC_SCAN_VOLUNTEER_EMAILS` / `DC_SCAN_SUPERVISOR_EMAILS` env.
+- **Dump Bin sign-in ≠ DC Scan claim access.** Corporate domains pass sign-in; claiming needs volunteer allowlist.
+- Allowlist: `VOLUNTEERS` (+ `alternateEmails`) + `DC_SCAN_VOLUNTEER_EMAILS` env + `dc_scan_volunteer_grants` table.
+- Signed-in non-volunteers: UI access gate → `POST /api/dc-scan/access-request` → supervisor approve.
+
+See [access-and-allowlist.md](access-and-allowlist.md).
+
+## Email alias mismatch
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Signed in OK; claim says **not on allowlist** | Session email ≠ roster primary (e.g. `@advantagesolutions.net` vs `@sasretailservices.com`) | Add `alternateEmails` on volunteer in `dc-scan-inventory.js`; or `DC_SCAN_VOLUNTEER_EMAILS`; or approve access request |
+| User already on Dump Bin allowlist | Confused two auth layers | Dump Bin access does not grant DC Scan claims |
+
+## Supervisor email not sent
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Access request submitted; no email | `supervisorEmails` not imported in `dc-scan-notify.js` | Import from `dc-scan-inventory.js` |
+| No approver on Railway | `DC_SCAN_APPROVER_EMAIL` unset | Set to `tyson.gauthier@retailodyssey.com` — see [supervisor-notify.md](supervisor-notify.md) |
+
+## UI black screen (the-dump-bin)
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Black page, no content | JS syntax error; `#app` stays hidden | Validate inline script; fix duplicate/broken functions |
+| Flash then black | `auth-gate` hide without `revealPage` | `auth-gate.js` in `<head>`; `bounceToSignIn` calls `revealPage()` first |
+
+Full UI checklist: `the-dump-bin/.cursor/skills/dc-scan-volunteer-board/ui-troubleshooting.md`.
 
 ## Seeds vs live PROD
 

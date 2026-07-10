@@ -118,6 +118,85 @@ async function notifyChangeResolved(resend, { request, status }) {
   }).catch((err) => console.error('[dc-scan-notify] resolved', err.message));
 }
 
+async function notifyReschedule(resend, { pledge, previousDate, scheduledDate, actorEmail }) {
+  const name = pledge.name || actorEmail;
+  const subject = `[DC Scan] ${name} rescheduled FM ${pledge.storeId} → ${scheduledDate}`;
+  const html = `
+    <p><strong>${esc(name)}</strong> (${esc(actorEmail)}) rescheduled
+    <strong>FM ${esc(pledge.storeId)}</strong> from <strong>${esc(previousDate)}</strong>
+    to <strong>${esc(scheduledDate)}</strong> (${esc(pledge.scope)} / ${esc(pledge.weekKey)}).</p>
+    ${pledge.sasVisitId ? `<p>SAS visit <code>${esc(pledge.sasVisitId)}</code> dates were updated in PROD.</p>` : '<p>Board date updated (no SAS visit id yet).</p>'}
+    <p><a href="${esc(DASHBOARD_URL)}">Open DC Scan board</a></p>`;
+  return sendMail(resend, {
+    to: approverEmail(),
+    cc: [normalizeEmail(actorEmail)].filter(Boolean),
+    subject,
+    html,
+    text: `${name} rescheduled FM ${pledge.storeId} from ${previousDate} to ${scheduledDate}`,
+    tag: 'dc-scan-reschedule',
+  }).catch((err) => console.error('[dc-scan-notify] reschedule', err.message));
+}
+
+function teammateEmailsExcept(excludeEmail) {
+  const skip = normalizeEmail(excludeEmail);
+  return VOLUNTEERS.map((v) => normalizeEmail(v.email)).filter((e) => e && e !== skip);
+}
+
+async function notifyDropoutOffer(resend, { request, pledge }) {
+  const to = teammateEmailsExcept(request.requestedByEmail);
+  if (!to.length) {
+    console.warn('[dc-scan-notify] dropout: no teammates to notify');
+    return null;
+  }
+  const claimUrl = `${DASHBOARD_URL}?takeOffer=${encodeURIComponent(request.id)}`;
+  const subject = `[DC Scan] Open shift — FM ${request.storeId} on ${request.scheduledDate} needs coverage`;
+  const html = `
+    <div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.55;color:#1a1a1a;max-width:640px;">
+      <p><strong>${esc(request.requestedByName)}</strong> needs to back out of
+      <strong>FM ${esc(request.storeId)}</strong> on <strong>${esc(request.scheduledDate)}</strong>.</p>
+      <p>The shift is <strong>on hold</strong> in SAS until someone on the team takes it.
+      If you can cover it, click below to open the board and assign yourself as lead.</p>
+      ${request.note ? `<p>Note: ${esc(request.note)}</p>` : ''}
+      <p style="margin:24px 0;">
+        <a href="${esc(claimUrl)}"
+           style="display:inline-block;background:#0d4f8b;color:#fff;padding:14px 22px;border-radius:8px;text-decoration:none;font-weight:700;">
+          I can take this shift
+        </a>
+      </p>
+      <p style="font-size:13px;color:#555;">Or open the board and use <em>Take open shift</em> under Open coverage:
+      <a href="${esc(DASHBOARD_URL)}">${esc(DASHBOARD_URL)}</a></p>
+    </div>`;
+  return sendMail(resend, {
+    to,
+    cc: [approverEmail()],
+    subject,
+    html,
+    text: [
+      `${request.requestedByName} backed out of FM ${request.storeId} on ${request.scheduledDate}.`,
+      `Take it: ${claimUrl}`,
+      `Board: ${DASHBOARD_URL}`,
+    ].join('\n'),
+    tag: 'dc-scan-dropout-offer',
+  });
+}
+
+async function notifyOfferTaken(resend, { request, pledge, previous }) {
+  const subject = `[DC Scan] ${pledge.name} took FM ${pledge.storeId} (was ${previous.name})`;
+  const html = `
+    <p><strong>${esc(pledge.name)}</strong> took the open shift for
+    <strong>FM ${esc(pledge.storeId)}</strong> on <strong>${esc(pledge.scheduledDate)}</strong>.</p>
+    <p>Previous lead <strong>${esc(previous.name)}</strong> (${esc(previous.email)}) was removed from the shift.</p>
+    <p><a href="${esc(DASHBOARD_URL)}">Open DC Scan board</a></p>`;
+  return sendMail(resend, {
+    to: [previous.email, pledge.email].filter(Boolean),
+    cc: [approverEmail()],
+    subject,
+    html,
+    text: `${pledge.name} took FM ${pledge.storeId}; ${previous.name} removed.`,
+    tag: 'dc-scan-offer-taken',
+  }).catch((err) => console.error('[dc-scan-notify] offer taken', err.message));
+}
+
 function volunteerInviteFrom() {
   return process.env.DC_SCAN_FROM_ADDRESS || 'DC Scans <dcscans@retail-odyssey.com>';
 }
@@ -150,7 +229,9 @@ function buildVolunteerInviteContent() {
         <li>You may claim <strong>more than one store</strong>.</li>
         <li>When your picks are right, tap <strong>Finalize</strong> to lock them and queue SAS visit/shift builds.</li>
         <li>A store shows <strong>In PROD</strong> or <strong>Completed</strong> only after we confirm it live in SAS — claimed is not the same as built.</li>
-        <li>Use <strong>Release / swap</strong> on your claim if plans change; Tyson approves those requests.</li>
+        <li>Use <strong>Reschedule / back out</strong> on your claim anytime (even after finalize).</li>
+        <li><strong>Reschedule</strong> changes the day yourself (Wed–Fri) and updates SAS; Tyson is copied.</li>
+        <li><strong>Back out</strong> emails teammates and holds the SAS shift until someone takes it.</li>
         <li>If the banner says PROD is pending, tap <strong>Resync SAS PROD</strong> (no page refresh needed).</li>
       </ul>
       <p style="margin-top:24px;">Wolf is already on <strong>FM 31</strong> and James on <strong>FM 53</strong> for today — you'll see those on the board once PROD syncs.</p>
@@ -340,6 +421,9 @@ module.exports = {
   notifyClaim,
   notifyChangeRequest,
   notifyChangeResolved,
+  notifyReschedule,
+  notifyDropoutOffer,
+  notifyOfferTaken,
   notifyFinalize,
   notifyVolunteerInvite,
   notifyDcScanAccessRequest,
