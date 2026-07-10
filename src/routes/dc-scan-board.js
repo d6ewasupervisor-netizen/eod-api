@@ -17,11 +17,14 @@ const {
 const {
   isVolunteerEmail,
   isSupervisorEmail,
+  isAdminEmail,
   canParticipateInDcScan,
   normalizeEmail,
   volunteerEmails,
   supervisorEmails,
+  adminEmails,
   findVolunteerByEmail,
+  VOLUNTEERS,
 } = require('../lib/dc-scan-inventory');
 
 const accessRequestLimiter = rateLimit({
@@ -45,9 +48,16 @@ function createDcScanBoardRouter({ resend }) {
       ok: true,
       approvedEmails: [...volunteerEmails()].sort(),
       supervisorEmails: [...supervisorEmails()].sort(),
+      adminEmails: [...adminEmails()].sort(),
+      volunteers: VOLUNTEERS.map((v) => ({
+        name: v.preferredName || v.name,
+        email: v.email,
+        displayName: v.displayName,
+      })),
       me: email,
       isVolunteer: isVolunteerEmail(email),
       isSupervisor: isSupervisorEmail(email),
+      isAdmin: isAdminEmail(email),
       canParticipate: canParticipateInDcScan(email),
       pendingAccessRequest,
     });
@@ -103,22 +113,89 @@ function createDcScanBoardRouter({ resend }) {
   router.post('/claim', async (req, res) => {
     try {
       const email = req.user?.email;
-      const { scope, storeId, scheduledDate } = req.body || {};
-      const { snapshot, pledge } = await board.addPledge({
+      const { scope, storeId, scheduledDate, assignToEmail, force, note } = req.body || {};
+      const { snapshot, pledge, previous } = await board.addPledge({
         email,
         scope,
         storeId,
         scheduledDate,
+        assignToEmail,
+        force,
+        note,
+      });
+      notify.notifyClaim(resend, { pledge }).catch(() => {});
+      const assignedOther = assignToEmail && normalizeEmail(assignToEmail) !== normalizeEmail(email);
+      return res.json({
+        success: true,
+        message: assignedOther
+          ? `Assigned FM ${pledge.storeId} to ${pledge.name} for ${pledge.scheduledDate}.`
+          : `Claimed FM ${pledge.storeId} for ${pledge.scheduledDate}.`,
+        snapshot,
+        pledge,
+        previous: previous
+          ? { id: previous.id, name: previous.name, email: previous.email }
+          : null,
+      });
+    } catch (err) {
+      return res.status(400).json({ error: err.message || 'Claim failed' });
+    }
+  });
+
+  router.post('/admin-assign', async (req, res) => {
+    try {
+      const email = req.user?.email;
+      if (!isAdminEmail(email) && !isSupervisorEmail(email)) {
+        return res.status(403).json({ error: 'Admin access required.' });
+      }
+      const {
+        scope,
+        storeId,
+        scheduledDate,
+        assignToEmail,
+        pledgeId,
+        release,
+        note,
+      } = req.body || {};
+
+      if (pledgeId) {
+        const out = await board.adminReassignPledge({
+          email,
+          pledgeId,
+          assignToEmail,
+          scheduledDate,
+          release: Boolean(release),
+          note,
+        });
+        return res.json({
+          success: true,
+          message: out.released
+            ? `Released FM ${out.pledge.storeId}.`
+            : `Reassigned FM ${out.pledge.storeId} to ${out.pledge.name}.`,
+          snapshot: out.snapshot,
+          pledge: out.pledge,
+        });
+      }
+
+      const { snapshot, pledge, previous } = await board.addPledge({
+        email,
+        scope,
+        storeId,
+        scheduledDate,
+        assignToEmail,
+        force: true,
+        note,
       });
       notify.notifyClaim(resend, { pledge }).catch(() => {});
       return res.json({
         success: true,
-        message: `Claimed FM ${pledge.storeId} for ${pledge.scheduledDate}.`,
+        message: previous
+          ? `Reassigned FM ${pledge.storeId} from ${previous.name} to ${pledge.name}.`
+          : `Assigned FM ${pledge.storeId} to ${pledge.name} for ${pledge.scheduledDate}.`,
         snapshot,
         pledge,
       });
     } catch (err) {
-      return res.status(400).json({ error: err.message || 'Claim failed' });
+      return res.status(400).json({ error: err.message || 'Admin assign failed' });
     }
   });
 

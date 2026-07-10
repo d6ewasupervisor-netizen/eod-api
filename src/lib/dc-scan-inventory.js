@@ -53,6 +53,12 @@ const VOLUNTEERS = [
 
 const DEFAULT_SUPERVISOR_EMAIL = 'tyson.gauthier@retailodyssey.com';
 
+/** Site admins: full force-assign / reassign powers on the DC Scan board. */
+const DEFAULT_ADMIN_EMAILS = [
+  'd6ewa.supervisor@gmail.com',
+  'tyson.gauthier@retailodyssey.com',
+];
+
 /** Emails granted via supervisor-approved DC Scan access requests. */
 const grantedVolunteerEmails = new Set();
 
@@ -105,9 +111,19 @@ function setGrantedVolunteerEmails(emails) {
   }
 }
 
+function adminEmails() {
+  const base = [...DEFAULT_ADMIN_EMAILS];
+  const extra = String(process.env.DC_SCAN_ADMIN_EMAILS || '')
+    .split(',')
+    .map(normalizeEmail)
+    .filter(Boolean);
+  return new Set([...base.map(normalizeEmail).filter(Boolean), ...extra]);
+}
+
 function supervisorEmails() {
   const base = [
     DEFAULT_SUPERVISOR_EMAIL,
+    ...DEFAULT_ADMIN_EMAILS,
     process.env.OVERRIDE_APPROVER_EMAIL,
     process.env.SHIFT_REQUEST_APPROVER_EMAIL,
     process.env.DC_SCAN_APPROVER_EMAIL,
@@ -118,7 +134,7 @@ function supervisorEmails() {
     .split(',')
     .map(normalizeEmail)
     .filter(Boolean);
-  return new Set([...base, ...extra]);
+  return new Set([...base, ...extra, ...adminEmails()]);
 }
 
 function isVolunteerEmail(email) {
@@ -129,13 +145,17 @@ function isSupervisorEmail(email) {
   return supervisorEmails().has(normalizeEmail(email));
 }
 
+function isAdminEmail(email) {
+  return adminEmails().has(normalizeEmail(email));
+}
+
 function findVolunteerByEmail(email) {
   const em = normalizeEmail(email);
   return VOLUNTEERS.find((v) => emailsForVolunteer(v).has(em)) || null;
 }
 
 function canParticipateInDcScan(email) {
-  return isVolunteerEmail(email) || isSupervisorEmail(email);
+  return isVolunteerEmail(email) || isSupervisorEmail(email) || isAdminEmail(email);
 }
 
 function pacificYmd(date = new Date()) {
@@ -268,13 +288,16 @@ module.exports = {
   STORE_IDS,
   VOLUNTEERS,
   DEFAULT_SUPERVISOR_EMAIL,
+  DEFAULT_ADMIN_EMAILS,
   normalizeEmail,
   normalizeStoreId,
   getStore,
   volunteerEmails,
   supervisorEmails,
+  adminEmails,
   isVolunteerEmail,
   isSupervisorEmail,
+  isAdminEmail,
   canParticipateInDcScan,
   emailsForVolunteer,
   addGrantedVolunteerEmail,

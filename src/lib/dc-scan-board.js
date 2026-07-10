@@ -16,6 +16,7 @@ const {
   getStore,
   isVolunteerEmail,
   isSupervisorEmail,
+  isAdminEmail,
   findVolunteerByEmail,
   setGrantedVolunteerEmails,
   weekContext,
@@ -480,6 +481,7 @@ function buildSnapshot() {
     })),
     approvedEmails: [...require('./dc-scan-inventory').volunteerEmails()].sort(),
     supervisorEmails: [...require('./dc-scan-inventory').supervisorEmails()].sort(),
+    adminEmails: [...require('./dc-scan-inventory').adminEmails()].sort(),
     thisWeek,
     ongoing,
     pledges,
@@ -624,15 +626,60 @@ function requireActor(email) {
   if (!em || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
     throw new Error('Signed-in email is required.');
   }
-  if (!isVolunteerEmail(em) && !isSupervisorEmail(em)) {
+  if (!isVolunteerEmail(em) && !isSupervisorEmail(em) && !isAdminEmail(em)) {
     throw new Error('Your account is not on the DC Scan signup allowlist.');
   }
   return em;
 }
 
-async function addPledge({ email, scope, storeId, scheduledDate, forceName }) {
+function resolveAssigneeEmail(rawEmail) {
+  const em = normalizeEmail(rawEmail);
+  if (!em || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+    throw new Error('Assignee email is required.');
+  }
+  const volunteer = findVolunteerByEmail(em);
+  return {
+    email: volunteer ? normalizeEmail(volunteer.email) : em,
+    name:
+      (volunteer && (volunteer.preferredName || volunteer.name)) ||
+      displayNameForEmail(em),
+    volunteer,
+  };
+}
+
+async function addPledge({
+  email,
+  scope,
+  storeId,
+  scheduledDate,
+  forceName,
+  assignToEmail,
+  force = false,
+  note,
+}) {
   return queueMutation(async () => {
-    const em = requireActor(email);
+    const actor = requireActor(email);
+    const adminForce = Boolean(force || assignToEmail);
+    if (adminForce && !isAdminEmail(actor) && !isSupervisorEmail(actor)) {
+      throw new Error('Only admins can assign stores to other people.');
+    }
+
+    const assignee = adminForce && assignToEmail
+      ? resolveAssigneeEmail(assignToEmail)
+      : {
+          email: actor,
+          name:
+            forceName ||
+            (() => {
+              const volunteer = findVolunteerByEmail(actor);
+              return (
+                (volunteer && (volunteer.preferredName || volunteer.name)) ||
+                displayNameForEmail(actor)
+              );
+            })(),
+          volunteer: findVolunteerByEmail(actor),
+        };
+
     const ctx = weekContext(new Date());
     const store = normalizeStoreId(storeId);
     if (!store) throw new Error('Invalid store number.');
@@ -651,16 +698,15 @@ async function addPledge({ email, scope, storeId, scheduledDate, forceName }) {
 
     const existing = activePledgeForSlot(slotId);
     if (existing) {
-      throw new Error(
-        `FM ${store} is already claimed by ${existing.name}. Request a swap/release if you need it.`,
-      );
+      if (!adminForce) {
+        throw new Error(
+          `FM ${store} is already claimed by ${existing.name}. Request a swap/release if you need it.`,
+        );
+      }
+      // Admin force-assign: release current holder, keep SAS ids if same store/date.
+      existing.releasedAt = new Date().toISOString();
+      existing.note = `Force-reassigned by ${actor}`;
     }
-
-    const volunteer = findVolunteerByEmail(em);
-    const name =
-      forceName ||
-      (volunteer && (volunteer.preferredName || volunteer.name)) ||
-      displayNameForEmail(em);
 
     const pledge = {
       id: pledgeId(),
@@ -668,28 +714,93 @@ async function addPledge({ email, scope, storeId, scheduledDate, forceName }) {
       scope: scopeNorm,
       weekKey: weekMeta.weekKey,
       storeId: store,
-      name,
-      email: em,
+      name: forceName || assignee.name,
+      email: assignee.email,
       scheduledDate: date,
       pledgedAt: new Date().toISOString(),
-      source: 'claim',
-      note: null,
+      source: adminForce ? 'admin-assign' : 'claim',
+      note: String(note || '').trim().slice(0, 500) || null,
       finalized: false,
       buildStatus: 'pending',
-      sasVisitId: null,
-      sasShiftId: null,
+      sasVisitId: existing && adminForce && existing.scheduledDate === date
+        ? existing.sasVisitId
+        : null,
+      sasShiftId: existing && adminForce && existing.scheduledDate === date
+        ? existing.sasShiftId
+        : null,
       sasError: null,
       releasedAt: null,
+      assignedByEmail: adminForce ? actor : null,
     };
 
-    // Claiming after a prior finalize puts the user back into draft for those slots.
-    if (state.finalizations[em]) {
-      // keep finalization record but new pledges start unfinalized
+    if (pledge.sasVisitId && pledge.sasShiftId) {
+      pledge.buildStatus = 'built';
+      pledge.finalized = true;
     }
 
     state.pledges.push(pledge);
     await persist();
-    return { snapshot: broadcast(), pledge };
+    return { snapshot: broadcast(), pledge, previous: existing || null };
+  });
+}
+
+/**
+ * Admin: reassign an existing pledge to any volunteer email (or release it).
+ */
+async function adminReassignPledge({
+  email,
+  pledgeId: pid,
+  assignToEmail,
+  scheduledDate,
+  release = false,
+  note,
+}) {
+  return queueMutation(async () => {
+    const actor = requireActor(email);
+    if (!isAdminEmail(actor) && !isSupervisorEmail(actor)) {
+      throw new Error('Only admins can reassign commitments.');
+    }
+
+    const pledge = activePledges().find((p) => p.id === String(pid || ''));
+    if (!pledge) throw new Error('Commitment not found.');
+
+    const now = new Date().toISOString();
+    if (release) {
+      pledge.releasedAt = now;
+      pledge.note = String(note || '').trim().slice(0, 500) || `Released by admin ${actor}`;
+      await persist();
+      return { snapshot: broadcast(), pledge, released: true };
+    }
+
+    const assignee = resolveAssigneeEmail(assignToEmail);
+    if (scheduledDate) {
+      const ctx = weekContext(new Date());
+      const allowed = allowedDatesForPledge(pledge, ctx);
+      pledge.scheduledDate = validateScheduledDate(
+        scheduledDate,
+        allowed,
+        dateFloorForPledge(pledge, ctx),
+      );
+    }
+    pledge.email = assignee.email;
+    pledge.name = assignee.name;
+    pledge.source = 'admin-assign';
+    pledge.assignedByEmail = actor;
+    pledge.note = String(note || '').trim().slice(0, 500) || `Reassigned by ${actor}`;
+    pledge.updatedAt = now;
+    pledge.pendingDropoutRequestId = null;
+
+    // Cancel any pending dropout/swap on this slot.
+    for (const req of state.changeRequests || []) {
+      if (req.status === 'pending' && req.pledgeId === pledge.id) {
+        req.status = 'cancelled';
+        req.resolvedAt = now;
+        req.resolvedBy = actor;
+      }
+    }
+
+    await persist();
+    return { snapshot: broadcast(), pledge, released: false };
   });
 }
 
@@ -1099,6 +1210,7 @@ module.exports = {
   buildSnapshot,
   broadcast,
   addPledge,
+  adminReassignPledge,
   reschedulePledge,
   requestChange,
   acceptOpenOffer,

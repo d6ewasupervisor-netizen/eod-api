@@ -53,6 +53,7 @@ Extends the generic [shift_volunteer](../../../../.cursor/skills/shift_volunteer
 | James Duchene | james.duchene@retailodyssey.com | 394407 |
 | Wolf (Aiyana Natarisalazar) | aiyana.natarisalazar@retailodyssey.com | 155473 |
 | Supervisor | tyson.gauthier@retailodyssey.com | — |
+| Site admin | d6ewa.supervisor@gmail.com (+ Tyson) | force-assign anyone to any store |
 
 Stores: **19, 28, 31, 53, 215, 459, 682** (exact match only — see `sas-exact-store-number` rule).
 

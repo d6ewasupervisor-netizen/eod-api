@@ -485,6 +485,21 @@ async function start() {
   startDcScanProdSync();
   app.use('/api/dc-scan', createDcScanBoardRouter({ resend }));
 
+  // Ensure DC Scan site admins (incl. Gmail) can request Dump Bin magic links.
+  try {
+    const { DEFAULT_ADMIN_EMAILS } = require('./lib/dc-scan-inventory');
+    for (const adminEmail of DEFAULT_ADMIN_EMAILS) {
+      await pool.query(
+        `INSERT INTO allowed_emails (email, note)
+         VALUES ($1, $2)
+         ON CONFLICT (email) DO NOTHING`,
+        [String(adminEmail).toLowerCase(), 'DC Scan site admin'],
+      );
+    }
+  } catch (err) {
+    console.warn('[dc-scan] seed admin allowed_emails', err.message);
+  }
+
   await reboticsBridge.init(app, pool, { resend });
 
   // Initialize Grafana keep-alive bridge (Rebotics reporting cookie).
