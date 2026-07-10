@@ -826,7 +826,7 @@ async function reschedulePledge({ email, pledgeId: pid, scheduledDate, note }) {
 
     const pledge = activePledges().find((p) => p.id === id);
     if (!pledge) throw new Error('Commitment not found. It may already be released.');
-    if (normalizeEmail(pledge.email) !== em && !isSupervisorEmail(em)) {
+    if (normalizeEmail(pledge.email) !== em && !isSupervisorEmail(em) && !isAdminEmail(em)) {
       throw new Error('You can only reschedule your own commitments.');
     }
     if (pendingChangeForSlot(pledge.slotId)) {
@@ -876,7 +876,7 @@ async function requestChange({
 
     const pledge = activePledges().find((p) => p.id === id);
     if (!pledge) throw new Error('Commitment not found. It may already be released.');
-    if (normalizeEmail(pledge.email) !== em && !isSupervisorEmail(em)) {
+    if (normalizeEmail(pledge.email) !== em && !isSupervisorEmail(em) && !isAdminEmail(em)) {
       throw new Error('You can only request changes on your own commitments.');
     }
     if (pendingChangeForSlot(pledge.slotId)) {
