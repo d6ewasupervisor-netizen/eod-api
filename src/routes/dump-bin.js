@@ -44,13 +44,6 @@ function verifyDownloadLinkToken(token) {
   return { key };
 }
 
-function senderLocalPart(userEmail) {
-  if (!userEmail) return 'noreply';
-  const localPart = userEmail.split('@')[0];
-  const firstSegment = localPart.split('.')[0];
-  return (firstSegment || localPart).toLowerCase().replace(/[^a-z0-9_-]/g, '');
-}
-
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -221,8 +214,9 @@ function createDumpBinRouter({ resend, logger }) {
       attachments.push({ filename, content: buf.toString('base64') });
     }
 
-    const fromLocal = senderLocalPart(userEmail);
-    const from = `${fromLocal}@${sendDomain}`;
+    // Always send as fax@… so Metrofax / print routing stays consistent.
+    // Reply-To is the logged-in user so store replies reach the requester.
+    const from = `fax@${sendDomain}`;
     const subject = `#${storeNumber}`;
     const fileListHtml = keys.map((k) => `<li>${escapeHtml(String(k).split('/').pop())}</li>`).join('');
     const html = `<div style="font-family:Segoe UI,system-ui,sans-serif;color:#222;"><h2 style="color:#4a7fb5;margin:0 0 8px;">Print at Store — #${storeNumber}${storeCity ? ` (${escapeHtml(storeCity)})` : ''}</h2><p>Requested by: <strong>${escapeHtml(userEmail)}</strong></p><p><strong>${attachments.length}</strong> file(s) attached:</p><ul>${fileListHtml}</ul><p style="color:#888;font-size:.85em;margin-top:20px;">Sent via the Dump Bin print-at-store workflow.</p></div>`;
