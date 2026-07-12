@@ -60,6 +60,7 @@ const createDumpBinRouter = require('./routes/dump-bin');
 const { createFm391P05W3PhotosRouter } = require('./routes/fm391-p05w3-photos');
 const { createTrackersRouter } = require('./routes/trackers');
 const { createEmailOutboxRouter } = require('./routes/email-outbox');
+const { createWelcomeLetterRouter } = require('./routes/welcome-letter');
 const {
   createDcScanBoardRouter,
   initDcScanBoard,
@@ -438,6 +439,7 @@ async function start() {
   app.use('/api/weeks', weeksRouter);
   app.use('/api/trackers', createTrackersRouter({ pool }));
   app.use('/api/email-outbox', createEmailOutboxRouter({ pool, resend, logger }));
+  app.use('/api/welcome-letter', createWelcomeLetterRouter({ resend, logger }));
   app.use('/api/hub', hubStoreRoutes);
   app.use('/api/hub', hubRoutes);
   app.use('/api/decide', createDecideRouter({ resend }));
