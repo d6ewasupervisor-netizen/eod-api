@@ -172,7 +172,7 @@ function buildWelcomeLetterHtml(firstName, { forPreview = false } = {}) {
     ]),
 
     // Key Resources
-    sectionHeading('Key Resources &amp; Links'),
+    sectionHeading('Key Resources & Links'),
     bodyPara('Save all of the following — you\'ll use them regularly.'),
     `<tr><td style="padding:0 28px 18px 28px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;">
