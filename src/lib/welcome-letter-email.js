@@ -83,8 +83,8 @@ function buildWelcomeLetterHtml(firstName) {
   const name = escapeHtml(firstName);
   const rows = [
     // Header logo
-    `<tr><td style="padding:0;background-color:#0E2A47;">
-      <img src="${LOGO_URL}" alt="Retail Odyssey" width="640" style="display:block;width:100%;max-width:640px;height:auto;border:0;outline:none;text-decoration:none;">
+    `<tr><td style="padding:0;background-color:#000000;">
+      <img src="${LOGO_URL}" alt="The Retail Odyssey Company" width="640" style="display:block;width:100%;max-width:640px;height:auto;border:0;outline:none;text-decoration:none;">
     </td></tr>`,
 
     // Title block
