@@ -15,7 +15,7 @@ function createWelcomeLetterRouter({ resend, logger }) {
 
   router.post('/preview', requireAuth, (req, res) => {
     try {
-      const letter = buildWelcomeLetter(req.body || {});
+      const letter = buildWelcomeLetter({ ...(req.body || {}), forPreview: true });
       return res.json({
         ok: true,
         to: letter.to,

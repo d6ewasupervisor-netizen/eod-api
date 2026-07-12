@@ -1,6 +1,11 @@
 'use strict';
 
-const LOGO_URL = 'https://the-dump-bin.com/welcome/assets/retail-odyssey-banner.png';
+const fs = require('fs');
+const path = require('path');
+
+const LOGO_CID = 'welcome_logo';
+const LOGO_FALLBACK_URL = 'https://the-dump-bin.com/welcome/assets/retail-odyssey-banner.png';
+const LOGO_PATH = path.join(__dirname, '../assets/welcome-letter-logo.png');
 
 const FROM_ADDRESS = 'Tyson Gauthier <tyson.gauthier@retail-odyssey.com>';
 const REPLY_TO = 'tyson.gauthier@retailodyssey.com';
@@ -11,6 +16,31 @@ const CC_ADDRESSES = [
 const SUBJECT = 'Welcome to Retail Odyssey from your supervisor!';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+let _logoBase64 = null;
+
+function getLogoBase64() {
+  if (_logoBase64) return _logoBase64;
+  _logoBase64 = fs.readFileSync(LOGO_PATH).toString('base64');
+  return _logoBase64;
+}
+
+function getLogoAttachment() {
+  return {
+    filename: 'retail-odyssey-logo.png',
+    content: getLogoBase64(),
+    contentId: LOGO_CID,
+    content_type: 'image/png',
+  };
+}
+
+function logoImgSrc({ forPreview = false } = {}) {
+  if (forPreview) {
+    return `data:image/png;base64,${getLogoBase64()}`;
+  }
+  return `cid:${LOGO_CID}`;
+}
+
 
 function escapeHtml(s) {
   return String(s)
@@ -79,12 +109,13 @@ function resourceRow(bg, resource, purpose, linksHtml) {
   </tr>`;
 }
 
-function buildWelcomeLetterHtml(firstName) {
+function buildWelcomeLetterHtml(firstName, { forPreview = false } = {}) {
   const name = escapeHtml(firstName);
+  const logoSrc = logoImgSrc({ forPreview });
   const rows = [
-    // Header logo
-    `<tr><td style="padding:0;background-color:#000000;">
-      <img src="${LOGO_URL}" alt="The Retail Odyssey Company" width="640" style="display:block;width:100%;max-width:640px;height:auto;border:0;outline:none;text-decoration:none;">
+    // Header logo — white cell + CID/data-URI image (Outlook-safe, not remote-blocked)
+    `<tr><td style="padding:16px 20px;background-color:#FFFFFF;">
+      <img src="${logoSrc}" alt="The Retail Odyssey Company" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;text-decoration:none;">
     </td></tr>`,
 
     // Title block
@@ -288,7 +319,7 @@ Retail Odyssey · Central Seattle
 `;
 }
 
-function buildWelcomeLetter({ firstName, email }) {
+function buildWelcomeLetter({ firstName, email, forPreview = false } = {}) {
   const validated = validateWelcomeLetterInput({ firstName, email });
   if (!validated.ok) {
     const err = new Error(validated.errors.join('; '));
@@ -297,7 +328,7 @@ function buildWelcomeLetter({ firstName, email }) {
     throw err;
   }
 
-  const html = buildWelcomeLetterHtml(validated.firstName);
+  const html = buildWelcomeLetterHtml(validated.firstName, { forPreview });
   const text = buildWelcomeLetterText(validated.firstName);
 
   return {
@@ -310,11 +341,12 @@ function buildWelcomeLetter({ firstName, email }) {
     subject: SUBJECT,
     html,
     text,
+    logoAttachment: forPreview ? null : getLogoAttachment(),
   };
 }
 
 function buildResendPayload(letter) {
-  return {
+  const payload = {
     from: letter.from,
     to: [letter.to],
     cc: letter.cc,
@@ -323,10 +355,15 @@ function buildResendPayload(letter) {
     text: letter.text,
     reply_to: letter.replyTo,
   };
+  if (letter.logoAttachment) {
+    payload.attachments = [letter.logoAttachment];
+  }
+  return payload;
 }
 
 module.exports = {
-  LOGO_URL,
+  LOGO_CID,
+  LOGO_FALLBACK_URL,
   FROM_ADDRESS,
   REPLY_TO,
   CC_ADDRESSES,
@@ -336,4 +373,5 @@ module.exports = {
   buildWelcomeLetterHtml,
   buildWelcomeLetterText,
   buildResendPayload,
+  getLogoAttachment,
 };
