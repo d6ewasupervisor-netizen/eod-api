@@ -71,7 +71,7 @@
   function renderRows(items) {
     const tbody = document.getElementById('emailRows');
     if (!items.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="muted">No emails match these filters.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="muted">No emails match these filters.</td></tr>';
       return;
     }
     tbody.innerHTML = items.map((item) => {
@@ -82,6 +82,7 @@
         <td>${statusBadge(item.status)}</td>
         <td>${deliveryBadge(item.deliveryStatus || item.lastEvent)}</td>
         <td><div>${item.sourceSystem}</div><div class="muted">${item.sourceType}</div></td>
+        <td class="from-cell">${escapeHtml(item.from || '—')}</td>
         <td class="subject-cell">${escapeHtml(item.subject || '—')}</td>
         <td class="to-cell">${escapeHtml(to || '—')}</td>
       </tr>`;

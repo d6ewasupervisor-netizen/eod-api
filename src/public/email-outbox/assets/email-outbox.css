@@ -108,4 +108,5 @@ button.danger { background: #991b1b; border-color: #7f1d1d; }
 }
 .edit-form label { margin: 0; }
 .to-cell { max-width: 220px; word-break: break-word; }
+.from-cell { max-width: 200px; word-break: break-word; }
 .subject-cell { max-width: 320px; }
