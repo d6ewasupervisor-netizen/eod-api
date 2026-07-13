@@ -9,7 +9,7 @@ const {
   resendStoredEmail,
   ingestEmailRecord,
   applyResendWebhookEvent,
-  syncFromResendApi,
+  syncFromResendAccounts,
   editEmailRecord,
   deleteEmailRecord,
   purgeEmailsOlderThan,
@@ -41,8 +41,13 @@ function requireIngestKey(req, res, next) {
   return next();
 }
 
-function createEmailOutboxRouter({ pool, resend, logger = console }) {
+function createEmailOutboxRouter({ pool, resend, resendSyncAccounts, logger = console }) {
   const router = express.Router();
+  // Fall back to a single-account sync (using the primary `resend` client)
+  // when no explicit multi-account list was wired up by the caller.
+  const syncAccounts = Array.isArray(resendSyncAccounts) && resendSyncAccounts.length
+    ? resendSyncAccounts
+    : [{ client: resend, label: null }];
 
   router.post('/ingest', requireIngestKey, async (req, res) => {
     try {
@@ -106,7 +111,7 @@ function createEmailOutboxRouter({ pool, resend, logger = console }) {
 
   router.post('/sync/resend', async (req, res) => {
     try {
-      const result = await syncFromResendApi(resend, pool, {
+      const result = await syncFromResendAccounts(syncAccounts, pool, {
         limit: req.body?.limit,
         maxPages: req.body?.maxPages,
       });

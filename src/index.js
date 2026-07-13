@@ -66,7 +66,7 @@ const {
   initDcScanBoard,
   startDcScanProdSync,
 } = require('./routes/dc-scan-board');
-const { createEmailSender, setEmailSender, purgeEmailsOlderThan, retentionDays, syncFromResendApi, dispatchTrackedEmail } = require('./lib/resend-outbox');
+const { createEmailSender, setEmailSender, purgeEmailsOlderThan, retentionDays, syncFromResendAccounts, dispatchTrackedEmail } = require('./lib/resend-outbox');
 const hubRoutes = require('./routes/hub-routes');
 const hubStoreRoutes = require('./routes/hub-store-routes');
 const { initHubBackup, startBackupIntervalJob } = require('./hub-backup');
@@ -81,6 +81,21 @@ const logger = {
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const PORT = process.env.PORT || 3001;
+
+// The Email Outbox's "sync from Resend" pulls history via `emails.list()`,
+// which is scoped to whichever Resend account owns the API key used to call
+// it — it can NOT see emails sent from a different Resend account. We send
+// mail from more than one Resend account (retail-odyssey.com on the primary
+// key above, the-dump-bin.com signoffs on RESEND_SIGNOFF_API_KEY), so list
+// every account here and the outbox sync will pull + merge history from all
+// of them instead of only the primary one.
+const resendSyncAccounts = [{ client: resend, label: 'retail-odyssey' }];
+if (process.env.RESEND_SIGNOFF_API_KEY) {
+  resendSyncAccounts.push({
+    client: new Resend(process.env.RESEND_SIGNOFF_API_KEY),
+    label: 'the-dump-bin',
+  });
+}
 
 // `pool` is the shared connection pool from ./lib/db. We re-export the same
 // instance throughout the app so we never end up with two pools fighting over
@@ -438,7 +453,7 @@ async function start() {
   app.use('/api/whoami', whoamiRouter);
   app.use('/api/weeks', weeksRouter);
   app.use('/api/trackers', createTrackersRouter({ pool }));
-  app.use('/api/email-outbox', createEmailOutboxRouter({ pool, resend, logger }));
+  app.use('/api/email-outbox', createEmailOutboxRouter({ pool, resend, resendSyncAccounts, logger }));
   app.use('/api/welcome-letter', createWelcomeLetterRouter({ resend, logger }));
   app.use('/api/hub', hubStoreRoutes);
   app.use('/api/hub', hubRoutes);
@@ -631,9 +646,9 @@ async function start() {
 
   cron.schedule('15 * * * *', async () => {
     try {
-      const result = await syncFromResendApi(resend, pool, { limit: 100, maxPages: 10 });
+      const result = await syncFromResendAccounts(resendSyncAccounts, pool, { limit: 100, maxPages: 10 });
       if (result.imported > 0 || result.updated > 0) {
-        logger.info(`Email outbox Resend sync: imported ${result.imported}, updated ${result.updated}`);
+        logger.info(`Email outbox Resend sync: imported ${result.imported}, updated ${result.updated} (${JSON.stringify(result.byAccount)})`);
       }
     } catch (err) {
       logger.error('Email outbox Resend sync failed:', err.message);
@@ -641,7 +656,7 @@ async function start() {
   }, {
     timezone: 'America/Los_Angeles',
   });
-  logger.info('Hourly Resend API sync scheduled for email outbox (America/Los_Angeles)');
+  logger.info(`Hourly Resend API sync scheduled for email outbox across ${resendSyncAccounts.length} account(s) (America/Los_Angeles)`);
 
   // ─── SAS AUTO-REFRESH CRON ─────────────────────────────────────────────────
   //

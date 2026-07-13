@@ -576,12 +576,13 @@ async function applyResendWebhookEvent(pool, event) {
   return { ok: true, matched: true, id: rows[0].id };
 }
 
-async function syncFromResendApi(resend, pool, { limit = 100, maxPages = 20 } = {}) {
+async function syncFromResendApi(resend, pool, { limit = 100, maxPages = 20, accountLabel = null } = {}) {
   const client = pool || { query };
   let after;
   let imported = 0;
   let updated = 0;
   let pages = 0;
+  const sourceSystem = accountLabel ? `resend-sync:${accountLabel}` : 'resend-sync';
 
   while (pages < maxPages) {
     const opts = { limit: Math.min(limit, 100) };
@@ -607,7 +608,7 @@ async function syncFromResendApi(resend, pool, { limit = 100, maxPages = 20 } = 
       }
 
       await insertEmailRecord(pool, {
-        sourceSystem: 'resend-sync',
+        sourceSystem,
         sourceType: 'unknown',
         resendId,
         status: deliveryStatus === 'failed' ? 'failed' : 'sent',
@@ -620,7 +621,7 @@ async function syncFromResendApi(resend, pool, { limit = 100, maxPages = 20 } = 
         subject: item.subject || null,
         storedPayload: {},
         resendAllowed: false,
-        metadata: { syncedFromResend: true },
+        metadata: { syncedFromResend: true, resendAccount: accountLabel || null },
       });
       imported += 1;
     }
@@ -631,6 +632,36 @@ async function syncFromResendApi(resend, pool, { limit = 100, maxPages = 20 } = 
   }
 
   return { imported, updated, pages };
+}
+
+/**
+ * Resend's `emails.list()` API is scoped to the account tied to the API key
+ * used to call it — it will NOT return emails sent from a different Resend
+ * account, even if both accounts belong to the same org. We send email from
+ * more than one Resend account (e.g. retail-odyssey.com from one account,
+ * the-dump-bin.com signoffs from another), so the Outbox has to sync each
+ * account separately and merge the results here.
+ */
+async function syncFromResendAccounts(accounts, pool, { limit = 100, maxPages = 20 } = {}) {
+  const list = (accounts || []).filter((a) => a && a.client);
+  const byAccount = [];
+  let imported = 0;
+  let updated = 0;
+  let pages = 0;
+
+  for (const { client: resendClient, label } of list) {
+    try {
+      const result = await syncFromResendApi(resendClient, pool, { limit, maxPages, accountLabel: label });
+      byAccount.push({ label: label || 'default', ...result });
+      imported += result.imported;
+      updated += result.updated;
+      pages += result.pages;
+    } catch (err) {
+      byAccount.push({ label: label || 'default', error: err.message || String(err) });
+    }
+  }
+
+  return { imported, updated, pages, byAccount };
 }
 
 function retentionDays() {
@@ -789,6 +820,7 @@ module.exports = {
   ingestEmailRecord,
   applyResendWebhookEvent,
   syncFromResendApi,
+  syncFromResendAccounts,
   editEmailRecord,
   compactEmailRecord,
   deleteEmailRecord,
