@@ -330,6 +330,7 @@ const LIST_SORT_COLUMNS = {
   sourceSystem: 'source_system',
   sourceType: 'source_type',
   to: "array_to_string(to_addresses, ',')",
+  from: 'from_address',
 };
 
 function resolveListSort(sortBy, sortDir) {
