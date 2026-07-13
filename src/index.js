@@ -52,6 +52,8 @@ const adminAdminsRouter = require('./routes/admin-admins');
 const accessRequestRouter = require('./routes/access-request');
 const accessRequestDecisionRouter = require('./routes/access-request-decision');
 const dcScanAccessDecisionRouter = require('./routes/dc-scan-access-decision');
+const reviewCreateRouter = require('./routes/review-create');
+const reviewDecisionRouter = require('./routes/review-decision');
 const { identityHandler } = require('./routes/_identity');
 const whoamiRouter = require('./routes/whoami');
 const weeksRouter = require('./routes/weeks');
@@ -338,6 +340,11 @@ async function start() {
   // registered before the global cors() middleware.
   app.use('/api/access-requests', accessRequestDecisionRouter);
   app.use('/api/dc-scan-access-requests', dcScanAccessDecisionRouter);
+  // Hosted human-in-the-loop review pages (flow-automation surfaces: monday-email,
+  // considerations, considerations-agenda, etc.) -- token-signed direct links, same
+  // reasoning as the access-request routes above.
+  app.use('/api/review', reviewCreateRouter);
+  app.use('/api/review', reviewDecisionRouter);
 
   // Cloudflare Access fronts both the-dump-bin.com (frontend) and
   // eod-api.the-dump-bin.com (this API). Cookies are scoped to the parent

@@ -416,8 +416,50 @@ async function sendAccessRequestOtherApproverEmail({ to, decidedBy, action, reco
   return resend.emails.send(payload);
 }
 
+function surfaceLabelFromId(surfaceId) {
+  return String(surfaceId || 'Review')
+    .split('-')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+async function sendReviewLinkEmail({ to, surfaceId, periodWeek, reviewUrl }) {
+  const surfaceLabel = surfaceLabelFromId(surfaceId);
+  const weekSuffix = periodWeek ? ` — ${periodWeek}` : '';
+  const subject = `${surfaceLabel} ready for review${weekSuffix}`;
+  const safeLink = escapeHtml(reviewUrl);
+  const text = [
+    `${surfaceLabel}${periodWeek ? ` (${periodWeek})` : ''} is ready for your review.`,
+    '',
+    'Open the link below to review, edit, and approve or reject.',
+    '',
+    MOBILE_LINK_INSTRUCTIONS_TEXT,
+    '',
+    reviewUrl,
+    '',
+    '\u2014 Retail Odyssey',
+  ].join('\n');
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:32px 16px;color:#1f2937;">
+      <h2 style="color:#1a3a6e;margin:0 0 16px;">${escapeHtml(surfaceLabel)} ready for review</h2>
+      <p style="margin:0 0 12px;">${periodWeek ? `<strong>${escapeHtml(periodWeek)}</strong> is` : 'This item is'} ready for your review, edits, and approval.</p>
+${MOBILE_LINK_INSTRUCTIONS_HTML}
+      <p style="margin:0 0 24px;">
+        <a href="${safeLink}" style="display:inline-block;background:#1a3a6e;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Open review</a>
+      </p>
+      <p style="color:#6b7280;font-size:13px;margin:0;">Can&apos;t click the button? Copy and paste this link:<br>${safeLink}</p>
+      <p style="margin-top:24px;color:#9ca3af;font-size:12px;">\u2014 Retail Odyssey</p>
+    </div>
+  `;
+  const payload = { from: FROM, to, subject, text, html };
+  addReplyTo(payload, {});
+  return resend.emails.send(payload);
+}
+
 module.exports = {
   sendLinkEmail,
+  sendReviewLinkEmail,
   sendHubLeadAccessEmail,
   sendHubTeamInviteEmail,
   sendAdminInviteEmail,
