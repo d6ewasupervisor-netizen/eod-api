@@ -410,8 +410,8 @@ function registerRoutes(app, resend, pool) {
   // GET /api/shifts/:visitId/sets — category-resets on the shift (the "sets")
   // Used by the EOD form so the lead can pick which sets weren't in the
   // store / weren't in SI from a dropdown sourced from the actual shift.
-  // The KOMPASS MAINTENANCE reset is filtered out — that's the cart, not a
-  // planogram set the lead would mark as missing.
+  // Only the KOMPASS MAINTENANCE cart/admin row (cat 5555) is filtered out —
+  // not every reset_type=MAINTENANCE planogram (those are real sets).
   app.get('/api/shifts/:visitId/sets', async (req, res) => {
     const { visitId } = req.params;
     if (!checkSession(res)) return;
@@ -420,12 +420,19 @@ function registerRoutes(app, resend, pool) {
       const resp = await sasGet(`/api/v1/field-app/visits/${visitId}/category-resets/`);
       const categoryResets = resp.data?.category_resets || [];
 
+      // Only exclude the true KOMPASS MAINTENANCE cart/admin reset (cat 5555).
+      // Do NOT filter on reset_type === 'MAINTENANCE' — SAS marks many real
+      // planogram sets as MAINTENANCE (vs NII/UPDATE) once they go through
+      // the Kompass maintenance workflow. Filtering on type alone dropped ~2/3
+      // of sets (e.g. 15 of 45 on a full ISE visit).
       const sets = categoryResets
         .filter(r => {
-          const isMaint = r.reset_type === 'MAINTENANCE'
-            || r.name === 'KOMPASS MAINTENANCE'
-            || r.number === 5555;
-          return !isMaint;
+          const num = r.number != null ? Number(r.number) : null;
+          const name = String(r.name || '').trim().toUpperCase();
+          const isCartAdmin =
+            num === 5555
+            || name === 'KOMPASS MAINTENANCE';
+          return !isCartAdmin;
         })
         .map(r => {
           const { dbkey, version, footage } = extractPlanogramMeta(r.planogram_id);
