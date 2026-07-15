@@ -372,7 +372,17 @@ async function start() {
     })
   );
 
-  app.use(express.json({ limit: '50mb' }));
+  app.use(express.json({
+    limit: '50mb',
+    // Resend webhook signature verification (svix) needs the exact raw bytes
+    // that were signed. This is the only global body parser, so it must be
+    // the one to capture them — a route-level express.json() further down
+    // the chain never re-parses (body-parser skips once req._body is set)
+    // and would silently leave req.rawBody undefined.
+    verify: (req, _res, buf) => {
+      req.rawBody = buf;
+    },
+  }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // ─── GLOBAL AUTH GATE ───────────────────────────────────────────────────────

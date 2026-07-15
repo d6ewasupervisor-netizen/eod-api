@@ -63,14 +63,9 @@ function createEmailOutboxRouter({ pool, resend, resendSyncAccounts, logger = co
 
   router.post(
     '/webhook',
-    express.json({
-      type: '*/*',
-      // svix verification needs the exact raw bytes Resend signed, not the
-      // re-serialized object — capture them alongside the parsed body.
-      verify: (req, _res, buf) => {
-        req.rawBody = buf;
-      },
-    }),
+    // Body is already parsed by the app-level express.json() in index.js,
+    // which also captures req.rawBody (needed for svix signature
+    // verification below) — no route-level parser needed here.
     async (req, res) => {
       // We send from more than one Resend account (retail-odyssey.com on the
       // primary key, the-dump-bin.com signoffs on RESEND_SIGNOFF_API_KEY — see
