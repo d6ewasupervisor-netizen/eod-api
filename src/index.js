@@ -461,7 +461,7 @@ async function start() {
   app.use('/api/weeks', weeksRouter);
   app.use('/api/trackers', createTrackersRouter({ pool }));
   app.use('/api/email-outbox', createEmailOutboxRouter({ pool, resend, resendSyncAccounts, logger }));
-  app.use('/api/welcome-letter', createWelcomeLetterRouter({ resend, logger }));
+  app.use('/api/welcome-letter', createWelcomeLetterRouter({ resend, logger, pool }));
   app.use('/api/hub', hubStoreRoutes);
   app.use('/api/hub', hubRoutes);
   app.use('/api/decide', createDecideRouter({ resend }));

@@ -2,14 +2,21 @@
 
 const express = require('express');
 const { requireAuth } = require('../auth-middleware');
-const { dispatchTrackedEmail } = require('../lib/resend-outbox');
+const {
+  dispatchTrackedEmail,
+  listEmails,
+  getEmailById,
+  resendStoredEmail,
+} = require('../lib/resend-outbox');
 const {
   buildWelcomeLetter,
   buildResendPayload,
   validateWelcomeLetterInput,
 } = require('../lib/welcome-letter-email');
 
-function createWelcomeLetterRouter({ resend, logger }) {
+const SOURCE_TYPE = 'welcome-letter';
+
+function createWelcomeLetterRouter({ resend, logger, pool }) {
   const router = express.Router();
   const log = logger || console;
 
@@ -122,7 +129,74 @@ function createWelcomeLetterRouter({ resend, logger }) {
       return res.status(502).json({
         ok: false,
         error: `Resend error: ${err.message || err}`,
+        recordId: err.recordId || undefined,
       });
+    }
+  });
+
+  // ─── Welcome Letter Board ────────────────────────────────────────────────
+  // Thin wrappers around the shared email-outbox tables/helpers, scoped to
+  // sourceType='welcome-letter' so this is a dedicated board without a
+  // separate storage layer or duplicated resend logic.
+
+  router.get('/board', requireAuth, async (req, res) => {
+    try {
+      const data = await listEmails(pool, {
+        page: req.query.page,
+        pageSize: req.query.pageSize,
+        status: req.query.status,
+        deliveryStatus: req.query.deliveryStatus,
+        search: req.query.search,
+        since: req.query.since,
+        until: req.query.until,
+        sortBy: req.query.sortBy,
+        sortDir: req.query.sortDir,
+        sourceType: SOURCE_TYPE,
+      });
+      return res.json({ ok: true, ...data });
+    } catch (err) {
+      log.error('[welcome-letter] board list failed:', err.message);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  router.get('/board/:id', requireAuth, async (req, res) => {
+    try {
+      const item = await getEmailById(pool, Number(req.params.id));
+      if (!item || item.sourceType !== SOURCE_TYPE) {
+        return res.status(404).json({ ok: false, error: 'Not found' });
+      }
+      return res.json({ ok: true, item });
+    } catch (err) {
+      log.error('[welcome-letter] board detail failed:', err.message);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  router.post('/board/:id/resend', requireAuth, async (req, res) => {
+    try {
+      const existing = await getEmailById(pool, Number(req.params.id));
+      if (!existing || existing.sourceType !== SOURCE_TYPE) {
+        return res.status(404).json({ ok: false, error: 'Not found' });
+      }
+      const result = await resendStoredEmail(resend, pool, Number(req.params.id), {
+        sentByEmail: req.user?.email,
+      });
+      if (result.error) {
+        return res.status(502).json({
+          ok: false,
+          error: result.error.message || String(result.error),
+          recordId: result.recordId,
+        });
+      }
+      return res.json({
+        ok: true,
+        resendId: result.data?.id,
+        recordId: result.recordId,
+      });
+    } catch (err) {
+      const status = err.statusCode || 500;
+      return res.status(status).json({ ok: false, error: err.message });
     }
   });
 

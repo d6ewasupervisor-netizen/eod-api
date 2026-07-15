@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const express = require('express');
+const { Webhook } = require('svix');
 const { requireAuth, requireRole } = require('../auth-middleware');
 const {
   listEmails,
@@ -60,15 +61,45 @@ function createEmailOutboxRouter({ pool, resend, resendSyncAccounts, logger = co
     }
   });
 
-  router.post('/webhook', express.json({ type: '*/*' }), async (req, res) => {
-    try {
-      const result = await applyResendWebhookEvent(pool, req.body || {});
-      return res.json({ ok: true, ...result });
-    } catch (err) {
-      logger.error?.('[email-outbox] webhook failed:', err.message);
-      return res.status(500).json({ ok: false, error: err.message });
-    }
-  });
+  router.post(
+    '/webhook',
+    express.json({
+      type: '*/*',
+      // svix verification needs the exact raw bytes Resend signed, not the
+      // re-serialized object — capture them alongside the parsed body.
+      verify: (req, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+    async (req, res) => {
+      const secret = String(process.env.RESEND_WEBHOOK_SECRET || '').trim();
+      if (secret) {
+        try {
+          const wh = new Webhook(secret);
+          wh.verify(req.rawBody, {
+            'svix-id': req.headers['svix-id'],
+            'svix-timestamp': req.headers['svix-timestamp'],
+            'svix-signature': req.headers['svix-signature'],
+          });
+        } catch (err) {
+          logger.error?.('[email-outbox] webhook signature verification failed:', err.message);
+          return res.status(401).json({ ok: false, error: 'Invalid webhook signature' });
+        }
+      } else {
+        logger.warn?.(
+          '[email-outbox] RESEND_WEBHOOK_SECRET is not set — accepting unverified webhook payloads. '
+          + 'Set it (from the Resend dashboard webhook endpoint) to enable signature verification.',
+        );
+      }
+      try {
+        const result = await applyResendWebhookEvent(pool, req.body || {});
+        return res.json({ ok: true, ...result });
+      } catch (err) {
+        logger.error?.('[email-outbox] webhook failed:', err.message);
+        return res.status(500).json({ ok: false, error: err.message });
+      }
+    },
+  );
 
   router.use(requireAuth);
   router.use(requireRole('admin', 'supervisor'));

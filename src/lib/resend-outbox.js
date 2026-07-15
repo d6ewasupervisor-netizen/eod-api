@@ -116,6 +116,10 @@ function rowToListItem(row) {
     deliveryStatus: row.delivery_status,
     lastEvent: row.last_event,
     lastEventAt: row.last_event_at,
+    openedAt: row.opened_at || null,
+    openCount: row.open_count || 0,
+    clickedAt: row.clicked_at || null,
+    clickCount: row.click_count || 0,
     from: row.from_address,
     to: row.to_addresses || [],
     cc: row.cc_addresses || [],
@@ -233,6 +237,10 @@ async function updateEmailRecord(pool, id, patch) {
     delivery_status: patch.deliveryStatus,
     last_event: patch.lastEvent,
     last_event_at: patch.lastEventAt,
+    opened_at: patch.openedAt,
+    open_count: patch.openCount,
+    clicked_at: patch.clickedAt,
+    click_count: patch.clickCount,
     error_message: patch.errorMessage,
     updated_at: patch.updatedAt || new Date().toISOString(),
   };
@@ -305,6 +313,7 @@ async function sendViaOutbox(resend, pool, meta, payload) {
       deliveryStatus: 'failed',
       errorMessage: err.message || String(err),
     });
+    err.recordId = recordId;
     throw err;
   }
 }
@@ -331,6 +340,7 @@ const LIST_SORT_COLUMNS = {
   sourceType: 'source_type',
   to: "array_to_string(to_addresses, ',')",
   from: 'from_address',
+  openedAt: 'opened_at',
 };
 
 function resolveListSort(sortBy, sortDir) {
@@ -562,19 +572,45 @@ async function applyResendWebhookEvent(pool, event) {
   if (!resendId) return { ok: false, reason: 'missing email id' };
 
   const lastEvent = type.replace(/^email\./, '') || data.last_event;
-  const deliveryStatus = mapResendEventToDelivery(lastEvent);
   const client = pool || { query };
-  const { rows } = await client.query('SELECT id FROM sent_emails WHERE resend_id = $1', [resendId]);
+  const { rows } = await client.query(
+    'SELECT id, open_count, click_count, opened_at, clicked_at FROM sent_emails WHERE resend_id = $1',
+    [resendId],
+  );
   if (!rows.length) return { ok: true, matched: false };
+  const row = rows[0];
+  const nowIso = new Date().toISOString();
 
-  await updateEmailRecord(pool, rows[0].id, {
+  // Opens/clicks are tracked in their own columns so they never clobber
+  // delivery_status — a message can be both "delivered" and "opened".
+  if (lastEvent === 'opened') {
+    await updateEmailRecord(pool, row.id, {
+      lastEvent,
+      lastEventAt: nowIso,
+      openCount: Number(row.open_count || 0) + 1,
+      openedAt: row.opened_at ? undefined : nowIso,
+    });
+    return { ok: true, matched: true, id: row.id };
+  }
+  if (lastEvent === 'clicked') {
+    await updateEmailRecord(pool, row.id, {
+      lastEvent,
+      lastEventAt: nowIso,
+      clickCount: Number(row.click_count || 0) + 1,
+      clickedAt: row.clicked_at ? undefined : nowIso,
+    });
+    return { ok: true, matched: true, id: row.id };
+  }
+
+  const deliveryStatus = mapResendEventToDelivery(lastEvent);
+  await updateEmailRecord(pool, row.id, {
     lastEvent,
-    lastEventAt: new Date().toISOString(),
+    lastEventAt: nowIso,
     deliveryStatus,
     status: deliveryStatus === 'failed' ? 'failed' : undefined,
     errorMessage: data.error?.message || data.bounce?.message || undefined,
   });
-  return { ok: true, matched: true, id: rows[0].id };
+  return { ok: true, matched: true, id: row.id };
 }
 
 async function syncFromResendApi(resend, pool, { limit = 100, maxPages = 20, accountLabel = null } = {}) {
