@@ -318,6 +318,54 @@ async function notifyFinalize(resend, { email, name, pledges, buildResults }) {
   }).catch((err) => console.error('[dc-scan-notify] finalize user', err.message));
 }
 
+function buildCommitmentReminderContent() {
+  const html = `
+    <div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.55;color:#1a1a1a;max-width:640px;">
+      <p>Hi team,</p>
+      <p>Quick reminder — there are still <strong>shifts on the DC Scan board that need a commitment</strong>.</p>
+      <p><strong>Claiming a store isn't enough.</strong> If you're going to commit to a shift, you need to tap
+      <strong>Finalize</strong> on the dashboard so it actually gets scheduled in SAS. Anything left un-finalized
+      won't be built.</p>
+      <p style="margin:24px 0;">
+        <a href="${esc(DASHBOARD_URL)}"
+           style="display:inline-block;background:#0d4f8b;color:#fff;padding:14px 22px;border-radius:8px;text-decoration:none;font-weight:700;">
+          Open DC Scan board
+        </a>
+      </p>
+      <p>If your day needs to change, use <strong>Reschedule</strong>. If you can't make it at all, use
+      <strong>Back out</strong> so a teammate can pick it up — don't just leave it hanging.</p>
+      <p>Thanks for staying on top of this,<br/>Tyson</p>
+    </div>`;
+  const text = [
+    'Reminder: shifts on the DC Scan board still need a commitment.',
+    '',
+    'Claiming a store is not enough — tap Finalize on the dashboard so your shift actually gets scheduled in SAS.',
+    'Anything left un-finalized will not be built.',
+    '',
+    `Dashboard: ${DASHBOARD_URL}`,
+    '',
+    'Need a different day? Use Reschedule. Can\'t make it? Use Back out so a teammate can take it.',
+    '',
+    'Thanks for staying on top of this,',
+    'Tyson',
+  ].join('\n');
+  return { html, text };
+}
+
+async function notifyCommitmentReminder(resend, { to, cc } = {}) {
+  const recipients = to && to.length ? to : VOLUNTEERS.map((v) => normalizeEmail(v.email));
+  const { html, text } = buildCommitmentReminderContent();
+  const subject = '[DC Scan] Reminder: finalize your shifts to get them scheduled';
+  return sendMail(resend, {
+    to: recipients,
+    cc,
+    subject,
+    html,
+    text,
+    tag: 'dc-scan-commitment-reminder',
+  });
+}
+
 function buildDcScanAccessDecisionUrl(id, action, approverEmail) {
   const { computeDecisionToken } = require('../routes/dc-scan-access-decision');
   const fallback = process.env.RAILWAY_PUBLIC_DOMAIN
@@ -430,6 +478,7 @@ module.exports = {
   notifyOfferTaken,
   notifyFinalize,
   notifyVolunteerInvite,
+  notifyCommitmentReminder,
   notifyDcScanAccessRequest,
   notifyDcScanAccessResolved,
   buildVolunteerInviteContent,

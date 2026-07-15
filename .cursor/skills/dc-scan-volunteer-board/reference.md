@@ -8,9 +8,10 @@
 | `DC_SCAN_PROD_START_DELAY_MS` | `8000` | Delay before first PROD sync |
 | `DC_SCAN_DASHBOARD_URL` | `https://the-dump-bin.com/dc-scan/` | Email + notify links |
 | `DC_SCAN_FROM_ADDRESS` | `DC Scans <dcscans@retail-odyssey.com>` | Volunteer invite From |
-| `DC_SCAN_APPROVER_EMAIL` | Tyson | Change/finalize notify To |
+| `DC_SCAN_APPROVER_EMAIL` | `tyson.gauthier@retailodyssey.com` (code default; **set explicitly on Railway**) | Change/finalize/access-request notify To |
 | `DC_SCAN_VOLUNTEER_EMAILS` | — | Comma extra allowlist |
 | `DC_SCAN_SUPERVISOR_EMAILS` | — | Comma extra supervisors |
+| `ACCESS_REQUEST_SECRET` | — | HMAC for access-request approve/deny links (Dump Bin + DC Scan) |
 | `SAS_USER` / `SAS_PASS` / `SAS_TOTP_SECRET` | — | SAS bridge + PROD sync |
 | `RESEND_API_KEY` | — | All outbound email |
 | `DUMP_BIN_SITE` | `https://the-dump-bin.com` | decide.html base |
@@ -40,7 +41,18 @@ Snapshot pledge fields:
 
 Table: `dc_scan_board_state` (single row `id=1`, JSONB `state`).
 
+Access control (migration `042_dc_scan_volunteer_access.sql`):
+
+| Table | Purpose |
+|-------|---------|
+| `dc_scan_volunteer_grants` | Supervisor-approved extra volunteer emails |
+| `dc_scan_access_requests` | Pending/approved/denied access requests |
+
 ## API response shapes
+
+**GET /approved-users** → `{ ok, canParticipate, pendingAccessRequest, isVolunteer, isSupervisor, me }`
+
+**POST /access-request** body: `{ name?, reason? }` — uses JWT email; emails supervisor.
 
 **GET /** → `{ success, snapshot }`
 
@@ -86,6 +98,7 @@ node scripts/send-dc-scan-volunteer-invite.js [--dry-run]
 
 ## Related skills
 
+- `dc-scan-volunteer-board-ui` — the-dump-bin UI boot and black-screen fixes
 - `sas-prod-shift-management-har` — visit/shift mutations, store match
 - `shift_volunteer` — generic pledge board pattern
 - `sas-auth-prod-session` — SAS bridge credentials
