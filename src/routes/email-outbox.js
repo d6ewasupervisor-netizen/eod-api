@@ -72,23 +72,39 @@ function createEmailOutboxRouter({ pool, resend, resendSyncAccounts, logger = co
       },
     }),
     async (req, res) => {
-      const secret = String(process.env.RESEND_WEBHOOK_SECRET || '').trim();
-      if (secret) {
-        try {
-          const wh = new Webhook(secret);
-          wh.verify(req.rawBody, {
-            'svix-id': req.headers['svix-id'],
-            'svix-timestamp': req.headers['svix-timestamp'],
-            'svix-signature': req.headers['svix-signature'],
-          });
-        } catch (err) {
-          logger.error?.('[email-outbox] webhook signature verification failed:', err.message);
+      // We send from more than one Resend account (retail-odyssey.com on the
+      // primary key, the-dump-bin.com signoffs on RESEND_SIGNOFF_API_KEY — see
+      // index.js), and each account has its own webhook endpoint + signing
+      // secret in the Resend dashboard even though both point at this same
+      // URL. Accept the payload if it verifies against ANY configured secret.
+      const secrets = [
+        String(process.env.RESEND_WEBHOOK_SECRET || '').trim(),
+        String(process.env.RESEND_SIGNOFF_WEBHOOK_SECRET || '').trim(),
+      ].filter(Boolean);
+
+      if (secrets.length) {
+        const verified = secrets.some((secret) => {
+          try {
+            const wh = new Webhook(secret);
+            wh.verify(req.rawBody, {
+              'svix-id': req.headers['svix-id'],
+              'svix-timestamp': req.headers['svix-timestamp'],
+              'svix-signature': req.headers['svix-signature'],
+            });
+            return true;
+          } catch (_err) {
+            return false;
+          }
+        });
+        if (!verified) {
+          logger.error?.('[email-outbox] webhook signature verification failed against all configured secrets');
           return res.status(401).json({ ok: false, error: 'Invalid webhook signature' });
         }
       } else {
         logger.warn?.(
-          '[email-outbox] RESEND_WEBHOOK_SECRET is not set — accepting unverified webhook payloads. '
-          + 'Set it (from the Resend dashboard webhook endpoint) to enable signature verification.',
+          '[email-outbox] No RESEND_WEBHOOK_SECRET(S) set — accepting unverified webhook payloads. '
+          + 'Set RESEND_WEBHOOK_SECRET (retail-odyssey) / RESEND_SIGNOFF_WEBHOOK_SECRET (the-dump-bin) '
+          + 'from the Resend dashboard webhook endpoints to enable signature verification.',
         );
       }
       try {
