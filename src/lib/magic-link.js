@@ -47,9 +47,16 @@ function isAllowedDestinationUrl(url) {
   }
   if (url.protocol !== 'https:') return false;
   if (url.host === 'checklanes.the-dump-bin.com') return true;
+  // Central Pet Scheduler (and other hub tools) on Railway production.
+  if (host === 'cpscheduler-production.up.railway.app' || host.endsWith('.up.railway.app')) {
+    return true;
+  }
   if (url.host === 'the-dump-bin.com') {
     const path = (url.pathname || '/').toLowerCase();
     if (path === '/' || path === '/index.html') return true;
+    if (path === '/central-pet' || path === '/central-pet/' || path.startsWith('/central-pet/')) {
+      return true;
+    }
     return isChecklanesPath(path) || isDcScanPath(path);
   }
   if (url.host.endsWith('.github.io')) {

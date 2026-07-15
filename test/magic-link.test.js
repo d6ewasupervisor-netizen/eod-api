@@ -30,6 +30,24 @@ describe('magic-link return URLs', () => {
     assert.match(link, /cpscheduler-production\.up\.railway\.app/);
   });
 
+  it('allows cpscheduler Railway host by default (hub tools)', () => {
+    process.env.ALLOWED_ORIGINS = 'https://the-dump-bin.com';
+    const { buildMagicLink } = load();
+    const link = buildMagicLink(
+      'test-token',
+      'https://cpscheduler-production.up.railway.app/shiftday.html'
+    );
+    assert.ok(link);
+    assert.match(link, /cpscheduler-production\.up\.railway\.app/);
+  });
+
+  it('allows central-pet hub path on the-dump-bin.com', () => {
+    process.env.ALLOWED_ORIGINS = 'https://the-dump-bin.com';
+    const { buildMagicLink } = load();
+    const link = buildMagicLink('test-token', 'https://the-dump-bin.com/central-pet/?to=shiftday');
+    assert.ok(link);
+  });
+
   it('rejects unknown external hosts', () => {
     process.env.ALLOWED_ORIGINS = 'https://the-dump-bin.com';
     const { buildMagicLink } = load();
