@@ -208,7 +208,7 @@ function buildWelcomeLetterHtml(firstName, { forPreview = false } = {}) {
 Central Seattle Supervisor — Retail Odyssey<br>
 Cell: (509) 572-7660<br>
 Fax: (858) 431-7768<br>
-Email: <a href="mailto:tyson.gauthier@retailodyssey.com" style="color:#2F6FB0;text-decoration:underline;">tyson.gauthier@retailodyssey.com</a>`),
+Email: <a href="mailto:tyson.gauthier@retailodyssey.com" style="color:#2F6FB0;text-decoration:underline;">tyson.gauthier@retailodyssey.com</a> / <a href="mailto:tyson.gauthier@retail-odyssey.com" style="color:#2F6FB0;text-decoration:underline;">tyson.gauthier@retail-odyssey.com</a>`),
 
     // Closing
     bodyPara(`If there's anything I haven't covered, just let me know. We look forward to working with you and helping you succeed in your new role, <strong>${name}</strong> — welcome aboard!`),
@@ -311,7 +311,7 @@ Tyson Gauthier
 Central Seattle Supervisor — Retail Odyssey
 Cell: (509) 572-7660
 Fax: (858) 431-7768
-Email: tyson.gauthier@retailodyssey.com
+Email: tyson.gauthier@retailodyssey.com / tyson.gauthier@retail-odyssey.com
 
 If there's anything I haven't covered, just let me know. We look forward to working with you and helping you succeed in your new role, ${firstName} — welcome aboard!
 

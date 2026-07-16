@@ -16,11 +16,34 @@ const {
 
 const SOURCE_TYPE = 'welcome-letter';
 
+// Welcome Letter send UI + dashboard are restricted to Tyson and Wolf only.
+// Keep in sync with the-dump-bin hub cards and welcome page gates.
+const WELCOME_LETTER_ALLOWED_EMAILS = new Set([
+  'tyson.gauthier@retailodyssey.com',
+  'tyson.gauthier@retail-odyssey.com',
+  'tgauthier2011@gmail.com',
+  'aiyana.natarisalazar@retailodyssey.com', // Wolf
+]);
+
+function requireWelcomeLetterAccess(req, res, next) {
+  const email = String(req.user?.email || '').trim().toLowerCase();
+  if (!email || !WELCOME_LETTER_ALLOWED_EMAILS.has(email)) {
+    return res.status(403).json({
+      ok: false,
+      error: 'Welcome Letter access is limited to authorized supervisors only.',
+    });
+  }
+  return next();
+}
+
 function createWelcomeLetterRouter({ resend, logger, pool }) {
   const router = express.Router();
   const log = logger || console;
 
-  router.post('/preview', requireAuth, (req, res) => {
+  // Every welcome-letter route requires auth + the Tyson/Wolf allowlist.
+  router.use(requireAuth, requireWelcomeLetterAccess);
+
+  router.post('/preview', (req, res) => {
     try {
       const letter = buildWelcomeLetter({ ...(req.body || {}), forPreview: true });
       return res.json({
@@ -44,7 +67,7 @@ function createWelcomeLetterRouter({ resend, logger, pool }) {
     }
   });
 
-  router.post('/send', requireAuth, async (req, res) => {
+  router.post('/send', async (req, res) => {
     const userEmail = req.user?.email;
     if (!userEmail) {
       return res.status(401).json({ ok: false, error: 'not authenticated' });
@@ -139,7 +162,7 @@ function createWelcomeLetterRouter({ resend, logger, pool }) {
   // sourceType='welcome-letter' so this is a dedicated board without a
   // separate storage layer or duplicated resend logic.
 
-  router.get('/board', requireAuth, async (req, res) => {
+  router.get('/board', async (req, res) => {
     try {
       const data = await listEmails(pool, {
         page: req.query.page,
@@ -160,7 +183,7 @@ function createWelcomeLetterRouter({ resend, logger, pool }) {
     }
   });
 
-  router.get('/board/:id', requireAuth, async (req, res) => {
+  router.get('/board/:id', async (req, res) => {
     try {
       const item = await getEmailById(pool, Number(req.params.id));
       if (!item || item.sourceType !== SOURCE_TYPE) {
@@ -173,7 +196,7 @@ function createWelcomeLetterRouter({ resend, logger, pool }) {
     }
   });
 
-  router.post('/board/:id/resend', requireAuth, async (req, res) => {
+  router.post('/board/:id/resend', async (req, res) => {
     try {
       const existing = await getEmailById(pool, Number(req.params.id));
       if (!existing || existing.sourceType !== SOURCE_TYPE) {
@@ -203,4 +226,8 @@ function createWelcomeLetterRouter({ resend, logger, pool }) {
   return router;
 }
 
-module.exports = { createWelcomeLetterRouter };
+module.exports = {
+  createWelcomeLetterRouter,
+  WELCOME_LETTER_ALLOWED_EMAILS,
+  requireWelcomeLetterAccess,
+};
