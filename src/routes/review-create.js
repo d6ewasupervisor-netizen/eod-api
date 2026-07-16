@@ -10,6 +10,12 @@ const { buildReviewUrl } = require('./review-tokens');
 
 const router = express.Router();
 
+// This router is mounted ahead of the app's global express.json() (see
+// index.js — access-request/review routes self-parse the same way
+// review-decision.js does with express.urlencoded()), so it needs its own
+// JSON body parser or req.body is always undefined here.
+router.use(express.json({ limit: '50mb' }));
+
 function authorizeCreate(req, res, next) {
   const secret = process.env.REVIEW_REQUEST_SECRET;
   if (!secret) {
