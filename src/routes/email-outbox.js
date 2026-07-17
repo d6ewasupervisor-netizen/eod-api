@@ -7,6 +7,9 @@ const { requireAuth, requireRole } = require('../auth-middleware');
 const {
   listEmails,
   getEmailById,
+  getEmailAttachment,
+  buildEmailEml,
+  contentDispositionHeader,
   resendStoredEmail,
   ingestEmailRecord,
   applyResendWebhookEvent,
@@ -180,6 +183,46 @@ function createEmailOutboxRouter({ pool, resend, resendSyncAccounts, logger = co
       return res.json({ ok: true, item });
     } catch (err) {
       return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  /** Download the full stored email as a .eml (RFC 822) file. */
+  router.get('/:id/download', async (req, res) => {
+    try {
+      const eml = await buildEmailEml(pool, Number(req.params.id));
+      res.setHeader('Content-Type', eml.contentType);
+      res.setHeader('Content-Disposition', contentDispositionHeader(eml.filename, { inline: false }));
+      res.setHeader('Content-Length', String(eml.content.length));
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.status(200).send(eml.content);
+    } catch (err) {
+      const status = err.statusCode || 500;
+      return res.status(status).json({ ok: false, error: err.message });
+    }
+  });
+
+  /**
+   * Download or view a single attachment.
+   * Query: disposition=inline|attachment (default attachment).
+   * Also accepts ?inline=1 as a shorthand for disposition=inline.
+   */
+  router.get('/:id/attachments/:index', async (req, res) => {
+    try {
+      const att = await getEmailAttachment(pool, Number(req.params.id), Number(req.params.index));
+      const wantInline = String(req.query.disposition || '').toLowerCase() === 'inline'
+        || req.query.inline === '1'
+        || req.query.inline === 'true';
+      const inline = wantInline && att.viewable;
+      res.setHeader('Content-Type', att.contentType);
+      res.setHeader('Content-Disposition', contentDispositionHeader(att.filename, { inline }));
+      res.setHeader('Content-Length', String(att.content.length));
+      res.setHeader('Cache-Control', 'private, no-store');
+      // Allow same-origin iframe/img viewing when opened as a blob URL from the UI.
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      return res.status(200).send(att.content);
+    } catch (err) {
+      const status = err.statusCode || 500;
+      return res.status(status).json({ ok: false, error: err.message });
     }
   });
 

@@ -1,9 +1,23 @@
 'use strict';
 
+const MailComposer = require('nodemailer/lib/mail-composer');
 const { query } = require('./db');
 
 /** @type {((meta: object, payload: object) => Promise<{ data?: object, error?: object, recordId?: number|null }>)|null} */
 let _sendEmail = null;
+
+const VIEWABLE_CONTENT_TYPES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+  'text/plain',
+  'text/html',
+  'text/csv',
+]);
 
 const AUTH_SOURCE_TYPES = new Set([
   'auth-magic-link',
@@ -103,6 +117,89 @@ function mapResendEventToDelivery(lastEvent) {
   return ev;
 }
 
+function base64ByteLength(contentBase64) {
+  if (!contentBase64 || typeof contentBase64 !== 'string') return 0;
+  // Strip data-URL prefix / whitespace if present; length math is approximate for padding.
+  const b64 = contentBase64.replace(/^data:[^;]+;base64,/, '').replace(/\s+/g, '');
+  if (!b64) return 0;
+  const padding = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((b64.length * 3) / 4) - padding);
+}
+
+function attachmentMeta(att, index) {
+  if (!att || !att.filename) return null;
+  const contentType = att.content_type || att.contentType || null;
+  const contentId = att.content_id || att.contentId || null;
+  const hasContent = Boolean(att.content_base64);
+  const sizeBytes = hasContent ? base64ByteLength(att.content_base64) : 0;
+  return {
+    index,
+    filename: String(att.filename),
+    contentType,
+    contentId: contentId ? String(contentId) : null,
+    sizeBytes,
+    hasContent,
+    viewable: hasContent && isViewableContentType(contentType, att.filename),
+  };
+}
+
+function attachmentsMetaList(attachments) {
+  if (!Array.isArray(attachments)) return [];
+  return attachments.map((att, index) => attachmentMeta(att, index)).filter(Boolean);
+}
+
+function isViewableContentType(contentType, filename) {
+  const ct = String(contentType || '').toLowerCase().split(';')[0].trim();
+  if (ct && VIEWABLE_CONTENT_TYPES.has(ct)) return true;
+  const name = String(filename || '').toLowerCase();
+  return /\.(pdf|png|jpe?g|gif|webp|svg|txt|html?|csv)$/.test(name);
+}
+
+function decodeStoredAttachmentContent(att) {
+  if (!att?.content_base64) return null;
+  const raw = String(att.content_base64).replace(/^data:[^;]+;base64,/, '').replace(/\s+/g, '');
+  try {
+    return Buffer.from(raw, 'base64');
+  } catch (_err) {
+    return null;
+  }
+}
+
+function sanitizeDownloadFilename(name, fallback = 'download') {
+  const base = String(name || fallback)
+    .replace(/[/\\?%*:|"<>]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180);
+  return base || fallback;
+}
+
+function contentDispositionHeader(filename, { inline = false } = {}) {
+  const safe = sanitizeDownloadFilename(filename);
+  // ASCII fallback + RFC 5987 filename* for non-ASCII.
+  const ascii = safe.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '') || 'download';
+  const disposition = inline ? 'inline' : 'attachment';
+  return `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(safe)}`;
+}
+
+function guessContentType(filename, contentType) {
+  const ct = String(contentType || '').trim();
+  if (ct) return ct;
+  const name = String(filename || '').toLowerCase();
+  if (name.endsWith('.pdf')) return 'application/pdf';
+  if (name.endsWith('.png')) return 'image/png';
+  if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
+  if (name.endsWith('.gif')) return 'image/gif';
+  if (name.endsWith('.webp')) return 'image/webp';
+  if (name.endsWith('.svg')) return 'image/svg+xml';
+  if (name.endsWith('.txt')) return 'text/plain';
+  if (name.endsWith('.html') || name.endsWith('.htm')) return 'text/html';
+  if (name.endsWith('.csv')) return 'text/csv';
+  if (name.endsWith('.json')) return 'application/json';
+  if (name.endsWith('.zip')) return 'application/zip';
+  return 'application/octet-stream';
+}
+
 function rowToListItem(row) {
   const compacted = Boolean(row.metadata?.compactedAt);
   return {
@@ -138,19 +235,165 @@ function rowToListItem(row) {
       && row.stored_payload
       && Object.keys(row.stored_payload).length,
     ),
+    canDownload: Boolean(
+      !compacted
+      && (
+        row.html_body
+        || row.text_body
+        || (Array.isArray(row.attachments) && row.attachments.some((a) => a?.content_base64))
+        || (row.stored_payload && Object.keys(row.stored_payload).length)
+      ),
+    ),
   };
 }
 
 function rowToDetail(row) {
   const item = rowToListItem(row);
+  // Never ship base64 payloads in the JSON detail response — use download routes.
   return {
     ...item,
     bcc: row.bcc_addresses || [],
     replyTo: row.reply_to,
     htmlBody: row.html_body,
     textBody: row.text_body,
-    attachments: row.attachments || [],
-    storedPayload: row.stored_payload || {},
+    attachments: attachmentsMetaList(row.attachments || []),
+    // Flag only — avoids transferring multi-MB attachment bodies on every detail open.
+    hasStoredPayload: Boolean(row.stored_payload && Object.keys(row.stored_payload).length),
+  };
+}
+
+/**
+ * Load a single stored attachment by index. Returns binary content for download/view.
+ * @returns {Promise<{ filename: string, contentType: string, content: Buffer, viewable: boolean }|null>}
+ */
+async function getEmailAttachment(pool, id, index) {
+  const client = pool || { query };
+  const { rows } = await client.query(
+    'SELECT id, attachments, metadata FROM sent_emails WHERE id = $1',
+    [id],
+  );
+  if (!rows.length) {
+    const err = new Error('Email record not found');
+    err.statusCode = 404;
+    throw err;
+  }
+  const row = rows[0];
+  if (row.metadata?.compactedAt) {
+    const err = new Error('Email was compacted — attachments are no longer stored');
+    err.statusCode = 409;
+    throw err;
+  }
+  const attachments = Array.isArray(row.attachments) ? row.attachments : [];
+  const idx = Number(index);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= attachments.length) {
+    const err = new Error('Attachment not found');
+    err.statusCode = 404;
+    throw err;
+  }
+  const att = attachments[idx];
+  if (!att?.filename || !att.content_base64) {
+    const err = new Error('Attachment content is not available');
+    err.statusCode = 404;
+    throw err;
+  }
+  const content = decodeStoredAttachmentContent(att);
+  if (!content) {
+    const err = new Error('Attachment content could not be decoded');
+    err.statusCode = 500;
+    throw err;
+  }
+  const contentType = guessContentType(att.filename, att.content_type || att.contentType);
+  return {
+    filename: String(att.filename),
+    contentType,
+    content,
+    viewable: isViewableContentType(contentType, att.filename),
+  };
+}
+
+/**
+ * Build an RFC 822 (.eml) message from a stored outbox row, including body + attachments.
+ * @returns {Promise<{ filename: string, contentType: string, content: Buffer }>}
+ */
+async function buildEmailEml(pool, id) {
+  const client = pool || { query };
+  const { rows } = await client.query('SELECT * FROM sent_emails WHERE id = $1', [id]);
+  if (!rows.length) {
+    const err = new Error('Email record not found');
+    err.statusCode = 404;
+    throw err;
+  }
+  const row = rows[0];
+  if (row.metadata?.compactedAt) {
+    const err = new Error('Email was compacted — body and attachments are no longer stored');
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const stored = row.stored_payload || {};
+  const html = row.html_body || stored.html || null;
+  const text = row.text_body || stored.text || null;
+  const from = row.from_address || stored.from || undefined;
+  const to = (row.to_addresses?.length ? row.to_addresses : normalizeAddressList(stored.to)).join(', ') || undefined;
+  const cc = (row.cc_addresses?.length ? row.cc_addresses : normalizeAddressList(stored.cc)).join(', ') || undefined;
+  const bcc = (row.bcc_addresses?.length ? row.bcc_addresses : normalizeAddressList(stored.bcc)).join(', ') || undefined;
+  const replyTo = row.reply_to || stored.reply_to || stored.replyTo || undefined;
+  const subject = row.subject || stored.subject || '(no subject)';
+  const date = row.created_at ? new Date(row.created_at) : new Date();
+
+  const rawAttachments = Array.isArray(row.attachments) && row.attachments.length
+    ? row.attachments
+    : (Array.isArray(stored.attachments) ? stored.attachments : []);
+
+  const attachments = rawAttachments
+    .map((att) => {
+      const content = decodeStoredAttachmentContent(att);
+      if (!content || !att.filename) return null;
+      const part = {
+        filename: String(att.filename),
+        content,
+        contentType: guessContentType(att.filename, att.content_type || att.contentType),
+      };
+      const contentId = att.content_id || att.contentId;
+      if (contentId) {
+        part.cid = String(contentId);
+        part.contentDisposition = 'inline';
+      }
+      return part;
+    })
+    .filter(Boolean);
+
+  if (!html && !text && !attachments.length) {
+    const err = new Error('No email body or attachments stored for download');
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const mail = new MailComposer({
+    from,
+    to,
+    cc: cc || undefined,
+    bcc: bcc || undefined,
+    replyTo: replyTo || undefined,
+    subject,
+    date,
+    html: html || undefined,
+    text: text || (html ? undefined : '(no body)'),
+    attachments: attachments.length ? attachments : undefined,
+    headers: {
+      'X-Email-Outbox-Id': String(row.id),
+      'X-Resend-Id': row.resend_id || '',
+      'X-Source-System': row.source_system || '',
+      'X-Source-Type': row.source_type || '',
+    },
+  });
+
+  const content = await mail.compile().build();
+  const safeSubject = sanitizeDownloadFilename(subject, `email-${row.id}`).slice(0, 80);
+  return {
+    filename: `${safeSubject || `email-${row.id}`}.eml`,
+    contentType: 'message/rfc822',
+    content,
   };
 }
 
@@ -846,6 +1089,8 @@ module.exports = {
   payloadForResend,
   attachmentsToStored,
   attachmentsFromStored,
+  attachmentsMetaList,
+  attachmentMeta,
   mapResendEventToDelivery,
   resolveListSort,
   LIST_SORT_COLUMNS,
@@ -853,6 +1098,13 @@ module.exports = {
   createEmailSender,
   listEmails,
   getEmailById,
+  getEmailAttachment,
+  buildEmailEml,
+  contentDispositionHeader,
+  sanitizeDownloadFilename,
+  guessContentType,
+  isViewableContentType,
+  decodeStoredAttachmentContent,
   resendStoredEmail,
   ingestEmailRecord,
   applyResendWebhookEvent,

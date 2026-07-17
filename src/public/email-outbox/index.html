@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Email Outbox</title>
-  <link rel="stylesheet" href="/email-outbox/assets/email-outbox.css?v=20260713-1" />
+  <link rel="stylesheet" href="/email-outbox/assets/email-outbox.css?v=20260717-1" />
   <script src="/auth-gate.js"></script>
 </head>
 <body>
@@ -95,6 +95,7 @@
         <div id="detailBody" hidden>
           <dl class="detail-grid" id="detailMeta"></dl>
           <div class="detail-actions">
+            <button type="button" id="downloadEmailBtn" class="secondary">Download email (.eml)</button>
             <button type="button" id="resendBtn">Resend exactly</button>
             <button type="button" id="compactBtn" class="secondary">Compact (free space)</button>
             <button type="button" id="deleteBtn" class="secondary danger">Delete</button>
@@ -119,11 +120,18 @@
           <iframe id="htmlPreview" title="Email HTML preview" sandbox=""></iframe>
           <h3>Attachments</h3>
           <ul id="attachmentList" class="attachment-list"></ul>
+          <div id="attachmentViewer" class="attachment-viewer" hidden>
+            <div class="attachment-viewer-header">
+              <strong id="attachmentViewerTitle">Attachment preview</strong>
+              <button type="button" id="attachmentViewerClose" class="secondary">Close</button>
+            </div>
+            <div id="attachmentViewerBody" class="attachment-viewer-body"></div>
+          </div>
           <p id="detailError" class="error" hidden></p>
         </div>
       </section>
     </section>
   </main>
-  <script src="/email-outbox/assets/email-outbox.js?v=20260713-1"></script>
+  <script src="/email-outbox/assets/email-outbox.js?v=20260717-1"></script>
 </body>
 </html>

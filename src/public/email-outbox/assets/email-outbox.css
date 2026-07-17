@@ -91,7 +91,12 @@ tbody tr:hover, tbody tr.is-selected { background: #172554; }
 }
 .detail-grid dt { color: #94a3b8; margin: 0; }
 .detail-grid dd { margin: 0; word-break: break-word; }
-.detail-actions { margin: 12px 0 16px; }
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 16px;
+}
 #htmlPreview {
   width: 100%;
   min-height: 260px;
@@ -99,8 +104,94 @@ tbody tr:hover, tbody tr.is-selected { background: #172554; }
   border-radius: 8px;
   background: #fff;
 }
-.attachment-list { margin: 0; padding-left: 18px; }
+.attachment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.attachment-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  background: #0b1220;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.attachment-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 160px;
+}
+.attachment-name {
+  font-weight: 600;
+  word-break: break-word;
+}
+.attachment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.attachment-actions button {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.attachment-viewer {
+  margin-top: 12px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #0b1220;
+  overflow: hidden;
+}
+.attachment-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #1f2937;
+}
+.attachment-viewer-body {
+  min-height: 200px;
+  max-height: min(70vh, 640px);
+  overflow: auto;
+  background: #111827;
+  padding: 8px;
+}
+.attachment-viewer-body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 4px;
+}
+.attachment-viewer-body iframe,
+.attachment-viewer-body embed,
+.attachment-viewer-body object {
+  width: 100%;
+  min-height: 420px;
+  border: 0;
+  background: #fff;
+  border-radius: 4px;
+}
+.attachment-viewer-body pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: #e2e8f0;
+}
 button.danger { background: #991b1b; border-color: #7f1d1d; }
+.error { color: #fecaca; margin-top: 10px; }
 .edit-form {
   display: grid;
   gap: 10px;
