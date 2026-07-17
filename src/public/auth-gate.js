@@ -103,6 +103,75 @@
     return res;
   }
 
+  // Signed-in-as badge: mirrors the-dump-bin's auth-gate.js so tools hosted
+  // directly off eod-api (dc-scan, trackers, email-outbox) show the same
+  // "Signed in as <email> / Log out" bar. Decodes the email straight out of
+  // the session JWT payload (display only — the server independently
+  // verifies the token on every API call), so no extra network round trip.
+  function decodeEmailFromToken(token) {
+    try {
+      var parts = String(token || '').split('.');
+      if (parts.length < 2) return '';
+      var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      var binary = atob(b64);
+      var bytes = new Uint8Array(binary.length);
+      for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      var json = new TextDecoder('utf-8').decode(bytes);
+      var payload = JSON.parse(json);
+      return (payload && payload.email) || '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function injectUserBadge(email) {
+    if (!email || document.getElementById('__dumpbin_user_badge')) return;
+
+    var bar = document.createElement('div');
+    bar.id = '__dumpbin_user_badge';
+    bar.setAttribute('style', [
+      'display:flex', 'align-items:center', 'justify-content:flex-end',
+      'flex-wrap:wrap', 'gap:10px', 'padding:6px 14px',
+      'background:#141c27', 'border-bottom:1px solid #2f4562',
+      'font-family:"Segoe UI",system-ui,-apple-system,sans-serif',
+      'font-size:12px', 'line-height:1.4', 'color:#8fa3b8',
+      'position:relative', 'z-index:1000',
+    ].join(';'));
+
+    var label = document.createElement('span');
+    label.appendChild(document.createTextNode('Signed in as '));
+    var emailEl = document.createElement('strong');
+    emailEl.setAttribute('style', 'color:#e8ecf1;font-weight:600;word-break:break-all;');
+    emailEl.textContent = email;
+    label.appendChild(emailEl);
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'Log out';
+    btn.setAttribute('style', [
+      'padding:4px 12px', 'border-radius:6px', 'border:1px solid #2f4562',
+      'background:#2a3a4e', 'color:#e8ecf1', 'font-size:12px',
+      'font-weight:600', 'font-family:inherit', 'cursor:pointer',
+    ].join(';'));
+    btn.addEventListener('click', function () { signOut(); });
+
+    bar.appendChild(label);
+    bar.appendChild(btn);
+
+    function place() {
+      if (document.body.firstChild) {
+        document.body.insertBefore(bar, document.body.firstChild);
+      } else {
+        document.body.appendChild(bar);
+      }
+    }
+    if (document.body) place();
+    else document.addEventListener('DOMContentLoaded', place);
+  }
+
+  function signOut() { clearSession(); bounceToSignIn('sign out'); }
+
   var bootPromise = (async function boot() {
     var qp = new URLSearchParams(location.search);
     var hasToken = !!qp.get('token');
@@ -120,6 +189,7 @@
         return;
       }
     }
+    injectUserBadge(decodeEmailFromToken(getSession()));
     revealPage();
   })();
 
@@ -128,11 +198,12 @@
     getSession: getSession,
     setSession: setSession,
     clearSession: clearSession,
-    signOut: function () { clearSession(); bounceToSignIn('sign out'); },
+    signOut: signOut,
     fetch: authFetch,
     bounceToSignIn: bounceToSignIn,
     bootPromise: bootPromise,
   };
   window.dumpBinAuthFetch = authFetch;
+  window.dumpBinSignOut = signOut;
   window.dumpBinAuthReady = bootPromise;
 })();
