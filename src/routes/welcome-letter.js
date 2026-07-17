@@ -16,13 +16,14 @@ const {
 
 const SOURCE_TYPE = 'welcome-letter';
 
-// Welcome Letter send UI + dashboard are restricted to Tyson and Wolf only.
+// Welcome Letter send UI + dashboard are restricted to authorized admins only.
 // Keep in sync with the-dump-bin hub cards and welcome page gates.
 const WELCOME_LETTER_ALLOWED_EMAILS = new Set([
   'tyson.gauthier@retailodyssey.com',
   'tyson.gauthier@retail-odyssey.com',
   'tgauthier2011@gmail.com',
   'aiyana.natarisalazar@retailodyssey.com', // Wolf
+  'd6ewa.supervisor@gmail.com', // admin
 ]);
 
 function requireWelcomeLetterAccess(req, res, next) {
