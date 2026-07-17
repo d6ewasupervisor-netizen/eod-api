@@ -212,9 +212,32 @@ function createGrafanaBridge({
     if (!shouldAutoStart()) {
       return { ok: true, autoStarted: false, status: getStatus() };
     }
-    await seed();
-    startHeartbeat();
-    return { ok: true, autoStarted: true, status: getStatus() };
+    // Never crash the whole API on Grafana seed failure — SAS / Rebotics /
+    // hub must stay up. Heartbeat will retry rotation; /grafana-trigger-auth
+    // remains available for manual recovery.
+    try {
+      await seed();
+      startHeartbeat();
+      return { ok: true, autoStarted: true, status: getStatus() };
+    } catch (error) {
+      healthy = false;
+      logger.error(
+        'Grafana seed failed at boot (non-fatal):',
+        error?.message || String(error)
+      );
+      try {
+        startHeartbeat();
+      } catch (hbErr) {
+        logger.error('Grafana heartbeat start failed:', hbErr?.message || String(hbErr));
+      }
+      return {
+        ok: false,
+        autoStarted: true,
+        seedFailed: true,
+        error: error?.message || String(error),
+        status: getStatus(),
+      };
+    }
   }
 
   return {
