@@ -389,6 +389,9 @@ async function start() {
   const PUBLIC_PATHS = [
     '/sas-session',
     '/sas-session/status',
+    // Sibling services (cp_scheduler) pull live session; route self-gates on
+    // Bearer SAS_AUTH_SECRET (or DISTRICT1_SESSION_PUSH_SECRET).
+    '/internal/sas-session/export',
     '/rebotics-auth-update',
     '/rebotics-token-internal',
     '/api/auth-status',

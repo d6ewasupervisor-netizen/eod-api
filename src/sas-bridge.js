@@ -34,6 +34,8 @@ const EMPLOYEE_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 let sasSession = {
   cookieHeader: null,
   csrfToken: null,
+  /** DRF auth_token for Authorization: Token … (Token-based GETs / field-app writes). */
+  authToken: null,
   receivedAt: null,
   lastHeartbeat: null,
   alive: false,
@@ -57,15 +59,30 @@ let dbPool = null;
  *
  * Either way the cookies are already validated by the caller before we get
  * here, so this function just commits the new state and lights the workers.
+ *
+ * authToken is optional for cookie-only consumers (photo queue) but required
+ * for Token-header clients (cp_scheduler loadSasSession via /internal/sas-session/export).
  */
-function applySession({ cookieHeader, csrfToken, source = 'unknown' }) {
+function applySession({
+  cookieHeader,
+  csrfToken,
+  authToken = null,
+  authBody = null,
+  source = 'unknown',
+}) {
   if (!cookieHeader || !csrfToken) {
     throw new Error('applySession: cookieHeader and csrfToken are required');
   }
 
+  const resolvedAuthToken =
+    authToken ||
+    authBody?.auth_token ||
+    null;
+
   sasSession = {
     cookieHeader,
     csrfToken,
+    authToken: resolvedAuthToken ? String(resolvedAuthToken) : null,
     receivedAt: new Date().toISOString(),
     lastHeartbeat: new Date().toISOString(),
     alive: true,
@@ -75,7 +92,10 @@ function applySession({ cookieHeader, csrfToken, source = 'unknown' }) {
   startHeartbeat();
   if (dbPool) startQueueWorker(dbPool);
 
-  logger.info(`Session applied (source=${source}). Heartbeat + queue worker (re)started.`);
+  logger.info(
+    `Session applied (source=${source}, hasAuthToken=${!!sasSession.authToken}). ` +
+      'Heartbeat + queue worker (re)started.'
+  );
   pushDistrict1Session().catch((err) => logger.error(`District 1 push: ${err.message}`));
   return sasSession;
 }
@@ -84,9 +104,14 @@ async function pushDistrict1Session() {
   const url = (process.env.DISTRICT1_RAILWAY_URL || '').replace(/\/+$/, '');
   const secret = process.env.DISTRICT1_SESSION_PUSH_SECRET;
   if (!url || !secret || !sasSession.alive) return;
+  const payload = {
+    cookieHeader: sasSession.cookieHeader,
+    csrfToken: sasSession.csrfToken,
+  };
+  if (sasSession.authToken) payload.authToken = sasSession.authToken;
   await axios.post(
     `${url}/internal/sas-session`,
-    { cookieHeader: sasSession.cookieHeader, csrfToken: sasSession.csrfToken },
+    payload,
     { headers: { Authorization: `Bearer ${secret}` }, timeout: 15000, validateStatus: () => true },
   );
   logger.info('Session pushed to District 1 Calendar');
@@ -590,7 +615,7 @@ function registerRoutes(app, pool) {
       return res.status(401).json({ success: false, error: 'Invalid auth secret' });
     }
 
-    const { cookieHeader, csrfToken } = req.body;
+    const { cookieHeader, csrfToken, authToken } = req.body;
 
     if (!cookieHeader || !csrfToken) {
       return res.status(400).json({ success: false, error: 'Missing cookieHeader or csrfToken' });
@@ -620,7 +645,12 @@ function registerRoutes(app, pool) {
       });
     }
 
-    applySession({ cookieHeader, csrfToken, source: 'POST /sas-session' });
+    applySession({
+      cookieHeader,
+      csrfToken,
+      authToken: authToken || null,
+      source: 'POST /sas-session',
+    });
 
     const expiresAt = new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString();
 
@@ -1242,20 +1272,58 @@ function registerRoutes(app, pool) {
     });
   });
 
+  /**
+   * Secured session export for sibling services (cp_scheduler, District 1).
+   * Shape matches sas-auth auth-state / auth-server /session so loadSasSession()
+   * can normalize without a Windows path.
+   * Never expose this without Bearer SAS_AUTH_SECRET (or D1 push secret).
+   */
   app.get('/internal/sas-session/export', (req, res) => {
     const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     const d1Secret = process.env.DISTRICT1_SESSION_PUSH_SECRET || '';
     if (!token || (token !== AUTH_SECRET && (!d1Secret || token !== d1Secret))) {
       return res.status(401).json({ ok: false, error: 'Unauthorized' });
     }
-    if (!sasSession.alive) {
-      return res.status(503).json({ ok: false, error: 'SAS session not alive' });
+
+    // Lazy self-heal for pullers (cp_scheduler) when session is dead or
+    // cookie-only (pre-authToken deploys). Single-flight + cooldown in
+    // auto-refresh; force when we specifically lack auth_token.
+    if ((!sasSession.alive || !sasSession.authToken) && autoRefresh.isConfigured()) {
+      const reason = !sasSession.alive
+        ? 'export:session-dead'
+        : 'export:missing-auth-token';
+      autoRefresh
+        .runAutoRefresh({ reason, force: !sasSession.authToken })
+        .catch((err) => logger.error(`Export-triggered refresh threw: ${err.message}`));
     }
+
+    if (!sasSession.alive) {
+      return res.status(503).json({
+        ok: false,
+        error: 'SAS session not alive — morning auth / auto-refresh in progress',
+        code: 'sas_session_unavailable',
+      });
+    }
+    if (!sasSession.authToken) {
+      return res.status(503).json({
+        ok: false,
+        error:
+          'SAS session alive but auth_token missing — re-minting; retry in ~30s',
+        code: 'sas_session_incomplete',
+        receivedAt: sasSession.receivedAt,
+      });
+    }
+
     return res.json({
       ok: true,
-      cookieHeader: sasSession.cookieHeader,
+      // loadSasSession / normalizeSession fields
+      auth: { auth_token: sasSession.authToken },
+      auth_token: sasSession.authToken,
       csrfToken: sasSession.csrfToken,
+      cookieHeader: sasSession.cookieHeader,
+      generatedAt: sasSession.receivedAt,
       receivedAt: sasSession.receivedAt,
+      source: sasSession.source,
     });
   });
 
