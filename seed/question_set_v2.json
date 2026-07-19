@@ -1,0 +1,389 @@
+{
+ "version": 2,
+ "title": "Division 701 \u2014 In-Store Best Practices Survey (v2)",
+ "sections": [
+  {
+   "id": "A",
+   "title": "KOMPASS Cart & Storage",
+   "questions": [
+    {
+     "id": "Q5",
+     "text": "Does the store have a KOMPASS cart?",
+     "type": "choice",
+     "options": [
+      "Yes",
+      "No",
+      "Other"
+     ],
+     "photo": true,
+     "branches": [
+      {
+       "when": "Yes",
+       "id": "Q5a",
+       "text": "Does the store put new items on it?",
+       "type": "yesno",
+       "good": "Yes"
+      },
+      {
+       "when": [
+        "No",
+        "Other"
+       ],
+       "id": "Q5b",
+       "text": "Does the store have an area for storing KOMPASS supplies, data skins, pushers, and reset materials?",
+       "type": "yesno",
+       "good": "Yes"
+      }
+     ],
+     "good": "Yes"
+    },
+    {
+     "id": "Q6",
+     "text": "Where in the store is the cart or designated area located (if there is one)?",
+     "type": "text",
+     "photo": true
+    },
+    {
+     "id": "Q7",
+     "text": "Does the store have a KOMPASS Champion or reset captain?",
+     "type": "yesno",
+     "branches": [
+      {
+       "when": "Yes",
+       "id": "Q7a",
+       "text": "What is their name?",
+       "type": "text"
+      },
+      {
+       "when": "Yes",
+       "id": "Q7b",
+       "text": "Do they keep the KOMPASS cart or area organized?",
+       "type": "choice",
+       "options": [
+        "Yes",
+        "No",
+        "N/A"
+       ],
+       "good": "Yes"
+      }
+     ],
+     "good": "Yes"
+    }
+   ]
+  },
+  {
+   "id": "B",
+   "title": "Supplies & Equipment",
+   "questions": [
+    {
+     "id": "Q8",
+     "text": "Does the store have cleaning supplies available to use?",
+     "type": "yesno",
+     "good": "Yes"
+    },
+    {
+     "id": "Q9",
+     "text": "Does the store provide garbage/recycling bags?",
+     "type": "yesno",
+     "good": "Yes"
+    },
+    {
+     "id": "Q10",
+     "text": "Does the store supply easy access to step ladders and banana boxes?",
+     "type": "yesno",
+     "good": "Yes"
+    },
+    {
+     "id": "Q11",
+     "text": "Is our team provided with adequate data skins/channel strips to replace broken or dirty ones?",
+     "type": "yesno",
+     "good": "Yes"
+    }
+   ]
+  },
+  {
+   "id": "C",
+   "title": "Staging Areas",
+   "questions": [
+    {
+     "id": "Q12",
+     "text": "Does the store have a designated staging area for new shelf-stable grocery items?",
+     "type": "yesno",
+     "photo": true,
+     "good": "Yes"
+    },
+    {
+     "id": "Q13",
+     "text": "Does the store have a designated staging area for refrigerated/frozen product?",
+     "type": "yesno",
+     "photo": true,
+     "good": "Yes"
+    },
+    {
+     "id": "Q14",
+     "text": "Does the store have a designated staging area for natural foods items?",
+     "type": "yesno",
+     "photo": true,
+     "good": "Yes"
+    },
+    {
+     "id": "Q15",
+     "text": "Does the store have a designated staging area for HABA?",
+     "type": "yesno",
+     "photo": true,
+     "good": "Yes"
+    },
+    {
+     "id": "Q16",
+     "text": "Does the store have a designated staging area for produce?",
+     "type": "yesno",
+     "photo": true,
+     "good": "Yes"
+    }
+   ]
+  },
+  {
+   "id": "D",
+   "title": "Vestcom & Tags",
+   "questions": [
+    {
+     "id": "Q17",
+     "text": "Is our team notified if the Vestcom box has been delayed or otherwise unavailable?",
+     "type": "yesno",
+     "good": "Yes"
+    },
+    {
+     "id": "Q18",
+     "text": "Is our team informed if there are materials missing from the Vestcom box?",
+     "type": "yesno",
+     "good": "Yes"
+    },
+    {
+     "id": "Q19",
+     "text": "Are our associates notified if the store has not received all shelf strips and POGs for an upcoming reset?",
+     "type": "yesno",
+     "good": "Yes"
+    },
+    {
+     "id": "Q20",
+     "text": "Where is the Vestcom box typically found at this store?",
+     "type": "text",
+     "photo": true
+    },
+    {
+     "id": "Q21",
+     "text": "Where are the price tags typically found at this store?",
+     "type": "text",
+     "photo": true
+    },
+    {
+     "id": "Q22",
+     "text": "Is there a regular issue with finding either the box or the tags at this store?",
+     "type": "yesno",
+     "good": "No"
+    },
+    {
+     "id": "Q23",
+     "text": "Does the store separate strips and/or tags prior to us performing the resets?",
+     "type": "yesno",
+     "good": "Yes"
+    }
+   ]
+  },
+  {
+   "id": "E",
+   "title": "Store Requests & Scope of Work",
+   "questions": [
+    {
+     "id": "Q24",
+     "text": "Does the store have a specific way they want overstock or not-in-set items handled?",
+     "type": "yesno",
+     "detailOn": "Yes"
+    },
+    {
+     "id": "Q25",
+     "text": "Does the store ask our team to place backstock on the top stock rack?",
+     "type": "yesno",
+     "good": "No"
+    },
+    {
+     "id": "Q26",
+     "text": "Does the store ask us to rotate product and check for out-of-date items?",
+     "type": "yesno",
+     "good": "No"
+    },
+    {
+     "id": "Q27",
+     "text": "Does the store ask us to perform the marking down of items pulled from sets?",
+     "type": "yesno",
+     "good": "No"
+    },
+    {
+     "id": "Q28",
+     "text": "Does the store ask us to make missing tags?",
+     "type": "yesno",
+     "good": "No"
+    },
+    {
+     "id": "Q29",
+     "text": "Does the store ask us to clean fixtures in excess of what would be considered our normal scope of involvement?",
+     "type": "yesno",
+     "good": "No"
+    }
+   ]
+  },
+  {
+   "id": "F",
+   "title": "Store Access & Entry",
+   "questions": [
+    {
+     "id": "Q30",
+     "text": "How do you enter the store each morning?",
+     "type": "text"
+    },
+    {
+     "id": "Q31",
+     "text": "Do you show up before the remainder of the team?",
+     "type": "yesno",
+     "branches": [
+      {
+       "when": "Yes",
+       "id": "Q31a",
+       "text": "How does the rest of the team enter the store?",
+       "type": "text"
+      }
+     ]
+    },
+    {
+     "id": "Q32",
+     "text": "Does anyone at the store make it difficult to gain entry?",
+     "type": "yesno",
+     "detailOn": "Yes",
+     "good": "No"
+    },
+    {
+     "id": "Q33",
+     "text": "Do you sign in on the vendor log?",
+     "type": "yesno",
+     "good": "Yes"
+    }
+   ]
+  },
+  {
+   "id": "G",
+   "title": "Store Contacts",
+   "questions": [
+    {
+     "id": "Q34",
+     "text": "Do you know the name of the store director?",
+     "type": "yesno",
+     "detailOn": "Yes",
+     "good": "Yes"
+    },
+    {
+     "id": "Q35",
+     "text": "Do you know the name of the price changer?",
+     "type": "yesno",
+     "detailOn": "Yes",
+     "good": "Yes"
+    },
+    {
+     "id": "Q36",
+     "text": "Do you know the name of the grocery manager?",
+     "type": "yesno",
+     "detailOn": "Yes",
+     "good": "Yes"
+    },
+    {
+     "id": "Q37",
+     "text": "Do you know the name of the grocery receiver?",
+     "type": "yesno",
+     "detailOn": "Yes",
+     "good": "Yes"
+    }
+   ]
+  },
+  {
+   "id": "H",
+   "title": "Department Relations",
+   "questions": [
+    {
+     "id": "Q38",
+     "text": "Do any of the following departments regularly push back on us performing resets?",
+     "type": "multiselect",
+     "options": [
+      "Produce",
+      "Deli",
+      "Bakery",
+      "Meat Department",
+      "HABA",
+      "Natural Foods",
+      "Grocery",
+      "Pharmacy",
+      "GM",
+      "None"
+     ],
+     "good": "None"
+    }
+   ]
+  },
+  {
+   "id": "I",
+   "title": "Technology",
+   "questions": [
+    {
+     "id": "Q39",
+     "text": "Does this store use DSL (Digital Shelf Labels)?",
+     "type": "yesno",
+     "branches": [
+      {
+       "when": "Yes",
+       "id": "Q39a",
+       "text": "Does our team get pushback from the store regarding use of a handheld (Zebra)?",
+       "type": "yesno",
+       "good": "No"
+      }
+     ]
+    },
+    {
+     "id": "Q40",
+     "text": "Is the store's wifi acceptable for performing your job?",
+     "type": "yesno",
+     "detailOn": "No",
+     "good": "Yes"
+    }
+   ]
+  },
+  {
+   "id": "J",
+   "title": "Completion & Sign-Out",
+   "questions": [
+    {
+     "id": "Q41",
+     "text": "When getting signed out at the end of the day, does someone from the store walk the sets to confirm completion standards prior to signing us out?",
+     "type": "yesno",
+     "good": "Yes"
+    }
+   ]
+  },
+  {
+   "id": "K",
+   "title": "Safety & Final Comments",
+   "questions": [
+    {
+     "id": "Q42",
+     "text": "Are there any safety issues or consistent issues with anything or anyone at this store?",
+     "type": "yesno",
+     "detailOn": "Yes",
+     "good": "No"
+    },
+    {
+     "id": "Q43",
+     "text": "Are there any comments or concerns you would like us to be aware of at this store?",
+     "type": "text",
+     "optional": true
+    }
+   ]
+  }
+ ]
+}

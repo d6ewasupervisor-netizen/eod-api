@@ -427,6 +427,11 @@ async function start() {
     '/fm391-p05w3/',
     '/dc-scan',
     '/dc-scan/',
+    // Survey admin dashboard shell (auth-gate.js + client session JWT);
+    // /api/survey/admin/* remains behind requireAuth + requireRole('admin').
+    '/survey-admin',
+    '/survey-admin/',
+    '/survey-admin.html',
     '/health',
   ];
   const PUBLIC_PREFIXES = [
@@ -475,6 +480,10 @@ async function start() {
   app.use('/api/trackers', createTrackersRouter({ pool }));
   app.use('/api/email-outbox', createEmailOutboxRouter({ pool, resend, resendSyncAccounts, logger }));
   app.use('/api/welcome-letter', createWelcomeLetterRouter({ resend, logger, pool }));
+  // Survey admin MUST mount before the general survey router so /api/survey/admin/*
+  // is not captured by /api/survey (and so it uses requireRole('admin'), not roster ACL).
+  app.use('/api/survey/admin', require('./routes/survey-admin'));
+  app.use('/api/survey', require('./routes/survey'));
   app.use('/api/hub', hubStoreRoutes);
   app.use('/api/hub', hubRoutes);
   app.use('/api/decide', createDecideRouter({ resend }));
@@ -502,6 +511,9 @@ async function start() {
   });
   app.get('/auth-gate.js', (_req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'auth-gate.js'));
+  });
+  app.get(['/survey-admin', '/survey-admin/', '/survey-admin.html'], (_req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'survey-admin.html'));
   });
   const fm391Dir = path.join(__dirname, 'public', 'fm391-p05w3');
   app.use('/fm391-p05w3/assets', express.static(path.join(fm391Dir, 'assets'), { fallthrough: false }));

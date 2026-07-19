@@ -1,0 +1,5883 @@
+{
+ "roster": [
+  {
+   "workday_id": "800619482",
+   "name": "Alexandra Wright Jamsyn",
+   "email": "alex.wright2@retailodyssey.com",
+   "phone": "2533976319",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 8B",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800673346",
+   "name": "Andrew GetzRodarte Alan",
+   "email": "aagetz1972@gmail.com",
+   "phone": "3609530851",
+   "title": "Retail Reset Merchandiser",
+   "role": "lead",
+   "team": "Kompass 2D",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800595949",
+   "name": "Angela Strode Marie",
+   "email": "angie.gray@sasretailservices.com",
+   "phone": "2538883082",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 5A",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800396689",
+   "name": "Annette Alexander Doreen",
+   "email": "annette.alexander@retailodyssey.com",
+   "phone": "5033021621",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 1F",
+   "supervisor_email": "bethany.skriiko@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800629893",
+   "name": "Bill McLaughlin",
+   "email": "bill.mclaughlin@retailodyssey.com",
+   "phone": "4253279673",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 4B",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800553635",
+   "name": "Brent Weathers Michael",
+   "email": "brent.weathers@retailodyssey.com",
+   "phone": "9072099052",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 7H",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800643739",
+   "name": "Brylee Borceguin Glenn",
+   "email": "brylee.borceguin@retailodyssey.com",
+   "phone": "3853469112",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 9B",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800290984",
+   "name": "Casey Paul R",
+   "email": "casey.paul@sasretailservices.com",
+   "phone": "3607069625",
+   "title": "Retail Reset Merchandiser",
+   "role": "lead",
+   "team": "Kompass 2H",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800353855",
+   "name": "Charles Vandenbroeke Allen",
+   "email": "charles.vandenbroeke@retailodyssey.com",
+   "phone": "5025070402",
+   "title": "Retail Reset Merchandiser",
+   "role": "lead",
+   "team": "Kompass 3B",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800025747",
+   "name": "Chris Metzger S",
+   "email": "chris.metzger@retailodyssey.com",
+   "phone": "5094159866",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 6C",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800425592",
+   "name": "Christopher Mounsey Paul",
+   "email": "christopher.mounsey@retailodyssey.com",
+   "phone": "2064195701",
+   "title": "Traveling Merchandiser Team Lead",
+   "role": "lead",
+   "team": "Kompass 4E",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800350112",
+   "name": "Christopher Mowry James",
+   "email": "christopher.mowry@retailodyssey.com",
+   "phone": "5416478735",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 10D",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800340877",
+   "name": "Cindi Griggs Ann",
+   "email": "cindi.griggs@retailodyssey.com",
+   "phone": "5032000536",
+   "title": "Retail Reset Merchandiser",
+   "role": "lead",
+   "team": "Kompass 1D",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800576372",
+   "name": "Cindy Roth L",
+   "email": "cindy.roth@sasretailservices.com",
+   "phone": "5096703174",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 6D",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800627722",
+   "name": "Connie Andrade",
+   "email": "connie.andrade@retailodyssey.com",
+   "phone": "2088401557",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 9C",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800177733",
+   "name": "Connie Bottomley M",
+   "email": "connie.bottomley@retailodyssey.com",
+   "phone": "5095402567",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 3A",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800181862",
+   "name": "David Davidson L",
+   "email": "david.davidson@retailodyssey.com",
+   "phone": "9072525904",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 7F",
+   "supervisor_email": "shelly.peck@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800608885",
+   "name": "Dominique Paniulaq Ekak Marie Aanavak",
+   "email": "dominique.paniulakek@retailodyssey.com",
+   "phone": "9073716396",
+   "title": "Retail Reset Merchandiser",
+   "role": "lead",
+   "team": "Kompass 7E",
+   "supervisor_email": "shelly.peck@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800616815",
+   "name": "Edith Thyselius",
+   "email": "edith.thyselius@sasretailservices.com",
+   "phone": "7247343072",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 4D",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800615960",
+   "name": "Hailey Roessler Grace",
+   "email": "hailey.roessler@retailodyssey.com",
+   "phone": "3609578348",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 2G",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800689409",
+   "name": "Harriet Reagan",
+   "email": "fuzyneedle26@gmail.com",
+   "phone": "5034229192",
+   "title": "Retail Reset Merchandiser",
+   "role": "lead",
+   "team": "Kompass 2H",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800664010",
+   "name": "Ian Andrews Mark",
+   "email": "ian.andrews@retailodyssey.com",
+   "phone": "5039544212",
+   "title": "Traveling Merchandiser US",
+   "role": "lead",
+   "team": "Kompass 2C",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800687502",
+   "name": "Jacob Wineteer Bruce",
+   "email": "jacob.wineteer@retailodyssey.com",
+   "phone": "9077403469",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 10G",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800627385",
+   "name": "James Duchene Ryan",
+   "email": "james.duchene@retailodyssey.com",
+   "phone": "2532856529",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800170152",
+   "name": "Jason Welling M",
+   "email": "jason.welling@retailodyssey.com",
+   "phone": "5412540853",
+   "title": "Retail Reset Merchandiser",
+   "role": "lead",
+   "team": "Kompass 10E",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800657448",
+   "name": "Jennifer Hilderbrand Lynn",
+   "email": "jennifer.hilderbrand@retailodyssey.com",
+   "phone": "5092901899",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 6A",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800614801",
+   "name": "Jessica LustWilliams",
+   "email": "jessica.lustwilliams@retailodyssey.com",
+   "phone": "4253303816",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 4A",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800378936",
+   "name": "Josie Williams M",
+   "email": "josie.williams@sasretailservices.com",
+   "phone": "3608437525",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 2E",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800503406",
+   "name": "Julene Walker",
+   "email": "julene.walker@sasretailservices.com",
+   "phone": "3609991961",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 5E",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800180519",
+   "name": "Julie Ferguson A",
+   "email": "julie.ferguson@retailodyssey.com",
+   "phone": "2132197681",
+   "title": "Retail Reset Merchandiser",
+   "role": "lead",
+   "team": "Kompass 1B",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800664201",
+   "name": "Karla Gamroth Anne",
+   "email": "karla.gamroth@retailodyssey.com",
+   "phone": "5033696747",
+   "title": "Retail Reset Merchandiser",
+   "role": "lead",
+   "team": "Kompass 1H",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800503342",
+   "name": "Kenna Senn Shantai",
+   "email": "kenna.senn@sasretailservices.com",
+   "phone": "2533539486",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 5B",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800666660",
+   "name": "Kimberly Alvarez Jean",
+   "email": "kimberly.alvarez@retailodyssey.com",
+   "phone": "9077154981",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 7B",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800511071",
+   "name": "Mary Bouck Wilma",
+   "email": "mary.bouck@retailodyssey.com",
+   "phone": "2533664520",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 5D",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800431805",
+   "name": "Michael Harrell",
+   "email": "michael.harrell@retailodyssey.com",
+   "phone": "5032693608",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 3C",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800337809",
+   "name": "Michelle Sweet Frances",
+   "email": "michelle.sweet@youradv.com",
+   "phone": "5033588714",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 1G",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800642456",
+   "name": "Mychal Taylor Logan",
+   "email": "mychal.taylor@retailodyssey.com",
+   "phone": "5418922267",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 10F",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800626959",
+   "name": "Neil Gregg",
+   "email": "greggneil409@gmail.com",
+   "phone": "5099309460",
+   "title": "Retail Reset Merchandiser",
+   "role": "lead",
+   "team": "Kompass 10A",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800364163",
+   "name": "Nicole Fouts A",
+   "email": "nicole.fouts@retailodyssey.com",
+   "phone": "2082602503",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 9D",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800605782",
+   "name": "Patricia Magana",
+   "email": "patricia.magana@retailodyssey.com",
+   "phone": "5097817044",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 6B",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "100020571",
+   "name": "Richard Wood E",
+   "email": "richard.e.wood@retailodyssey.com",
+   "phone": "5414358270",
+   "title": "Retail Reset Merchandiser",
+   "role": "lead",
+   "team": "Kompass 10B",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800020204",
+   "name": "Robert Durnez Henry",
+   "email": "robert.durnez@retailodyssey.com",
+   "phone": "5414008488",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 2F",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800389604",
+   "name": "Robyn Reichl Amelia",
+   "email": "robyn.reichl@retailodyssey.com",
+   "phone": "2532211229",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 5F",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800318130",
+   "name": "Ryan Beam Douglas",
+   "email": "ryan.beam@retailodyssey.com",
+   "phone": "3609016671",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 2H",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800531563",
+   "name": "Samantha Mittendorf Lynn",
+   "email": "samantha.mittendorf@sasretailservices.com",
+   "phone": "2086805814",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 9E",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800174415",
+   "name": "Sanyaa Spriggle M",
+   "email": "sanyaa.spriggle@retailodyssey.com",
+   "phone": "5417877477",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 10C",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800607649",
+   "name": "Sara Palmer",
+   "email": "baebeegirl2021@outlook.com",
+   "phone": "2533595834",
+   "title": "Retail Reset Merchandiser",
+   "role": "lead",
+   "team": "Kompass 5C",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800432058",
+   "name": "Saviya Hurley Joanne",
+   "email": "saviya.hurley@retailodyssey.com",
+   "phone": "2088194718",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 6E",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800620904",
+   "name": "Selena Conde Holmes Isabel",
+   "email": "selenacontreras.cond@retailodyssey.com",
+   "phone": "5037266122",
+   "title": "Traveling Merchandiser US",
+   "role": "lead",
+   "team": "Kompass 2H",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800033884",
+   "name": "Susan Marquand Lee",
+   "email": "susan.marquand@retailodyssey.com",
+   "phone": "3607398470",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 4C",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800531226",
+   "name": "Tamera Sandeno L",
+   "email": "tamera.sandeno@retailodyssey.com",
+   "phone": "5038809089",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 1A",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800515745",
+   "name": "Teena DwyerBailie Marie",
+   "email": "teena.dwyerbailie@retailodyssey.com",
+   "phone": "2533476717",
+   "title": "Traveling Merchandiser Team Lead",
+   "role": "lead",
+   "team": "Traveling Team Seattle 2",
+   "supervisor_email": "kgingrasso@retailodyssey.com",
+   "district": "Traveling"
+  },
+  {
+   "workday_id": "800243740",
+   "name": "Tracy Watts Lynn",
+   "email": "tracy.watts@retailodyssey.com",
+   "phone": "2086588382",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 9A",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800047689",
+   "name": "Victor Trevino Gonzalez",
+   "email": "victor.trevino@retailodyssey.com",
+   "phone": "5039512280",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "lead",
+   "team": "Kompass 1C",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800625370",
+   "name": "Zoie Granger Constance",
+   "email": "zoie.granger@retailodyssey.com",
+   "phone": "9078889418",
+   "title": "Retail Reset Merchandiser",
+   "role": "lead",
+   "team": "Kompass 7D",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800675884",
+   "name": "Adela Cruz Roseanne",
+   "email": "adelarc203@gmail.com",
+   "phone": "3608397036",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2D",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800603533",
+   "name": "Alex Allen",
+   "email": "jacketmn64@gmail.com",
+   "phone": "4253671710",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4B",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800657325",
+   "name": "Alex Dahlgren Jack",
+   "email": "alexdahlgren20@gmail.com",
+   "phone": "4252737470",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Traveling Team Seattle 2",
+   "supervisor_email": "kgingrasso@retailodyssey.com",
+   "district": "Traveling"
+  },
+  {
+   "workday_id": "800503615",
+   "name": "Alexander Lavell William",
+   "email": "superawl04@gmail.com",
+   "phone": "2532194875",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 1A",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800683558",
+   "name": "Alexander Wakefield Shea",
+   "email": "wakefieldalexander9@gmail.com",
+   "phone": "4252479342",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8B",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800631686",
+   "name": "Alexandria Lionberger Jean",
+   "email": "alexandrialionberger@gmail.com",
+   "phone": "9718180963",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 2C",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800679274",
+   "name": "Alexis Silva Enrique",
+   "email": "alexissilva8018@gmail.com",
+   "phone": "3605261936",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4C",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800675914",
+   "name": "Alualu Mose jr Kenera lowen",
+   "email": "alualu28mose@gmail.com",
+   "phone": "38558805777",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2E",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800615024",
+   "name": "Amy Fuller Melissa",
+   "email": "amy.fuller@retailodyssey.com",
+   "phone": "4582206823",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 10A",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800178983",
+   "name": "Amy Payne L",
+   "email": "akafatamy46@gmail.com",
+   "phone": "5037570994",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800628637",
+   "name": "Analynn Ahchee Fue",
+   "email": "analynnahchee@gmail.com",
+   "phone": "9073129275",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7A",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800663606",
+   "name": "Andrew Valadon Dean",
+   "email": "andrew.valadon@gmail.com",
+   "phone": "2066311259",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 9B",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800553846",
+   "name": "Andri Castro",
+   "email": "andri147castro@outlook.com",
+   "phone": "5095717746",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800675927",
+   "name": "Angela Pangburn Eleanore",
+   "email": "a.pangburn@yahoo.com",
+   "phone": "2066096441",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800616115",
+   "name": "Angelina Iniguez Carrillo Kelleen",
+   "email": "kalleen.iniguezcarri@retailodyssey.com",
+   "phone": "5037108703",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1A",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800632442",
+   "name": "Angelo SalinasLance Ray",
+   "email": "angelosalinas121@gmail.com",
+   "phone": "3608691733",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2D",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800509006",
+   "name": "Angie Moorehead Kay",
+   "email": "angie.moorehead@sasretailservices.com",
+   "phone": "5417366895",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3A",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800677498",
+   "name": "Anita Askren Marie",
+   "email": "daskren@gmail.com",
+   "phone": "5098830118",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 6D",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800678819",
+   "name": "Annie Vekved",
+   "email": "annieelise@outlook.com",
+   "phone": "3606336197",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4C",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800687544",
+   "name": "Anthony Hunter Kenyatta",
+   "email": "hunterkanthony97@gmail.com",
+   "phone": "9099683276",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800660425",
+   "name": "Antonio Landaverde Hernandez Ivan",
+   "email": "antoniolhdz88@gmail.com",
+   "phone": "2066605429",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800688076",
+   "name": "Antonio Sanchez Mendoza",
+   "email": "revanantblade@outlook.com",
+   "phone": "7725019956",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800605320",
+   "name": "Antonita Zukas Bacuyag",
+   "email": "tonette1102@yahoo.com",
+   "phone": "9075008846",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7H",
+   "supervisor_email": "shelly.peck@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800387242",
+   "name": "April Mcclure",
+   "email": "april.mcclure@sasretailservices.com",
+   "phone": "2082868983",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 9A",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800618004",
+   "name": "Arika Miles",
+   "email": "milesarikaa@gmail.com",
+   "phone": "5035806749",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800674098",
+   "name": "Arsham Dabney Peytin",
+   "email": "shaamroc221@gmail.com",
+   "phone": "8046868625",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 9A",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800304969",
+   "name": "Artie Martinez Jr",
+   "email": "artymartinez2006@yahoo.com",
+   "phone": "2064302093",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 1A",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800655887",
+   "name": "Ashton Finel Keenan Jesse",
+   "email": "ashton_finel@yahoo.com",
+   "phone": "2532820697",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5D",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800675307",
+   "name": "Atila Osborn",
+   "email": "atilaosborn@gmail.com",
+   "phone": "9712801777",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2C",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800693233",
+   "name": "Austin Lizama Jay",
+   "email": "austinlizama05@gmail.com",
+   "phone": "5093818017",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 6E",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800691254",
+   "name": "Austin Skar Daniel",
+   "email": "adskar96@gmail.com",
+   "phone": "3609047215",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2D",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800450751",
+   "name": "Benita Henry Elizabeth",
+   "email": "henrybenita133@yahoo.com",
+   "phone": "9073013341",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7A",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800326745",
+   "name": "Berkley Grimsley",
+   "email": "orange_sc_dog@yahoo.com",
+   "phone": "4195208032",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4C",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800458116",
+   "name": "Billy Rogers jr Ray",
+   "email": "rogersbjr90@gmail.com",
+   "phone": "3608618014",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800644542",
+   "name": "Bobbi Frazier Jo",
+   "email": "bobbi.2buster@gmail.com",
+   "phone": "2087603228",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 9B",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800655059",
+   "name": "Bobby Kelley III Gene",
+   "email": "bgkelleyiii@gmail.com",
+   "phone": "9857734917",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5B",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800665213",
+   "name": "Bradley Machado Sean",
+   "email": "bradleymachado2@gmail.com",
+   "phone": "3602322659",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2D",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800247253",
+   "name": "Brandie Stevens Marie",
+   "email": "brandie.stevens@retailodyssey.com",
+   "phone": "2532609358",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5D",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800644541",
+   "name": "Brandon Admire",
+   "email": "element6975@gmail.com",
+   "phone": "9712746262",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2C",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800686568",
+   "name": "Briseyda Sanchez",
+   "email": "bsxnchez23@icloud.com",
+   "phone": "5034280751",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3B",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800182386",
+   "name": "Bruce Brennick M",
+   "email": "bruce.brennick@youradv.com",
+   "phone": "5096382539",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 6E",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800658319",
+   "name": "Bryan Leyva",
+   "email": "leyvabry@gmail.com",
+   "phone": "3609099746",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2E",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800688113",
+   "name": "Caleb Meredith Taylor",
+   "email": "calebtmeredith@gmail.com",
+   "phone": "4256253837",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4A",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800683285",
+   "name": "Caleigh Schmidt Taylor",
+   "email": "schmidt.caleigh.t@gmail.com",
+   "phone": "2066414007",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5A",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800668574",
+   "name": "Carissa Cameron Mackenzie",
+   "email": "carissa.cameron.1007@gmail.com",
+   "phone": "3606880063",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5B",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800674518",
+   "name": "Carmen Johnson Denise",
+   "email": "carmjohnson73@hotmail.com",
+   "phone": "2063999124",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4A",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800672900",
+   "name": "Cassandra Manning Louise",
+   "email": "hotfiredbird95@gmail.com",
+   "phone": "3609700568",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 5A",
+   "supervisor_email": "kgingrasso@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800675489",
+   "name": "Chance Ward Jaxon",
+   "email": "chancefsss@gmail.com",
+   "phone": "9494311168",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 6C",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800583182",
+   "name": "Charisma Anghinetti",
+   "email": "charismashao@yahoo.com",
+   "phone": "6502075013",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 10F",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800577333",
+   "name": "Charlene Lenhart Marie",
+   "email": "lenhartc4@gmail.com",
+   "phone": "4069405267",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7F",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800184242",
+   "name": "Charles Broeke E",
+   "email": "charles.broeke@sasretailservices.com",
+   "phone": "5412322437",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3B",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800616769",
+   "name": "Charlie Jones Hayden",
+   "email": "jonescha2007@gmail.com",
+   "phone": "5415793383",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2G",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800691091",
+   "name": "Cheyenne Long Renee",
+   "email": "chey.long542@gmail.com",
+   "phone": "3606063927",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2D",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800673692",
+   "name": "Christopher Makris Demetrios",
+   "email": "mrchrismakris@gmail.com",
+   "phone": "5033102860",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800604420",
+   "name": "Cindy Austria Jo",
+   "email": "jasmine91959@hotmail.com",
+   "phone": "5037193975",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1A",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800669758",
+   "name": "Clay Airoso Joseph",
+   "email": "clayairoso@gmail.com",
+   "phone": "4796162110",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 9E",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800631469",
+   "name": "Clinton Williams",
+   "email": "newmng2024@gmail.com",
+   "phone": "2164140957",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 6A",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800610911",
+   "name": "Collin Carrigan Wayne",
+   "email": "collinwayne@gmail.com",
+   "phone": "2534684184",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5B",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800563988",
+   "name": "Conner Mcclure Ray",
+   "email": "connermcclure.15@icloud.com",
+   "phone": "2082504890",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 9A",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800153136",
+   "name": "Courtney Fetty Margaret",
+   "email": "courtney.fetty@retailodyssey.com",
+   "phone": "6158549443",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 4C",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800502253",
+   "name": "Crystal Hannon Anne",
+   "email": "crystalhannon23@gmail.com",
+   "phone": "",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1G",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800601727",
+   "name": "Curtis Baustian",
+   "email": "baustiancurtis@gmail.com",
+   "phone": "2534429465",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5B",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800270942",
+   "name": "Curtis Nelson B",
+   "email": "cnelson066@gmail.com",
+   "phone": "8189034719",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3C",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800687931",
+   "name": "Dailene Mora Avalos Nineth",
+   "email": "dailene.moraavalos@retailodyssey.com",
+   "phone": "5038282965",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 3C",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800688615",
+   "name": "Dana Kornhauser Elliot",
+   "email": "dana.kornhauser@retailodyssey.com",
+   "phone": "5419442531",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 10G",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800480649",
+   "name": "Danette Shoemaker Elizabeth",
+   "email": "danette.shoemaker@retailodyssey.com",
+   "phone": "2532132245",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 5C",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800170857",
+   "name": "Daniel Cunningham C",
+   "email": "danchris555@yahoo.com",
+   "phone": "5412602527",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 10B",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800677022",
+   "name": "Daniel Harrison Andrew",
+   "email": "danielharrison89744@icloud.com",
+   "phone": "5107725398",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2D",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800248419",
+   "name": "Darrel Littlefield Guy",
+   "email": "dglittlefield@hotmail.com",
+   "phone": "5099698117",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800638030",
+   "name": "David Ghukasyan Tigran",
+   "email": "davidtghukasyan@icloud.com",
+   "phone": "9073858610",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7B",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800624663",
+   "name": "David Lincecum James",
+   "email": "dave.lincecum@retailodyssey.com",
+   "phone": "8303910721",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 10G",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800667424",
+   "name": "David Relyea Franklin",
+   "email": "relyeadavid24@gmail.com",
+   "phone": "3605617251",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2B",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800594572",
+   "name": "David Ward",
+   "email": "davidwadeward@yahoo.com",
+   "phone": "5094804048",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 6C",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800321188",
+   "name": "Deborah Smith Lynn",
+   "email": "deborah.smith@sasretailservices.com",
+   "phone": "(360) 723-8932",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800664630",
+   "name": "Dennis Brookens Lee",
+   "email": "dlbrookens@outlook.com",
+   "phone": "5036495234",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1D",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800645910",
+   "name": "Dennis Oberkamper Nile",
+   "email": "dennyoberkamper72@gmail.com",
+   "phone": "5032740399",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2B",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800668189",
+   "name": "Devon Bryndle michael",
+   "email": "bryndle.dev@gmail.com",
+   "phone": "5034766536",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1E",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800621808",
+   "name": "Donald Williams III Loren",
+   "email": "don.lorn.williams12@gmail.com",
+   "phone": "9075214211",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7B",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800460520",
+   "name": "Earl Fears",
+   "email": "earlfears053@gmail.com",
+   "phone": "4582900795",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 10F",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800687270",
+   "name": "Eddie Davis",
+   "email": "itsneozyme@gmail.com",
+   "phone": "2065399212",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Traveling Team Seattle 2",
+   "supervisor_email": "kgingrasso@retailodyssey.com",
+   "district": "Traveling"
+  },
+  {
+   "workday_id": "800393756",
+   "name": "Eldin Dedakovic",
+   "email": "e.dedakovic@yahoo.com",
+   "phone": "2536568194",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800346668",
+   "name": "Emily Miller Elizabeth",
+   "email": "yemeem@gmail.com",
+   "phone": "2063546877",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4E",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800182006",
+   "name": "Emily Witt Kathleen",
+   "email": "emwitt53@gmail.com",
+   "phone": "5032502368",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1B",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800671135",
+   "name": "Eric Ho Diep",
+   "email": "eric.d.ho1@gmail.com",
+   "phone": "2068538901",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 5B",
+   "supervisor_email": "kgingrasso@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800681108",
+   "name": "Eric Zwicker Craig",
+   "email": "eric.c.zwicker@gmail.com",
+   "phone": "2533458375",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5B",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800654722",
+   "name": "Evan Banks",
+   "email": "evanb.banks07@gmail.com",
+   "phone": "2532420515",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5C",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800640817",
+   "name": "Evan Parks Joseph",
+   "email": "parksevan70@gmail.com",
+   "phone": "5094321141",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800497455",
+   "name": "Falakiko Taulanga",
+   "email": "falakiko.taulanga@sasretailservices.com",
+   "phone": "8086342178",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7A",
+   "supervisor_email": "shelly.peck@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800595134",
+   "name": "Fetuao AhChee Marie",
+   "email": "starr.ahchee@retailodyssey.com",
+   "phone": "9072303320",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 7A",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800686418",
+   "name": "Francia Dearwester Lyn",
+   "email": "frand31069@outlook.com",
+   "phone": "5039974454",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2B",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800332311",
+   "name": "Frank Herring Jerone",
+   "email": "franklinjherring@gmail.com",
+   "phone": "5419907924",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3C",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800526504",
+   "name": "Garrett Hults",
+   "email": "garretthults@gmail.com",
+   "phone": "4252686235",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Traveling Team Seattle 2",
+   "supervisor_email": "kgingrasso@retailodyssey.com",
+   "district": "Traveling"
+  },
+  {
+   "workday_id": "800681191",
+   "name": "Gavin Lee Masaaki",
+   "email": "gmlee253@gmail.com",
+   "phone": "2536777461",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5D",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800670477",
+   "name": "Gloria Box Dean",
+   "email": "gdrbnsn@gmail.com",
+   "phone": "3602810073",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2D",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800469824",
+   "name": "Graham Peberdy Alexander",
+   "email": "graham.peberdy@sasretailservices.com",
+   "phone": "2068534963",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4C",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800684323",
+   "name": "Harry Shoaf Carl",
+   "email": "harry.shoaf@gmail.com",
+   "phone": "2062711324",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5A",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800601066",
+   "name": "Heather Giaudrone Jo",
+   "email": "msheatherg77@gmail.com",
+   "phone": "2068397564",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Traveling Team Seattle 2",
+   "supervisor_email": "kgingrasso@retailodyssey.com",
+   "district": "Traveling"
+  },
+  {
+   "workday_id": "800355379",
+   "name": "Howard Schroeter Charles",
+   "email": "hcsch@frontier.com",
+   "phone": "5037079590",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1H",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800655472",
+   "name": "Isaac Barrera Lee William",
+   "email": "darkctm0@gmail.com",
+   "phone": "5037652038",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1F",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800216936",
+   "name": "Isaiah Harris Kane",
+   "email": "isaiah.harris1234@gmail.com",
+   "phone": "3602413265",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2E",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800681558",
+   "name": "Jace Miller",
+   "email": "jacem2759@gmail.com",
+   "phone": "5096550457",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5E",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800632448",
+   "name": "Jack Scarbrough Lorin",
+   "email": "jackscarbrough29@yahoo.com",
+   "phone": "5419996038",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 10B",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800316361",
+   "name": "Jacquelyn Tucker Marie",
+   "email": "myhappyplace196828@gmail.com",
+   "phone": "3609478298",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2E",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800166307",
+   "name": "Jana Casler Lynn",
+   "email": "janacasler@gmail.com",
+   "phone": "3602811940",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7F",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800672833",
+   "name": "Janet Damm Ann",
+   "email": "rhodydamm@aol.com",
+   "phone": "5039759914",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800626111",
+   "name": "Jared Fontaine",
+   "email": "jared.a.fontaine@gmail.com",
+   "phone": "3608650571",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5A",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800321250",
+   "name": "Jarred Harris A",
+   "email": "jarred.harris@sasretailservices.com",
+   "phone": "3609751375",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2E",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800262246",
+   "name": "Jasonpaul Lavell Nordlof",
+   "email": "jasonpaul.lavell@sasretailservices.com",
+   "phone": "2538829571",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1A",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800627200",
+   "name": "Jax",
+   "email": "jaxpond8@gmail.com",
+   "phone": "5092120822",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 6B",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800597329",
+   "name": "Jennifer Russell Ann",
+   "email": "jennifer.russell@sasretailservices.com",
+   "phone": "5034607716",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800590334",
+   "name": "Jeremey Pierson Roy",
+   "email": "jeremeypierson5@gmail.com",
+   "phone": "2068514021",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Traveling Team Seattle 2",
+   "supervisor_email": "kgingrasso@retailodyssey.com",
+   "district": "Traveling"
+  },
+  {
+   "workday_id": "800637310",
+   "name": "Jeremy Niemi Robert",
+   "email": "niemijeremy001@gmail.com",
+   "phone": "9713419410",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1F",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800574025",
+   "name": "Jesica Zumwalt",
+   "email": "jes.zumwalt@sasretailservices.com",
+   "phone": "2069605041",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8B",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800678202",
+   "name": "Joao Panzo Clemente",
+   "email": "joaopanzo002@gmail.com",
+   "phone": "2533060047",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8B",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800600775",
+   "name": "Joe Brown III Mack",
+   "email": "treybrown209@gmail.com",
+   "phone": "9712938379",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2C",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800175861",
+   "name": "John Cheshier",
+   "email": "johncheshiertoby@gmail.com",
+   "phone": "4258351007",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4B",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800616731",
+   "name": "John Filipini Angelo",
+   "email": "jafilipini1@gmail.com",
+   "phone": "2066963827",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 4A",
+   "supervisor_email": "kgingrasso@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800631283",
+   "name": "Johnny Sovann",
+   "email": "sovannjohnny847@gmail.com",
+   "phone": "2066706197",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4B",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800685202",
+   "name": "Jon Beckley MICHAEL",
+   "email": "jon.beckley@retailodyssey.com",
+   "phone": "3605210326",
+   "title": "Data Collector",
+   "role": "member",
+   "team": "Kompass 2C",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800654453",
+   "name": "Jordan Leslie Lynne",
+   "email": "brarydoccount7777@outlook.com",
+   "phone": "3604708077",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800683856",
+   "name": "Jordan Rieman Bradley",
+   "email": "jordan.rieman23@icloud.com",
+   "phone": "2536253682",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5A",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800655750",
+   "name": "Jose Sanchez Perez Refugio",
+   "email": "sanchezjose779@gmail.com",
+   "phone": "5094065106",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 1A",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800675970",
+   "name": "Joshua Giesick Conrad",
+   "email": "jaysee76@icloud.com",
+   "phone": "5035758037",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800688548",
+   "name": "Josiah Davis Nathaniel",
+   "email": "josiahnd11@gmail.com",
+   "phone": "3609362039",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2E",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800677418",
+   "name": "Julia Walunga",
+   "email": "juliawalunga25@gmail.com",
+   "phone": "9074400475",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 7A",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800364837",
+   "name": "Julie Slaughter A",
+   "email": "julie.slaughter@youradv.com",
+   "phone": "5038578617",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800666204",
+   "name": "Jurrell Rodgers",
+   "email": "j_rodgers757@yahoo.com",
+   "phone": "9042399989",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800674178",
+   "name": "Justin Swann",
+   "email": "swann.justin27@gmail.com",
+   "phone": "3194235590",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 9B",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800462308",
+   "name": "Justina Sledge Nicole",
+   "email": "justina.sledge@retailodyssey.com",
+   "phone": "5093911204",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 6B",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800674847",
+   "name": "Juuso Luoto Oskari",
+   "email": "juusoluoto@outlook.com",
+   "phone": "4252403819",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 5C",
+   "supervisor_email": "kgingrasso@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800683688",
+   "name": "Kailea Brown Michelle",
+   "email": "beebearynice@gmail.com",
+   "phone": "3303389003",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8B",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800691660",
+   "name": "Kainoah Holley John",
+   "email": "kainoahholley2006@gmail.com",
+   "phone": "5092094258",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 6A",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800655005",
+   "name": "Kaleb Davis",
+   "email": "kdavis111008@gmail.com",
+   "phone": "5038875701",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2E",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800676205",
+   "name": "Kaleb Moon Malcolm",
+   "email": "kalebmoon04@gmail.com",
+   "phone": "5039338494",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2B",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800665348",
+   "name": "Kara Kirkpatrick Marie",
+   "email": "irishgirlk@yahoo.com",
+   "phone": "3606448923",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800436546",
+   "name": "Karen Bressi Ann",
+   "email": "karenbressi1@gmail.com",
+   "phone": "9096706742",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 9C",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800656989",
+   "name": "Karen Hutchison D",
+   "email": "hutchisonincreswell@gmail.com",
+   "phone": "4582718353",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 10D",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800265180",
+   "name": "Karen Mascott Jeanne",
+   "email": "kmascott@comcast.net",
+   "phone": "3605760939",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2E",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800614639",
+   "name": "Kari Taylor Lynn",
+   "email": "40ktaylor@gmail.com",
+   "phone": "5037932193",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800259377",
+   "name": "Karissa Kurious Ann",
+   "email": "karissa.kurious@sasretailservices.com",
+   "phone": "3606606059",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4B",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800395889",
+   "name": "Katherine Ptasnik Ann",
+   "email": "oneeightykaty@yahoo.com",
+   "phone": "9712846370",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1D",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800651665",
+   "name": "Kathreena Melton Dlynn",
+   "email": "quill.melton@retailodyssey.com",
+   "phone": "4582317569",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 10C",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800639163",
+   "name": "Katie Gott",
+   "email": "misskatieann777@gmail.com",
+   "phone": "4255182578",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800670867",
+   "name": "Kaydence Smith Nicole",
+   "email": "kaydencesmith2006@icloud.com",
+   "phone": "2087638247",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 6E",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "100020746",
+   "name": "Keith Fifer Alan",
+   "email": "thefifers@msn.com",
+   "phone": "5038669939",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 1D",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800320331",
+   "name": "Kelli Marlitt Marie",
+   "email": "kelli.marlitt@sasretailservices.com",
+   "phone": "360 369-8167",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 2D",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800626471",
+   "name": "Kelly Martin Christine",
+   "email": "kelly.c.martin614@gmail.com",
+   "phone": "9077504837",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 6E",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "100020569",
+   "name": "Kelly Wood Annette",
+   "email": "kelly.wood1313@outlook.com",
+   "phone": "5414041315",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 10B",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800603817",
+   "name": "Kelsee Dillon Lynn",
+   "email": "kelseedillon10@gmail.com",
+   "phone": "2089185441",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 9A",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800665058",
+   "name": "Kenneth Evans Sr",
+   "email": "kennethesr@yahoo.com",
+   "phone": "7738221183",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5D",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800684046",
+   "name": "Kenneth Gonzalez",
+   "email": "kennethgonzalez2008@icloud.com",
+   "phone": "2064761273",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "100102271",
+   "name": "Kenneth Koelling Paul",
+   "email": "kpkoelling@hotmail.com",
+   "phone": "4588992660",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 10C",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800684463",
+   "name": "Kenny Doyle Andrew",
+   "email": "kendoyleuniverse@gmail.com",
+   "phone": "5412327400",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3A",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800612709",
+   "name": "Kerri Hamilton Lynn",
+   "email": "kkhamilton77@gmail.com",
+   "phone": "2069901788",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800499724",
+   "name": "Kim Ridgway Marie",
+   "email": "kim.ridgway@retailodyssey.com",
+   "phone": "3604510330",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5E",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800608936",
+   "name": "Kimberlee SanchezCanastuj Leanne",
+   "email": "kim.sanchezcanastuj@retailodyssey.com",
+   "phone": "9717242710",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 1F",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800605698",
+   "name": "Kimberly Claflin Janell",
+   "email": "kimberly.claflin@retailodyssey.com",
+   "phone": "5037058185",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8B",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800688640",
+   "name": "Kimberly Lopez Joy",
+   "email": "kimmyjoy001@yahoo.com",
+   "phone": "2086177587",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 9A",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800557770",
+   "name": "Kira Greenway",
+   "email": "leaffyoranges@gmail.com",
+   "phone": "2089635022",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 9B",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800662825",
+   "name": "Korbyn WhittWilliams Grey",
+   "email": "korbyn.whittwilliams@gmail.com",
+   "phone": "2532233358",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5C",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800666939",
+   "name": "Kristy Graves Lynn",
+   "email": "kristygraves05@live.com",
+   "phone": "2083801592",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 9C",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800558152",
+   "name": "Kyle Miller Willis",
+   "email": "kyle.miller@retailodyssey.com",
+   "phone": "4194874690",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4C",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800630168",
+   "name": "Kyler Smith Robert",
+   "email": "kyler.smith@retailodyssey.com",
+   "phone": "5412641573",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 3D",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800687512",
+   "name": "Landon Munoz Dominic",
+   "email": "munozlandon123@gmail.com",
+   "phone": "4259672146",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4B",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800326493",
+   "name": "Layden Warner Alastair",
+   "email": "layden.warner@retailodyssey.com",
+   "phone": "5419802297",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2F",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800675756",
+   "name": "Liam McLaren",
+   "email": "lwmclaren72@gmail.com",
+   "phone": "3609369132",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2D",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800498669",
+   "name": "Liddie Dodge Alene",
+   "email": "harruth@hotmail.com",
+   "phone": "5412850058",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 3A",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800614944",
+   "name": "Lillian Johnson",
+   "email": "lillian.johnson@retailodyssey.com",
+   "phone": "9073288196",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7E",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800516150",
+   "name": "Linda Osmon Mary",
+   "email": "linda.osmon@sasretailservices.com",
+   "phone": "5037915229",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2C",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800517907",
+   "name": "Llaziel Castro",
+   "email": "ac3156331@icloud.com",
+   "phone": "5094527853",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800436333",
+   "name": "Lora Gifford Rae",
+   "email": "loragifford27@yahoo.com",
+   "phone": "3606310469",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4A",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800690376",
+   "name": "Luke Presley",
+   "email": "luke.presley22@gmail.com",
+   "phone": "4253580454",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800662189",
+   "name": "Mackenzie PulleyKohler",
+   "email": "kenzie.pulleykohler@retailodyssey.com",
+   "phone": "5419411415",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3A",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800366632",
+   "name": "Maddie Stevens",
+   "email": "madysyn.stevens@retailodyssey.com",
+   "phone": "2533159629",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5D",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800683759",
+   "name": "Maranda Ballek Lee",
+   "email": "ballek.mara@gmail.com",
+   "phone": "9713044812",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3B",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800690687",
+   "name": "Marcella Leonard Denise",
+   "email": "mleonard392@gmail.com",
+   "phone": "3609912405",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800671477",
+   "name": "Marie Holbrook",
+   "email": "holbrook.maria@gmail.com",
+   "phone": "2084040886",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 9D",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800622745",
+   "name": "Mario Escamilla Echeverria",
+   "email": "marioboombastic0831@gmail.com",
+   "phone": "3604903448",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5E",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800677146",
+   "name": "Marissa Lemos Francine",
+   "email": "marissalemos16@gmail.com",
+   "phone": "6159107112",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8B",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800012635",
+   "name": "Mary Medina Diane",
+   "email": "mohavedan@gmail.com",
+   "phone": "9282990217",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 10C",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800679531",
+   "name": "Matthew Juul",
+   "email": "juulmj@gmail.com",
+   "phone": "5092097156",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 6E",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800689761",
+   "name": "Matthew Rhynas Aaron",
+   "email": "makenzierhynas@gmail.com",
+   "phone": "2064465246",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4A",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800625790",
+   "name": "Matthew Skerl Edward",
+   "email": "pozaryckidianne63@gmail.com",
+   "phone": "5039577803",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1A",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800480093",
+   "name": "Matthew VanDenBroeke Brian",
+   "email": "broeke499@gmail.com",
+   "phone": "5415146501",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3B",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800607575",
+   "name": "Matthew Walker Laurence",
+   "email": "spyguy77@charter.net",
+   "phone": "5418844779",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 10F",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800321353",
+   "name": "Maurice Mcdougald T",
+   "email": "maurice.mcdougald@sasretailservices.com",
+   "phone": "4259480479",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5C",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800666288",
+   "name": "Megan Ahgook Rose",
+   "email": "mrahgook@gmail.com",
+   "phone": "9078888235",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7B",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800623956",
+   "name": "Melissa Adams Gayle",
+   "email": "missy7826@yahoo.com",
+   "phone": "9713594130",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1G",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800395233",
+   "name": "Melissa Shaw Marina",
+   "email": "melita030@yahoo.com",
+   "phone": "2533322357",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8B",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800200974",
+   "name": "Michael Austin John",
+   "email": "micaj@duck.com",
+   "phone": "9078851573",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7A",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800605744",
+   "name": "Michael Larson Lee",
+   "email": "mllarson1122@gmail.com",
+   "phone": "4255308393",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5F",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800564925",
+   "name": "Michael McGuffey Lee",
+   "email": "michael.mcguffey@retailodyssey.com",
+   "phone": "7074786380",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 10A",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "100062543",
+   "name": "Michael Mcconnell Ray",
+   "email": "michaelmcconnell007@comcast.net",
+   "phone": "5037307515",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1B",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800573744",
+   "name": "Michael Reynolds David",
+   "email": "michael.davidreynolds@yahoo.com",
+   "phone": "4252230281",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4E",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800639876",
+   "name": "Miguel Angel Garcia Felton",
+   "email": "miguelgarcia120803@gmail.com",
+   "phone": "9713029335",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2C",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800666526",
+   "name": "Monique Barron Perez Theressa",
+   "email": "monique.perez73@yahoo.com",
+   "phone": "5093170006",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 6C",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800598832",
+   "name": "Natalie Barnes Ann",
+   "email": "natalie.barnes@retailodyssey.com",
+   "phone": "4253446584",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4D",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800676978",
+   "name": "Natasha Mitchell Liberti",
+   "email": "natmitch135@gmail.com",
+   "phone": "2532170260",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800672184",
+   "name": "Nathanael Celestino",
+   "email": "nathanaelcelestino@gmail.com",
+   "phone": "5093053325",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 1A",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800514149",
+   "name": "Nicole Boullion Marie",
+   "email": "nicki.boullion@sasretailservices.com",
+   "phone": "3607028790",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800251244",
+   "name": "Oliver Witt Pr",
+   "email": "olli.witt@gmx.de",
+   "phone": "5038999586",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1B",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800600488",
+   "name": "Omar Robles Francisco",
+   "email": "omar.robles@retailodyssey.com",
+   "phone": "9716456493",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1D",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800391164",
+   "name": "Pamela Gardner R",
+   "email": "pamela.gardner@sasretailservices.com",
+   "phone": "5038106253",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800614314",
+   "name": "Patience Christeson JoDee",
+   "email": "pjodee71995@gmail.com",
+   "phone": "5039791317",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3B",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800168467",
+   "name": "Patricia Turner Lynn",
+   "email": "patricia.turner@retailodyssey.com",
+   "phone": "9717704485",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 1F",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800174792",
+   "name": "Philip Scoppettuolo R",
+   "email": "prscoppe315@gmail.com",
+   "phone": "5038407769",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1D",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800670234",
+   "name": "Priscilla Pensgard Dawn",
+   "email": "priscilla.pensgard@retailodyssey.com",
+   "phone": "9077174191",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7A",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800692572",
+   "name": "Raven Dudley",
+   "email": "ravend2801@gmail.com",
+   "phone": "2067249002",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800582706",
+   "name": "Rhonda Aldrich Ann",
+   "email": "r.aldrich2779@gmail.com",
+   "phone": "3605812779",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800604027",
+   "name": "Ricardo Celestino",
+   "email": "ricardocelestino1017@gmail.com",
+   "phone": "5098323514",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 1A",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800681210",
+   "name": "Ricardo Suarez Ramos",
+   "email": "ramosricardo814@gmail.com",
+   "phone": "9714445809",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 1D",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800180555",
+   "name": "Richard Heckman",
+   "email": "rickhckmn8@gmail.com",
+   "phone": "5035229676",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2B",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800665685",
+   "name": "Robert Coolidge",
+   "email": "robertcoolidge9@gmail.com",
+   "phone": "4582297542",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 10A",
+   "supervisor_email": "raechel.roberts@retailodyssey.com",
+   "district": "10"
+  },
+  {
+   "workday_id": "800670264",
+   "name": "Roger Landaverde Antonio",
+   "email": "rogerlansds@gmail.com",
+   "phone": "2532698602",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800678438",
+   "name": "Rosemary Rollins Timothy Louise",
+   "email": "malachirllns@gmail.com",
+   "phone": "2534029778",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4C",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800614959",
+   "name": "Royann Lund Kay",
+   "email": "royann.lund@gmail.com",
+   "phone": "5037586152",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800258911",
+   "name": "Ruth Northcutt M",
+   "email": "ruth.northcutt@sasretailservices.com",
+   "phone": "2533262907",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Traveling Team Seattle 2",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "Traveling"
+  },
+  {
+   "workday_id": "800658320",
+   "name": "Saharo Abdirahaman",
+   "email": "saharoabdi4@gmail.com",
+   "phone": "4133140328",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800680777",
+   "name": "Samantha Goto",
+   "email": "gotosammi1@gmail.com",
+   "phone": "5035100080",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3B",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800601430",
+   "name": "Sara Barajas Juarez Eloisa",
+   "email": "barajassaraeloisa@gmail.com",
+   "phone": "5055509097",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1B",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800265453",
+   "name": "Scott Parker Douglas",
+   "email": "scott.parker@retailodyssey.com",
+   "phone": "5099484040",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 6B",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800682076",
+   "name": "Shalu Sethi",
+   "email": "sethishalu01@gmail.com",
+   "phone": "4257725962",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4D",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800652725",
+   "name": "Shawna Moore Valerio Jane",
+   "email": "sjmoore76@yahoo.com",
+   "phone": "5039022011",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 9A",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800665759",
+   "name": "Sheay Ferguson Ocean",
+   "email": "sheayferguson70@gmail.com",
+   "phone": "3609010459",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2D",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800689427",
+   "name": "Sheryl Simonson Diane",
+   "email": "simonsonsheryl4@gmail.com",
+   "phone": "2183413737",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "dustin.hooker@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800630901",
+   "name": "Simon Crenshaw Peter",
+   "email": "simonofcrenshaw@gmail.com",
+   "phone": "2066369872",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4B",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800669490",
+   "name": "Spring Brooks",
+   "email": "springrhea2@gmail.com",
+   "phone": "9167046407",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8B",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800665976",
+   "name": "Stephanie Pim Ann",
+   "email": "stephpim4@gmail.com",
+   "phone": "2532609457",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 5C",
+   "supervisor_email": "kgingrasso@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800542944",
+   "name": "Stephen Lincoln Sharose",
+   "email": "stephen.lincoln@sasretailservices.com",
+   "phone": "509-212-4672",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 6B",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800665890",
+   "name": "Sterling Hatch Koen",
+   "email": "boomsterling017@gmail.com",
+   "phone": "4253307875",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 4A",
+   "supervisor_email": "kgingrasso@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800167953",
+   "name": "Susan Bloom",
+   "email": "tutusquilt@msn.com",
+   "phone": "2082834728",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 9B",
+   "supervisor_email": "jgruidl@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800654623",
+   "name": "Tara Boitz",
+   "email": "taralynn246810@gmail.com",
+   "phone": "9073151864",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7B",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800617193",
+   "name": "Taylor Sadewasser Jean",
+   "email": "taylorsadewasser@gmail.com",
+   "phone": "9713301202",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2B",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800682437",
+   "name": "Temesgen Kahassay",
+   "email": "temekahassay@gmail.com",
+   "phone": "5039954097",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800601765",
+   "name": "Tera Cooper",
+   "email": "terakoop14@gmail.com",
+   "phone": "3607622759",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800501258",
+   "name": "Teresa Reynolds",
+   "email": "terrey253@gmail.com",
+   "phone": "2534874098",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 5D",
+   "supervisor_email": "kim.lawler@retailodyssey.com",
+   "district": "5"
+  },
+  {
+   "workday_id": "800621113",
+   "name": "Teresa Wynn Marie",
+   "email": "teresa.wynn@retailodyssey.com",
+   "phone": "3608463001",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 9B",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "9"
+  },
+  {
+   "workday_id": "800451810",
+   "name": "Thor Frommherz",
+   "email": "frommtho000@gmail.com",
+   "phone": "3609326964",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2B",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800616676",
+   "name": "Tiffany Pond Marie",
+   "email": "tiffanypond04@gmail.com",
+   "phone": "5095287647",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 6B",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800566333",
+   "name": "Tim",
+   "email": "adamstim97302@gmail.com",
+   "phone": "5037797495",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3C",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800627285",
+   "name": "Timothy Rodgers James",
+   "email": "trodgers6400@gmail.com",
+   "phone": "5413377903",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3A",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800686560",
+   "name": "Trenton Hartman James",
+   "email": "t53774227241@gmail.com",
+   "phone": "5415703789",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800684017",
+   "name": "Troy Candelario Christopher",
+   "email": "troycndlr@gmail.com",
+   "phone": "4253555247",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4B",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800584218",
+   "name": "Tyler Belgin Joseph",
+   "email": "belgintyler@gmail.com",
+   "phone": "3604701553",
+   "title": "Traveling Merchandiser US",
+   "role": "member",
+   "team": "Kompass 2H",
+   "supervisor_email": "michelle.lerat@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800676724",
+   "name": "Tyler Bowen Clark",
+   "email": "tyler8faith@gmail.com",
+   "phone": "9719302820",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2B",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800443053",
+   "name": "Vera Broeke K",
+   "email": "vera.broeke@retailodyssey.com",
+   "phone": "5416036507",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 3B",
+   "supervisor_email": "ky.stanley@retailodyssey.com",
+   "district": "3"
+  },
+  {
+   "workday_id": "800533202",
+   "name": "Vikanda Thiphakhinkeo Lily",
+   "email": "lily.thiphakhinkeo@sasretailservices.com",
+   "phone": "5095519140",
+   "title": "Merchandiser Retail Team Lead",
+   "role": "member",
+   "team": "Kompass 6B",
+   "supervisor_email": "april.gauthier@retailodyssey.com",
+   "district": "6"
+  },
+  {
+   "workday_id": "800578522",
+   "name": "Vir-Laine Ferrari",
+   "email": "virlaineferrari@gmail.com",
+   "phone": "5037995992",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1G",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800564344",
+   "name": "William Villareal James",
+   "email": "williamvillareal834@gmail.com",
+   "phone": "8083820270",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 7A",
+   "supervisor_email": "seth.newman@retailodyssey.com",
+   "district": "7"
+  },
+  {
+   "workday_id": "800386271",
+   "name": "Wolf",
+   "email": "aiyana.natarisalazar@retailodyssey.com",
+   "phone": "5099014680",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8B",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800343253",
+   "name": "Xavier Sanders Marquis",
+   "email": "malachi1064@gmail.com",
+   "phone": "2066981835",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8A",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800687521",
+   "name": "Xavier WilliamsClaussen Parrish",
+   "email": "xavierclaussen050@gmail.com",
+   "phone": "4254992049",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8B",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800583708",
+   "name": "Zachary Harrington Michael",
+   "email": "zmharrington01@gmail.com",
+   "phone": "9713124515",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1B",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800692488",
+   "name": "Zachary Hauck Robert",
+   "email": "zhauck766@gmail.com",
+   "phone": "4259210508",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 4A",
+   "supervisor_email": "melissa.langland@retailodyssey.com",
+   "district": "4"
+  },
+  {
+   "workday_id": "800667760",
+   "name": "Zachary House Nicholas",
+   "email": "zachary.house176@gmail.com",
+   "phone": "9714388176",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 1C",
+   "supervisor_email": "james.carr@retailodyssey.com",
+   "district": "1"
+  },
+  {
+   "workday_id": "800638880",
+   "name": "Zander Escobar Aren",
+   "email": "zainydude04@gmail.com",
+   "phone": "8635944556",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2G",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800692214",
+   "name": "Zoria Mcmurry Ranae",
+   "email": "zoriamcmurry60@gmail.com",
+   "phone": "3183946847",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 8B",
+   "supervisor_email": "tyson.gauthier@retailodyssey.com",
+   "district": "8"
+  },
+  {
+   "workday_id": "800489502",
+   "name": "charles simmons jr raymond",
+   "email": "simmons97202@yahoo.com",
+   "phone": "",
+   "title": "Retail Reset Merchandiser",
+   "role": "member",
+   "team": "Kompass 2B",
+   "supervisor_email": "amy.preston@retailodyssey.com",
+   "district": "2"
+  },
+  {
+   "workday_id": "800676266",
+   "name": "Amy Preston Christine",
+   "email": "amy.preston@retailodyssey.com",
+   "phone": "3602811117",
+   "title": "Supervisor Retail",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "100020332",
+   "name": "April Gauthier Nicole",
+   "email": "april.gauthier@retailodyssey.com",
+   "phone": "5099199471",
+   "title": "Supervisor Retail",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "800330486",
+   "name": "Bethany Skriiko Joy",
+   "email": "bethany.skriiko@retailodyssey.com",
+   "phone": "5039532702",
+   "title": "Manager Retail Operations",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "800663334",
+   "name": "Dustin Hooker Tyler",
+   "email": "dustin.hooker@retailodyssey.com",
+   "phone": "+15098640181",
+   "title": "Supervisor Retail",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "100023379",
+   "name": "James Carr M",
+   "email": "james.carr@retailodyssey.com",
+   "phone": "5035507689",
+   "title": "Supervisor Retail",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "800165905",
+   "name": "Jessica Gruidl L",
+   "email": "jgruidl@retailodyssey.com",
+   "phone": "2084122236",
+   "title": "Supervisor Retail",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "800166436",
+   "name": "Kevin Gingrasso Anthony",
+   "email": "kgingrasso@retailodyssey.com",
+   "phone": "4257776371",
+   "title": "Manager Retail Operations",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "800115411",
+   "name": "Kimberly Lawler Sue",
+   "email": "kim.lawler@retailodyssey.com",
+   "phone": "2532035074",
+   "title": "Supervisor Retail",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "800618371",
+   "name": "Kyle Stanley T",
+   "email": "ky.stanley@retailodyssey.com",
+   "phone": "5032008694",
+   "title": "Supervisor Retail",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "800269006",
+   "name": "Melissa Langland Lynn",
+   "email": "melissa.langland@retailodyssey.com",
+   "phone": "4256253655",
+   "title": "Supervisor Retail",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "800166064",
+   "name": "Michelle Lerat F",
+   "email": "michelle.lerat@retailodyssey.com",
+   "phone": "4255950199",
+   "title": "Supervisor Retail",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "800357408",
+   "name": "Raechel Roberts Nicole",
+   "email": "raechel.roberts@retailodyssey.com",
+   "phone": "5416591107",
+   "title": "Supervisor Retail",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "800263453",
+   "name": "Seth Newman Conrad",
+   "email": "seth.newman@retailodyssey.com",
+   "phone": "9715335844",
+   "title": "Manager Retail Operations",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "800587935",
+   "name": "Shelly Peck Marie",
+   "email": "shelly.peck@retailodyssey.com",
+   "phone": "9078916412",
+   "title": "Supervisor Retail",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  },
+  {
+   "workday_id": "800175315",
+   "name": "Tyson Gauthier A",
+   "email": "tyson.gauthier@retailodyssey.com",
+   "phone": "(509) 572-7660",
+   "title": "Supervisor Retail",
+   "role": "supervisor",
+   "team": null,
+   "supervisor_email": null,
+   "district": null
+  }
+ ],
+ "store_access": {
+  "christopher.mowry@retailodyssey.com": [
+   281
+  ],
+  "hutchisonincreswell@gmail.com": [
+   281
+  ],
+  "jason.welling@retailodyssey.com": [
+   30
+  ],
+  "mychal.taylor@retailodyssey.com": [
+   165
+  ],
+  "spyguy77@charter.net": [
+   165
+  ],
+  "earlfears053@gmail.com": [
+   165
+  ],
+  "charismashao@yahoo.com": [
+   165
+  ],
+  "jacob.wineteer@retailodyssey.com": [
+   126
+  ],
+  "dana.kornhauser@retailodyssey.com": [
+   126
+  ],
+  "dave.lincecum@retailodyssey.com": [
+   126
+  ],
+  "robertcoolidge9@gmail.com": [
+   195,
+   196
+  ],
+  "greggneil409@gmail.com": [
+   195,
+   196
+  ],
+  "michael.mcguffey@retailodyssey.com": [
+   195,
+   196
+  ],
+  "amy.fuller@retailodyssey.com": [
+   195,
+   196
+  ],
+  "sanyaa.spriggle@retailodyssey.com": [
+   21,
+   650
+  ],
+  "mohavedan@gmail.com": [
+   21,
+   650
+  ],
+  "kpkoelling@hotmail.com": [
+   21,
+   650
+  ],
+  "quill.melton@retailodyssey.com": [
+   21,
+   650
+  ],
+  "jackscarbrough29@yahoo.com": [
+   50,
+   464
+  ],
+  "richard.e.wood@retailodyssey.com": [
+   50,
+   464
+  ],
+  "kelly.wood1313@outlook.com": [
+   50,
+   464
+  ],
+  "danchris555@yahoo.com": [
+   50,
+   464
+  ],
+  "lillian.johnson@retailodyssey.com": [
+   485
+  ],
+  "dominique.paniulakek@retailodyssey.com": [
+   485
+  ],
+  "tonette1102@yahoo.com": [
+   158
+  ],
+  "brent.weathers@retailodyssey.com": [
+   158
+  ],
+  "leaffyoranges@gmail.com": [
+   439,
+   613,
+   662
+  ],
+  "swann.justin27@gmail.com": [
+   439,
+   613,
+   662
+  ],
+  "bobbi.2buster@gmail.com": [
+   439,
+   613,
+   662
+  ],
+  "teresa.wynn@retailodyssey.com": [
+   439,
+   613,
+   662
+  ],
+  "andrew.valadon@gmail.com": [
+   439,
+   613,
+   662
+  ],
+  "tutusquilt@msn.com": [
+   439,
+   613,
+   662
+  ],
+  "brylee.borceguin@retailodyssey.com": [
+   439,
+   613,
+   662
+  ],
+  "casey.paul@sasretailservices.com": [
+   75,
+   135,
+   600,
+   663
+  ],
+  "deborah.smith@sasretailservices.com": [
+   75,
+   135,
+   600,
+   663
+  ],
+  "revanantblade@outlook.com": [
+   75,
+   135,
+   600,
+   663
+  ],
+  "hunterkanthony97@gmail.com": [
+   75,
+   135,
+   600,
+   663
+  ],
+  "simonsonsheryl4@gmail.com": [
+   75,
+   135,
+   600,
+   663
+  ],
+  "r.aldrich2779@gmail.com": [
+   75,
+   135,
+   600,
+   663
+  ],
+  "belgintyler@gmail.com": [
+   75,
+   135,
+   600,
+   663
+  ],
+  "temekahassay@gmail.com": [
+   75,
+   135,
+   600
+  ],
+  "irishgirlk@yahoo.com": [
+   75,
+   135,
+   600
+  ],
+  "selenacontreras.cond@retailodyssey.com": [
+   75,
+   135,
+   600
+  ],
+  "terakoop14@gmail.com": [
+   75,
+   135,
+   600
+  ],
+  "nicki.boullion@sasretailservices.com": [
+   75,
+   135,
+   600
+  ],
+  "mleonard392@gmail.com": [
+   75,
+   135,
+   140,
+   208,
+   460,
+   600,
+   683
+  ],
+  "mrchrismakris@gmail.com": [
+   75,
+   135,
+   600
+  ],
+  "jaysee76@icloud.com": [
+   75,
+   135,
+   600
+  ],
+  "ryan.beam@retailodyssey.com": [
+   135,
+   150,
+   255,
+   360,
+   600
+  ],
+  "fuzyneedle26@gmail.com": [
+   663
+  ],
+  "shaamroc221@gmail.com": [
+   198,
+   226,
+   449,
+   685
+  ],
+  "april.mcclure@sasretailservices.com": [
+   198,
+   226,
+   449,
+   685
+  ],
+  "kimmyjoy001@yahoo.com": [
+   198,
+   226,
+   449,
+   685
+  ],
+  "sjmoore76@yahoo.com": [
+   198,
+   226,
+   449,
+   685
+  ],
+  "tracy.watts@retailodyssey.com": [
+   198,
+   226,
+   449,
+   685
+  ],
+  "relyeadavid24@gmail.com": [
+   150,
+   255,
+   360
+  ],
+  "kalebmoon04@gmail.com": [
+   150,
+   255,
+   360
+  ],
+  "frand31069@outlook.com": [
+   150,
+   255,
+   360
+  ],
+  "frommtho000@gmail.com": [
+   150,
+   255,
+   360
+  ],
+  "taylorsadewasser@gmail.com": [
+   150,
+   255,
+   360
+  ],
+  "dennyoberkamper72@gmail.com": [
+   150,
+   255,
+   360
+  ],
+  "simmons97202@yahoo.com": [
+   150,
+   255,
+   360
+  ],
+  "tyler8faith@gmail.com": [
+   150,
+   255,
+   360
+  ],
+  "isaiah.harris1234@gmail.com": [
+   140,
+   208,
+   460,
+   683
+  ],
+  "josiahnd11@gmail.com": [
+   140,
+   185,
+   208,
+   460,
+   683
+  ],
+  "alualu28mose@gmail.com": [
+   140,
+   208,
+   460,
+   683
+  ],
+  "josie.williams@sasretailservices.com": [
+   140,
+   208,
+   460,
+   683
+  ],
+  "myhappyplace196828@gmail.com": [
+   140,
+   208,
+   460,
+   683
+  ],
+  "jarred.harris@sasretailservices.com": [
+   140,
+   208,
+   460,
+   683
+  ],
+  "kdavis111008@gmail.com": [
+   140,
+   208,
+   460,
+   683
+  ],
+  "leyvabry@gmail.com": [
+   140,
+   208,
+   460,
+   683
+  ],
+  "kmascott@comcast.net": [
+   140,
+   208,
+   460,
+   683
+  ],
+  "linda.osmon@sasretailservices.com": [
+   125,
+   660
+  ],
+  "ian.andrews@retailodyssey.com": [
+   125,
+   127,
+   660
+  ],
+  "atilaosborn@gmail.com": [
+   125,
+   127,
+   660
+  ],
+  "alexandrialionberger@gmail.com": [
+   125,
+   127,
+   660
+  ],
+  "miguelgarcia120803@gmail.com": [
+   125,
+   127,
+   660
+  ],
+  "treybrown209@gmail.com": [
+   125,
+   127,
+   660
+  ],
+  "jon.beckley@retailodyssey.com": [
+   125,
+   127,
+   660
+  ],
+  "element6975@gmail.com": [
+   125,
+   127,
+   660
+  ],
+  "adskar96@gmail.com": [
+   93,
+   236,
+   614
+  ],
+  "angelosalinas121@gmail.com": [
+   93,
+   236,
+   614
+  ],
+  "aagetz1972@gmail.com": [
+   93,
+   236,
+   614
+  ],
+  "bradleymachado2@gmail.com": [
+   93,
+   236,
+   614
+  ],
+  "sheayferguson70@gmail.com": [
+   93,
+   236,
+   614
+  ],
+  "adelarc203@gmail.com": [
+   93,
+   236,
+   614
+  ],
+  "danielharrison89744@icloud.com": [
+   93,
+   236,
+   614
+  ],
+  "kelli.marlitt@sasretailservices.com": [
+   93,
+   236,
+   614
+  ],
+  "gdrbnsn@gmail.com": [
+   93,
+   236,
+   614
+  ],
+  "chey.long542@gmail.com": [
+   93,
+   236,
+   614
+  ],
+  "lwmclaren72@gmail.com": [
+   93,
+   236,
+   614
+  ],
+  "niemijeremy001@gmail.com": [
+   377
+  ],
+  "kim.sanchezcanastuj@retailodyssey.com": [
+   377
+  ],
+  "darkctm0@gmail.com": [
+   377
+  ],
+  "patricia.turner@retailodyssey.com": [
+   377
+  ],
+  "annette.alexander@retailodyssey.com": [
+   377
+  ],
+  "samantha.mittendorf@sasretailservices.com": [
+   156
+  ],
+  "clayairoso@gmail.com": [
+   156
+  ],
+  "james.duchene@retailodyssey.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "antoniolhdz88@gmail.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "dglittlefield@hotmail.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "e.dedakovic@yahoo.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "kkhamilton77@gmail.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "luke.presley22@gmail.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "kennethgonzalez2008@icloud.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "parksevan70@gmail.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "misskatieann777@gmail.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "a.pangburn@yahoo.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "rogerlansds@gmail.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "saharoabdi4@gmail.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "natmitch135@gmail.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "malachi1064@gmail.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "ravend2801@gmail.com": [
+   19,
+   53,
+   215,
+   682
+  ],
+  "charles.vandenbroeke@retailodyssey.com": [
+   90,
+   225,
+   355
+  ],
+  "charles.broeke@sasretailservices.com": [
+   90,
+   225,
+   355
+  ],
+  "vera.broeke@retailodyssey.com": [
+   90,
+   225,
+   355
+  ],
+  "gotosammi1@gmail.com": [
+   90,
+   225,
+   355
+  ],
+  "ballek.mara@gmail.com": [
+   90,
+   225,
+   355
+  ],
+  "bsxnchez23@icloud.com": [
+   90,
+   225,
+   355
+  ],
+  "pjodee71995@gmail.com": [
+   90,
+   225,
+   355
+  ],
+  "broeke499@gmail.com": [
+   90,
+   225,
+   355
+  ],
+  "hailey.roessler@retailodyssey.com": [
+   185
+  ],
+  "jonescha2007@gmail.com": [
+   185
+  ],
+  "zainydude04@gmail.com": [
+   185
+  ],
+  "kristygraves05@live.com": [
+   260
+  ],
+  "connie.andrade@retailodyssey.com": [
+   260
+  ],
+  "karenbressi1@gmail.com": [
+   260
+  ],
+  "angie.gray@sasretailservices.com": [
+   171,
+   655,
+   691
+  ],
+  "jared.a.fontaine@gmail.com": [
+   171,
+   655,
+   691
+  ],
+  "schmidt.caleigh.t@gmail.com": [
+   171,
+   655,
+   691
+  ],
+  "jordan.rieman23@icloud.com": [
+   171,
+   655,
+   691
+  ],
+  "harry.shoaf@gmail.com": [
+   171,
+   655,
+   691
+  ],
+  "hotfiredbird95@gmail.com": [
+   171,
+   655,
+   691
+  ],
+  "kenna.senn@sasretailservices.com": [
+   265,
+   424,
+   604
+  ],
+  "collinwayne@gmail.com": [
+   265,
+   424,
+   604
+  ],
+  "carissa.cameron.1007@gmail.com": [
+   265,
+   424,
+   604
+  ],
+  "eric.c.zwicker@gmail.com": [
+   265,
+   424,
+   604
+  ],
+  "baustiancurtis@gmail.com": [
+   265,
+   424,
+   604
+  ],
+  "bgkelleyiii@gmail.com": [
+   265,
+   424,
+   604
+  ],
+  "eric.d.ho1@gmail.com": [
+   265,
+   424,
+   604
+  ],
+  "danette.shoemaker@retailodyssey.com": [
+   615
+  ],
+  "maurice.mcdougald@sasretailservices.com": [
+   390,
+   605,
+   615
+  ],
+  "evanb.banks07@gmail.com": [
+   390,
+   605,
+   615
+  ],
+  "korbyn.whittwilliams@gmail.com": [
+   390,
+   605,
+   615
+  ],
+  "juusoluoto@outlook.com": [
+   390,
+   605,
+   615
+  ],
+  "baebeegirl2021@outlook.com": [
+   390,
+   605,
+   615
+  ],
+  "stephpim4@gmail.com": [
+   390,
+   605,
+   615
+  ],
+  "julene.walker@sasretailservices.com": [
+   186,
+   659
+  ],
+  "marioboombastic0831@gmail.com": [
+   186,
+   659
+  ],
+  "kim.ridgway@retailodyssey.com": [
+   186,
+   659
+  ],
+  "jacem2759@gmail.com": [
+   186,
+   659
+  ],
+  "nicole.fouts@retailodyssey.com": [
+   383
+  ],
+  "holbrook.maria@gmail.com": [
+   383
+  ],
+  "alex.wright2@retailodyssey.com": [
+   23,
+   28,
+   31,
+   459
+  ],
+  "aiyana.natarisalazar@retailodyssey.com": [
+   23,
+   28,
+   31,
+   459
+  ],
+  "beebearynice@gmail.com": [
+   23,
+   28,
+   31,
+   459
+  ],
+  "marissalemos16@gmail.com": [
+   23,
+   28,
+   31,
+   459
+  ],
+  "xavierclaussen050@gmail.com": [
+   23,
+   28,
+   31,
+   459
+  ],
+  "kimberly.claflin@retailodyssey.com": [
+   23,
+   28,
+   31,
+   459
+  ],
+  "springrhea2@gmail.com": [
+   23,
+   28,
+   31,
+   459
+  ],
+  "joaopanzo002@gmail.com": [
+   23,
+   28,
+   31,
+   459
+  ],
+  "wakefieldalexander9@gmail.com": [
+   23,
+   28,
+   31,
+   459
+  ],
+  "jes.zumwalt@sasretailservices.com": [
+   23,
+   28,
+   31,
+   459
+  ],
+  "melita030@yahoo.com": [
+   23,
+   28,
+   31,
+   459
+  ],
+  "zoriamcmurry60@gmail.com": [
+   23,
+   28,
+   31,
+   459
+  ],
+  "patricia.magana@retailodyssey.com": [
+   163,
+   286
+  ],
+  "tiffanypond04@gmail.com": [
+   163,
+   286
+  ],
+  "lily.thiphakhinkeo@sasretailservices.com": [
+   163,
+   286
+  ],
+  "jaxpond8@gmail.com": [
+   163,
+   286
+  ],
+  "stephen.lincoln@sasretailservices.com": [
+   163,
+   286
+  ],
+  "justina.sledge@retailodyssey.com": [
+   163,
+   286
+  ],
+  "scott.parker@retailodyssey.com": [
+   163,
+   286
+  ],
+  "cindy.roth@sasretailservices.com": [
+   654
+  ],
+  "daskren@gmail.com": [
+   654
+  ],
+  "don.lorn.williams12@gmail.com": [
+   649,
+   653
+  ],
+  "taralynn246810@gmail.com": [
+   649,
+   653
+  ],
+  "mrahgook@gmail.com": [
+   649,
+   653
+  ],
+  "davidtghukasyan@icloud.com": [
+   649,
+   653
+  ],
+  "kimberly.alvarez@retailodyssey.com": [
+   649,
+   653
+  ],
+  "david.davidson@retailodyssey.com": [
+   17
+  ],
+  "janacasler@gmail.com": [
+   17
+  ],
+  "lenhartc4@gmail.com": [
+   17
+  ],
+  "mary.bouck@retailodyssey.com": [
+   41,
+   111,
+   665
+  ],
+  "madysyn.stevens@retailodyssey.com": [
+   41,
+   111,
+   665
+  ],
+  "ashton_finel@yahoo.com": [
+   41,
+   111,
+   665
+  ],
+  "kennethesr@yahoo.com": [
+   41,
+   111,
+   665
+  ],
+  "brandie.stevens@retailodyssey.com": [
+   41,
+   111,
+   665
+  ],
+  "terrey253@gmail.com": [
+   41,
+   111,
+   665
+  ],
+  "gmlee253@gmail.com": [
+   41,
+   111,
+   665
+  ],
+  "robyn.reichl@retailodyssey.com": [
+   603
+  ],
+  "mllarson1122@gmail.com": [
+   603
+  ],
+  "jessica.lustwilliams@retailodyssey.com": [
+   209,
+   210,
+   458,
+   681
+  ],
+  "loragifford27@yahoo.com": [
+   209,
+   210,
+   458,
+   681
+  ],
+  "carmjohnson73@hotmail.com": [
+   209,
+   210,
+   458,
+   681
+  ],
+  "calebtmeredith@gmail.com": [
+   209,
+   210,
+   458,
+   681
+  ],
+  "boomsterling017@gmail.com": [
+   209,
+   210,
+   458,
+   681
+  ],
+  "jafilipini1@gmail.com": [
+   209,
+   210,
+   458,
+   681
+  ],
+  "zhauck766@gmail.com": [
+   209,
+   210,
+   458,
+   681
+  ],
+  "makenzierhynas@gmail.com": [
+   210
+  ],
+  "johncheshiertoby@gmail.com": [
+   180,
+   457,
+   688
+  ],
+  "bill.mclaughlin@retailodyssey.com": [
+   180,
+   457,
+   688
+  ],
+  "simonofcrenshaw@gmail.com": [
+   180,
+   457,
+   688
+  ],
+  "sovannjohnny847@gmail.com": [
+   180,
+   457,
+   688
+  ],
+  "jacketmn64@gmail.com": [
+   180,
+   457,
+   688
+  ],
+  "karissa.kurious@sasretailservices.com": [
+   180,
+   457,
+   688
+  ],
+  "troycndlr@gmail.com": [
+   180,
+   457,
+   688
+  ],
+  "munozlandon123@gmail.com": [
+   180,
+   457,
+   688
+  ],
+  "edith.thyselius@sasretailservices.com": [
+   13,
+   122
+  ],
+  "natalie.barnes@retailodyssey.com": [
+   13,
+   122
+  ],
+  "sethishalu01@gmail.com": [
+   13,
+   122
+  ],
+  "christopher.mounsey@retailodyssey.com": [
+   608
+  ],
+  "michael.davidreynolds@yahoo.com": [
+   608
+  ],
+  "susan.marquand@retailodyssey.com": [
+   24,
+   25,
+   667
+  ],
+  "graham.peberdy@sasretailservices.com": [
+   24,
+   25,
+   667
+  ],
+  "orange_sc_dog@yahoo.com": [
+   24,
+   25,
+   667
+  ],
+  "kyle.miller@retailodyssey.com": [
+   24,
+   25,
+   667
+  ],
+  "annieelise@outlook.com": [
+   24,
+   25,
+   667
+  ],
+  "alexissilva8018@gmail.com": [
+   24,
+   25,
+   667
+  ],
+  "courtney.fetty@retailodyssey.com": [
+   24,
+   25,
+   667
+  ],
+  "malachirllns@gmail.com": [
+   25,
+   667
+  ],
+  "yemeem@gmail.com": [
+   608
+  ],
+  "connie.bottomley@retailodyssey.com": [
+   227,
+   325,
+   328,
+   417
+  ],
+  "angie.moorehead@sasretailservices.com": [
+   325,
+   328,
+   417
+  ],
+  "harruth@hotmail.com": [
+   227,
+   325,
+   328,
+   417
+  ],
+  "kenzie.pulleykohler@retailodyssey.com": [
+   325,
+   328,
+   417
+  ],
+  "kendoyleuniverse@gmail.com": [
+   227,
+   325,
+   417
+  ],
+  "trodgers6400@gmail.com": [
+   325,
+   328
+  ],
+  "michael.harrell@retailodyssey.com": [
+   5,
+   70
+  ],
+  "franklinjherring@gmail.com": [
+   5,
+   70
+  ],
+  "cnelson066@gmail.com": [
+   5,
+   70
+  ],
+  "adamstim97302@gmail.com": [
+   5,
+   70
+  ],
+  "dailene.moraavalos@retailodyssey.com": [
+   5,
+   70
+  ],
+  "kyler.smith@retailodyssey.com": [
+   227
+  ],
+  "rickhckmn8@gmail.com": [
+   255,
+   360
+  ],
+  "robert.durnez@retailodyssey.com": [
+   372
+  ],
+  "layden.warner@retailodyssey.com": [
+   372
+  ],
+  "jasmine91959@hotmail.com": [
+   63,
+   153,
+   240,
+   694
+  ],
+  "kalleen.iniguezcarri@retailodyssey.com": [
+   63,
+   153,
+   240,
+   694
+  ],
+  "tamera.sandeno@retailodyssey.com": [
+   63,
+   153,
+   240,
+   694
+  ],
+  "pozaryckidianne63@gmail.com": [
+   63,
+   153,
+   240,
+   694
+  ],
+  "artymartinez2006@yahoo.com": [
+   63,
+   153,
+   240,
+   694
+  ],
+  "sanchezjose779@gmail.com": [
+   63,
+   153,
+   240,
+   694
+  ],
+  "ricardocelestino1017@gmail.com": [
+   63,
+   153,
+   240,
+   694
+  ],
+  "nathanaelcelestino@gmail.com": [
+   63,
+   153,
+   240,
+   694
+  ],
+  "superawl04@gmail.com": [
+   63,
+   153,
+   240,
+   694
+  ],
+  "jasonpaul.lavell@sasretailservices.com": [
+   63,
+   153,
+   240,
+   694
+  ],
+  "rhodydamm@aol.com": [
+   663
+  ],
+  "julie.ferguson@retailodyssey.com": [
+   35,
+   40,
+   285,
+   482
+  ],
+  "michaelmcconnell007@comcast.net": [
+   35,
+   40,
+   285,
+   482
+  ],
+  "emwitt53@gmail.com": [
+   35,
+   40,
+   285,
+   482
+  ],
+  "olli.witt@gmx.de": [
+   35,
+   40,
+   285,
+   482
+  ],
+  "barajassaraeloisa@gmail.com": [
+   35,
+   40,
+   285,
+   482
+  ],
+  "zmharrington01@gmail.com": [
+   35,
+   40,
+   285,
+   482
+  ],
+  "victor.trevino@retailodyssey.com": [
+   220,
+   375,
+   393,
+   516
+  ],
+  "akafatamy46@gmail.com": [
+   220,
+   375,
+   393,
+   516
+  ],
+  "pamela.gardner@sasretailservices.com": [
+   220,
+   375,
+   393,
+   516
+  ],
+  "40ktaylor@gmail.com": [
+   220,
+   375,
+   393,
+   516
+  ],
+  "royann.lund@gmail.com": [
+   220,
+   375,
+   393,
+   516
+  ],
+  "zachary.house176@gmail.com": [
+   220,
+   375,
+   393,
+   516
+  ],
+  "milesarikaa@gmail.com": [
+   220,
+   375,
+   393,
+   516
+  ],
+  "t53774227241@gmail.com": [
+   220,
+   375,
+   393,
+   516
+  ],
+  "j_rodgers757@yahoo.com": [
+   220,
+   375,
+   393,
+   516
+  ],
+  "brarydoccount7777@outlook.com": [
+   220,
+   375,
+   393,
+   516
+  ],
+  "rogersbjr90@gmail.com": [
+   220,
+   375,
+   393,
+   516
+  ],
+  "ac3156331@icloud.com": [
+   220,
+   375,
+   393,
+   516
+  ],
+  "julie.slaughter@youradv.com": [
+   375,
+   516
+  ],
+  "andri147castro@outlook.com": [
+   220,
+   375,
+   393,
+   516
+  ],
+  "hcsch@frontier.com": [
+   462
+  ],
+  "karla.gamroth@retailodyssey.com": [
+   462
+  ],
+  "jennifer.russell@sasretailservices.com": [
+   220
+  ],
+  "cindi.griggs@retailodyssey.com": [
+   60,
+   143,
+   661
+  ],
+  "prscoppe315@gmail.com": [
+   60,
+   143,
+   661
+  ],
+  "omar.robles@retailodyssey.com": [
+   60,
+   143,
+   661
+  ],
+  "thefifers@msn.com": [
+   60,
+   143,
+   661
+  ],
+  "oneeightykaty@yahoo.com": [
+   60,
+   143,
+   661
+  ],
+  "dlbrookens@outlook.com": [
+   60,
+   143,
+   661
+  ],
+  "ramosricardo814@gmail.com": [
+   60,
+   143,
+   661
+  ],
+  "bryndle.dev@gmail.com": [
+   218
+  ],
+  "virlaineferrari@gmail.com": [
+   242,
+   651
+  ],
+  "michelle.sweet@youradv.com": [
+   242,
+   651
+  ],
+  "crystalhannon23@gmail.com": [
+   242,
+   651
+  ],
+  "missy7826@yahoo.com": [
+   242,
+   651
+  ],
+  "connermcclure.15@icloud.com": [
+   198,
+   226,
+   449,
+   685
+  ],
+  "kelseedillon10@gmail.com": [
+   198,
+   226,
+   449,
+   685
+  ],
+  "saviya.hurley@retailodyssey.com": [
+   49,
+   351
+  ],
+  "kelly.c.martin614@gmail.com": [
+   49,
+   351
+  ],
+  "bruce.brennick@youradv.com": [
+   214,
+   351
+  ],
+  "kaydencesmith2006@icloud.com": [
+   49,
+   351
+  ],
+  "austinlizama05@gmail.com": [
+   49,
+   351
+  ],
+  "juulmj@gmail.com": [
+   49,
+   657
+  ],
+  "jennifer.hilderbrand@retailodyssey.com": [
+   214,
+   657
+  ],
+  "kainoahholley2006@gmail.com": [
+   214,
+   657
+  ],
+  "newmng2024@gmail.com": [
+   214,
+   657
+  ],
+  "micaj@duck.com": [
+   11,
+   18,
+   71,
+   656
+  ],
+  "priscilla.pensgard@retailodyssey.com": [
+   11,
+   18,
+   71,
+   656
+  ],
+  "juliawalunga25@gmail.com": [
+   11,
+   18,
+   71,
+   656
+  ],
+  "starr.ahchee@retailodyssey.com": [
+   11,
+   18,
+   71,
+   656
+  ],
+  "analynnahchee@gmail.com": [
+   11,
+   18,
+   71,
+   656
+  ],
+  "falakiko.taulanga@sasretailservices.com": [
+   11,
+   18,
+   71,
+   656
+  ],
+  "williamvillareal834@gmail.com": [
+   11,
+   18,
+   71,
+   656
+  ],
+  "chris.metzger@retailodyssey.com": [
+   486,
+   652
+  ],
+  "chancefsss@gmail.com": [
+   486,
+   652
+  ],
+  "davidwadeward@yahoo.com": [
+   486,
+   652
+  ],
+  "monique.perez73@yahoo.com": [
+   486,
+   652
+  ],
+  "henrybenita133@yahoo.com": [
+   71
+  ],
+  "zoie.granger@retailodyssey.com": [
+   224
+  ],
+  "alexdahlgren20@gmail.com": [
+   391,
+   658
+  ],
+  "msheatherg77@gmail.com": [
+   391,
+   658
+  ],
+  "teena.dwyerbailie@retailodyssey.com": [
+   391,
+   658
+  ],
+  "jeremeypierson5@gmail.com": [
+   391,
+   658
+  ],
+  "itsneozyme@gmail.com": [
+   391,
+   658
+  ],
+  "ruth.northcutt@sasretailservices.com": [
+   391,
+   658
+  ],
+  "garretthults@gmail.com": [
+   391,
+   658
+  ],
+  "raechel.roberts@retailodyssey.com": [
+   21,
+   30,
+   50,
+   126,
+   165,
+   195,
+   196,
+   281,
+   464,
+   650
+  ],
+  "shelly.peck@retailodyssey.com": [
+   11,
+   17,
+   18,
+   71,
+   158,
+   485,
+   656
+  ],
+  "seth.newman@retailodyssey.com": [
+   11,
+   17,
+   18,
+   60,
+   71,
+   75,
+   125,
+   127,
+   135,
+   143,
+   158,
+   198,
+   224,
+   226,
+   377,
+   439,
+   449,
+   485,
+   600,
+   613,
+   649,
+   653,
+   656,
+   660,
+   661,
+   662,
+   685
+  ],
+  "jgruidl@retailodyssey.com": [
+   156,
+   198,
+   226,
+   260,
+   383,
+   439,
+   449,
+   613,
+   662,
+   685
+  ],
+  "amy.preston@retailodyssey.com": [
+   75,
+   93,
+   125,
+   127,
+   135,
+   140,
+   150,
+   185,
+   208,
+   236,
+   255,
+   360,
+   372,
+   460,
+   600,
+   614,
+   660,
+   663,
+   683
+  ],
+  "dustin.hooker@retailodyssey.com": [
+   75,
+   135,
+   600,
+   663
+  ],
+  "michelle.lerat@retailodyssey.com": [
+   63,
+   75,
+   135,
+   153,
+   220,
+   240,
+   375,
+   393,
+   516,
+   600,
+   663,
+   694
+  ],
+  "james.carr@retailodyssey.com": [
+   35,
+   40,
+   60,
+   63,
+   143,
+   153,
+   218,
+   220,
+   240,
+   242,
+   285,
+   375,
+   377,
+   393,
+   462,
+   482,
+   516,
+   651,
+   661,
+   694
+  ],
+  "bethany.skriiko@retailodyssey.com": [
+   377
+  ],
+  "tyson.gauthier@retailodyssey.com": [
+   19,
+   23,
+   28,
+   31,
+   53,
+   215,
+   391,
+   459,
+   658,
+   682
+  ],
+  "ky.stanley@retailodyssey.com": [
+   5,
+   70,
+   90,
+   225,
+   227,
+   325,
+   328,
+   355,
+   417
+  ],
+  "kim.lawler@retailodyssey.com": [
+   41,
+   111,
+   171,
+   186,
+   265,
+   390,
+   424,
+   603,
+   604,
+   605,
+   615,
+   655,
+   659,
+   665,
+   691
+  ],
+  "kgingrasso@retailodyssey.com": [
+   171,
+   209,
+   210,
+   265,
+   390,
+   391,
+   424,
+   458,
+   604,
+   605,
+   615,
+   655,
+   658,
+   681,
+   691
+  ],
+  "april.gauthier@retailodyssey.com": [
+   49,
+   163,
+   214,
+   286,
+   351,
+   486,
+   652,
+   654,
+   657
+  ],
+  "melissa.langland@retailodyssey.com": [
+   13,
+   24,
+   25,
+   122,
+   180,
+   209,
+   210,
+   457,
+   458,
+   608,
+   667,
+   681,
+   688
+  ]
+ },
+ "store_supervisors": {
+  "281": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "30": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "165": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "126": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "195": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "196": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "650": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "21": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "464": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "485": [
+   "seth.newman@retailodyssey.com",
+   "shelly.peck@retailodyssey.com"
+  ],
+  "158": [
+   "seth.newman@retailodyssey.com",
+   "shelly.peck@retailodyssey.com"
+  ],
+  "50": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "662": [
+   "jgruidl@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "75": [
+   "amy.preston@retailodyssey.com",
+   "dustin.hooker@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "600": [
+   "amy.preston@retailodyssey.com",
+   "dustin.hooker@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "135": [
+   "amy.preston@retailodyssey.com",
+   "dustin.hooker@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "663": [
+   "amy.preston@retailodyssey.com",
+   "dustin.hooker@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "439": [
+   "jgruidl@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "226": [
+   "jgruidl@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "255": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "208": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "660": [
+   "amy.preston@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "614": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "150": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "236": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "125": [
+   "amy.preston@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "377": [
+   "bethany.skriiko@retailodyssey.com",
+   "james.carr@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "156": [
+   "jgruidl@retailodyssey.com"
+  ],
+  "19": [
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "90": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "185": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "260": [
+   "jgruidl@retailodyssey.com"
+  ],
+  "171": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
+  ],
+  "604": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
+  ],
+  "615": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
+  ],
+  "186": [
+   "kim.lawler@retailodyssey.com"
+  ],
+  "424": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
+  ],
+  "613": [
+   "jgruidl@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "383": [
+   "jgruidl@retailodyssey.com"
+  ],
+  "31": [
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "459": [
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "23": [
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "163": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "286": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "654": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "691": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
+  ],
+  "649": [
+   "seth.newman@retailodyssey.com"
+  ],
+  "653": [
+   "seth.newman@retailodyssey.com"
+  ],
+  "17": [
+   "seth.newman@retailodyssey.com",
+   "shelly.peck@retailodyssey.com"
+  ],
+  "655": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
+  ],
+  "265": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
+  ],
+  "390": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
+  ],
+  "605": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
+  ],
+  "111": [
+   "kim.lawler@retailodyssey.com"
+  ],
+  "41": [
+   "kim.lawler@retailodyssey.com"
+  ],
+  "603": [
+   "kim.lawler@retailodyssey.com"
+  ],
+  "209": [
+   "kgingrasso@retailodyssey.com",
+   "melissa.langland@retailodyssey.com"
+  ],
+  "665": [
+   "kim.lawler@retailodyssey.com"
+  ],
+  "458": [
+   "kgingrasso@retailodyssey.com",
+   "melissa.langland@retailodyssey.com"
+  ],
+  "659": [
+   "kim.lawler@retailodyssey.com"
+  ],
+  "210": [
+   "kgingrasso@retailodyssey.com",
+   "melissa.langland@retailodyssey.com"
+  ],
+  "681": [
+   "kgingrasso@retailodyssey.com",
+   "melissa.langland@retailodyssey.com"
+  ],
+  "180": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "457": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "122": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "608": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "24": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "25": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "355": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "13": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "325": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "417": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "328": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "225": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "5": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "70": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "227": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "360": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "460": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "127": [
+   "amy.preston@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "93": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "140": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "372": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "240": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "63": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "35": [
+   "james.carr@retailodyssey.com"
+  ],
+  "482": [
+   "james.carr@retailodyssey.com"
+  ],
+  "375": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "462": [
+   "james.carr@retailodyssey.com"
+  ],
+  "220": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "393": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "661": [
+   "james.carr@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "60": [
+   "james.carr@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "218": [
+   "james.carr@retailodyssey.com"
+  ],
+  "242": [
+   "james.carr@retailodyssey.com"
+  ],
+  "651": [
+   "james.carr@retailodyssey.com"
+  ],
+  "449": [
+   "jgruidl@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "685": [
+   "jgruidl@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "198": [
+   "jgruidl@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "28": [
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "351": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "49": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "215": [
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "53": [
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "682": [
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "214": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "18": [
+   "seth.newman@retailodyssey.com",
+   "shelly.peck@retailodyssey.com"
+  ],
+  "656": [
+   "seth.newman@retailodyssey.com",
+   "shelly.peck@retailodyssey.com"
+  ],
+  "657": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "486": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "652": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "11": [
+   "seth.newman@retailodyssey.com",
+   "shelly.peck@retailodyssey.com"
+  ],
+  "71": [
+   "seth.newman@retailodyssey.com",
+   "shelly.peck@retailodyssey.com"
+  ],
+  "224": [
+   "seth.newman@retailodyssey.com"
+  ],
+  "688": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "667": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "683": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "153": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "694": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "285": [
+   "james.carr@retailodyssey.com"
+  ],
+  "40": [
+   "james.carr@retailodyssey.com"
+  ],
+  "516": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "143": [
+   "james.carr@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "391": [
+   "kgingrasso@retailodyssey.com",
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "658": [
+   "kgingrasso@retailodyssey.com",
+   "tyson.gauthier@retailodyssey.com"
+  ]
+ },
+ "store_districts": {
+  "281": "10",
+  "30": "10",
+  "165": "10",
+  "126": "10",
+  "195": "10",
+  "196": "10",
+  "650": "10",
+  "21": "10",
+  "464": "10",
+  "485": "7",
+  "158": "7",
+  "50": "10",
+  "662": "9",
+  "75": "2",
+  "600": "2",
+  "135": "2",
+  "663": "2",
+  "439": "9",
+  "226": "9",
+  "255": "2",
+  "208": "2",
+  "660": "2",
+  "614": "2",
+  "150": "2",
+  "236": "2",
+  "125": "2",
+  "377": "1",
+  "156": "9",
+  "19": "8",
+  "90": "3",
+  "185": "2",
+  "260": "9",
+  "171": "5",
+  "604": "5",
+  "615": "5",
+  "186": "5",
+  "424": "5",
+  "613": "9",
+  "383": "9",
+  "31": "8",
+  "459": "8",
+  "23": "8",
+  "163": "6",
+  "286": "6",
+  "654": "6",
+  "691": "5",
+  "649": "7",
+  "653": "7",
+  "17": "7",
+  "655": "5",
+  "265": "5",
+  "390": "5",
+  "605": "5",
+  "111": "5",
+  "41": "5",
+  "603": "5",
+  "209": "4",
+  "665": "5",
+  "458": "4",
+  "659": "5",
+  "210": "4",
+  "681": "4",
+  "180": "4",
+  "457": "4",
+  "122": "4",
+  "608": "4",
+  "24": "4",
+  "25": "4",
+  "355": "3",
+  "13": "4",
+  "325": "3",
+  "417": "3",
+  "328": "3",
+  "225": "3",
+  "5": "3",
+  "70": "3",
+  "227": "3",
+  "360": "2",
+  "460": "2",
+  "127": "2",
+  "93": "2",
+  "140": "2",
+  "372": "2",
+  "240": "1",
+  "63": "1",
+  "35": "1",
+  "482": "1",
+  "375": "1",
+  "462": "1",
+  "220": "1",
+  "393": "1",
+  "661": "1",
+  "60": "1",
+  "218": "1",
+  "242": "1",
+  "651": "1",
+  "449": "9",
+  "685": "9",
+  "198": "9",
+  "28": "8",
+  "351": "6",
+  "49": "6",
+  "215": "8",
+  "53": "8",
+  "682": "8",
+  "214": "6",
+  "18": "7",
+  "656": "7",
+  "657": "6",
+  "486": "6",
+  "652": "6",
+  "11": "7",
+  "71": "7",
+  "224": "7",
+  "688": "4",
+  "667": "4",
+  "683": "2",
+  "153": "1",
+  "694": "1",
+  "285": "1",
+  "40": "1",
+  "516": "1",
+  "143": "1",
+  "391": "Traveling",
+  "658": "Traveling"
+ }
+}
