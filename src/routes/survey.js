@@ -33,7 +33,6 @@ router.get('/me', async (req, res, next) => {
         role: req.surveyUser.role,
         team: req.surveyUser.team,
         district: req.surveyUser.district,
-        phone: req.surveyUser.phone || null,
         title: req.surveyUser.title || null,
         supervisorEmail: req.surveyUser.supervisor_email || null,
         isMasterAdmin: !!req.surveyUser.isMasterAdmin,

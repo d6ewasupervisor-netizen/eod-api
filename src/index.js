@@ -46,6 +46,8 @@ const {
 // work without a CF Access JWT.
 const requestLinkRouter = require('./routes/request-link');
 const verifyTokenRouter = require('./routes/verify-token');
+const requestSmsOtpRouter = require('./routes/request-sms-otp');
+const verifySmsOtpRouter = require('./routes/verify-sms-otp');
 const adminSessionRouter = require('./routes/admin-session');
 const adminAllowedEmailsRouter = require('./routes/admin-allowed-emails');
 const adminAdminsRouter = require('./routes/admin-admins');
@@ -408,6 +410,10 @@ async function start() {
     // /api/verify-token only honors single-use JWTs signed by JWT_SECRET.
     '/api/request-link',
     '/api/verify-token',
+    // SMS one-time PIN (Twilio) — self-gated + rate-limited
+    '/api/request-sms-otp',
+    '/api/request-sms-otp/status',
+    '/api/verify-sms-otp',
     // Dump bin file GET: session Bearer OR short-lived ?t= JWT (typ dump_dl).
     '/api/download',
     // Local tracker agent authenticates with its own ingest bearer before the
@@ -477,6 +483,8 @@ async function start() {
   // /api/access-request matches district6 -- distinct subtrees.
   app.use('/api/request-link', requestLinkRouter);
   app.use('/api/verify-token', verifyTokenRouter);
+  app.use('/api/request-sms-otp', requestSmsOtpRouter);
+  app.use('/api/verify-sms-otp', verifySmsOtpRouter);
   app.use('/api/admin/session', adminSessionRouter);
   app.use('/api/admin/allowed-emails', adminAllowedEmailsRouter);
   app.use('/api/admin/admins', adminAdminsRouter);

@@ -118,46 +118,22 @@ async function userHasStoreAccess(surveyUser, kompassRoles, storeNum) {
 }
 
 /**
- * Build typeahead suggestions for the signed-in user (and optional store).
- * Includes identity fields, teammates on shared stores, and prior text answers.
+ * Typeahead for operational / store-side free-text only.
+ * Never suggests RO teammates — store contacts & champions are other companies.
  */
 async function buildSuggestions(surveyUser, { storeNum = null, kompassRoles = [] } = {}) {
   const stores = storeNum != null
     ? [Number(storeNum)]
     : await listAccessibleStores(surveyUser, kompassRoles);
 
-  const people = [];
-  if (stores.length) {
-    const { rows } = await pool.query(
-      `SELECT DISTINCT ro.email, ro.name, ro.role, ro.team, ro.phone, ro.district
-         FROM survey_roster ro
-         JOIN survey_store_access a ON a.email = ro.email
-        WHERE ro.active = TRUE
-          AND a.store_num = ANY($1::int[])
-        ORDER BY ro.name
-        LIMIT 200`,
-      [stores]
-    );
-    for (const p of rows) {
-      people.push({
-        name: p.name,
-        email: p.email,
-        role: p.role,
-        team: p.team,
-        phone: p.phone,
-        district: p.district,
-      });
-    }
-  }
-
-  // Prior free-text answers at these stores (any respondent) for location/entry hints
+  // Prior free-text answers at these stores (locations / entry only — not people lists from roster)
   const prior = {
     cartLocations: [],
     vestcomLocations: [],
     tagLocations: [],
     entryMethods: [],
-    championNames: [],
-    contactNames: [],
+    // Store-side names captured on prior surveys (Fred Meyer / Kroger staff), not RO team
+    storeSideNames: [],
   };
   if (stores.length) {
     const { rows } = await pool.query(
@@ -182,12 +158,12 @@ async function buildSuggestions(surveyUser, { storeNum = null, kompassRoles = []
       pushUnique(prior.tagLocations, a.Q21);
       pushUnique(prior.entryMethods, a.Q30);
       pushUnique(prior.entryMethods, a.Q31a);
-      pushUnique(prior.championNames, a.Q7a);
-      for (const k of ['Q34_d', 'Q35_d', 'Q36_d', 'Q37_d']) pushUnique(prior.contactNames, a[k]);
+      // Champion / directors / managers entered previously for THIS store (store associates)
+      pushUnique(prior.storeSideNames, a.Q7a);
+      for (const k of ['Q34_d', 'Q35_d', 'Q36_d', 'Q37_d']) pushUnique(prior.storeSideNames, a[k]);
     }
   }
 
-  // Baseline text-ish answers for the store
   if (storeNum != null) {
     const { rows: base } = await pool.query(
       `SELECT answers FROM survey_baseline WHERE store_num = $1 ORDER BY submitted DESC LIMIT 5`,
@@ -200,11 +176,9 @@ async function buildSuggestions(surveyUser, { storeNum = null, kompassRoles = []
     };
     for (const b of base) {
       const a = b.answers || {};
-      // mapped baseline is mostly yes/no; still harvest any strings
       for (const [k, v] of Object.entries(a)) {
         if (typeof v === 'string' && v.length > 2 && !['Yes', 'No', 'N/A', 'Other'].includes(v)) {
           if (k === 'Q6') pushUnique(prior.cartLocations, v);
-          else pushUnique(prior.contactNames, v);
         }
       }
     }
@@ -213,32 +187,29 @@ async function buildSuggestions(surveyUser, { storeNum = null, kompassRoles = []
   const profile = {
     name: surveyUser.name,
     email: surveyUser.email,
-    phone: surveyUser.phone || null,
+    // phone intentionally omitted from client profile payload
     team: surveyUser.team || null,
     district: surveyUser.district || null,
     role: surveyUser.role,
     title: surveyUser.title || null,
   };
 
-  // Question-keyed suggestion lists for the UI typeahead
+  // Locations / how you enter — OK to suggest.
+  // Names — only prior store-side answers for this store set (never RO roster).
   const byQuestion = {
     Q6: prior.cartLocations,
-    Q7a: [
-      ...prior.championNames,
-      ...people.filter((p) => p.role === 'lead' || /captain|champion/i.test(p.title || '')).map((p) => p.name),
-    ],
+    Q7a: prior.storeSideNames,
     Q20: prior.vestcomLocations,
     Q21: prior.tagLocations,
     Q30: prior.entryMethods.length
       ? prior.entryMethods
       : ['Front doors when open', 'Receiving / back door', 'Vendor entrance', 'Side employee entrance'],
     Q31a: prior.entryMethods,
-    Q34_d: prior.contactNames,
-    Q35_d: prior.contactNames,
-    Q36_d: prior.contactNames,
-    Q37_d: prior.contactNames,
+    Q34_d: prior.storeSideNames,
+    Q35_d: prior.storeSideNames,
+    Q36_d: prior.storeSideNames,
+    Q37_d: prior.storeSideNames,
   };
-  // Dedupe byQuestion
   for (const k of Object.keys(byQuestion)) {
     const seen = new Set();
     byQuestion[k] = (byQuestion[k] || []).filter((v) => {
@@ -251,7 +222,7 @@ async function buildSuggestions(surveyUser, { storeNum = null, kompassRoles = []
 
   return {
     profile,
-    people,
+    people: [], // never surface RO teammates as suggestions
     byQuestion,
     districts: [...new Set(
       (await pool.query(
