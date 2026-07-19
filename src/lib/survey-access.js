@@ -31,10 +31,8 @@ async function requireSurveyAccess(req, res, next) {
   try {
     const su = await getSurveyUser(req.user && req.user.email);
     if (!su) return res.status(403).json({ ok: false, error: 'Not on the survey roster' });
-    // Kompass env admin elevates to master for scoping
-    if ((req.user?.roles || []).includes('admin') || isMasterAdminEmail(su.email)) {
-      su.isMasterAdmin = true;
-    }
+    // Master admin is a hard-coded allowlist only (not every KOMPASS_ADMIN_EMAILS entry).
+    su.isMasterAdmin = isMasterAdminEmail(su.email);
     req.surveyUser = su;
     next();
   } catch (err) {
@@ -54,7 +52,9 @@ function requireSurveyRole(...allowed) {
 
 // Data scoping — mirrors hub-store-access listAccessibleStores
 async function listAccessibleStores(surveyUser, kompassRoles = []) {
-  if (surveyUser?.isMasterAdmin || (kompassRoles || []).includes('admin')) {
+  // Only master admin sees every store division-wide.
+  // Ordinary supervisors/leads (even if also in KOMPASS_ADMIN_EMAILS) stay scoped.
+  if (surveyUser?.isMasterAdmin || isMasterAdminEmail(surveyUser?.email)) {
     const { rows } = await pool.query('SELECT DISTINCT store_num FROM survey_store_access ORDER BY store_num');
     return rows.map((r) => r.store_num);
   }
