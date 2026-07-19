@@ -40,6 +40,16 @@ function isDcScanPath(pathname) {
   return path === '/dc-scan' || path === '/dc-scan/' || path.startsWith('/dc-scan/');
 }
 
+function isSurveyPath(pathname) {
+  const path = (pathname || '/').toLowerCase();
+  return (
+    path === '/survey' || path === '/survey/' || path.startsWith('/survey/')
+    || path === '/survey.html'
+    || path === '/survey-admin' || path === '/survey-admin/' || path.startsWith('/survey-admin/')
+    || path === '/survey-admin.html'
+  );
+}
+
 function isAllowedDestinationUrl(url) {
   const host = url.host.toLowerCase();
   if (allowedReturnHosts().has(host)) {
@@ -57,7 +67,7 @@ function isAllowedDestinationUrl(url) {
     if (path === '/central-pet' || path === '/central-pet/' || path.startsWith('/central-pet/')) {
       return true;
     }
-    return isChecklanesPath(path) || isDcScanPath(path);
+    return isChecklanesPath(path) || isDcScanPath(path) || isSurveyPath(path);
   }
   if (url.host.endsWith('.github.io')) {
     const path = (url.pathname || '/').toLowerCase();
@@ -110,4 +120,5 @@ module.exports = {
   buildDestinationUrl,
   wrapForExternalBrowser,
   isAllowedDestinationUrl,
+  isSurveyPath,
 };

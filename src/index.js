@@ -522,11 +522,15 @@ async function start() {
     maxAge: '7d',
     fallthrough: false,
   }));
-  app.get(['/survey', '/survey/', '/survey.html'], (_req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'survey.html'));
+  // Canonical field/admin UIs live on the-dump-bin.com (site auth-gate).
+  // Keep these routes as permanent redirects so old eod-api bookmarks still work.
+  app.get(['/survey', '/survey/', '/survey.html'], (req, res) => {
+    const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(302, `https://the-dump-bin.com/survey/${qs}`);
   });
-  app.get(['/survey-admin', '/survey-admin/', '/survey-admin.html'], (_req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'survey-admin.html'));
+  app.get(['/survey-admin', '/survey-admin/', '/survey-admin.html'], (req, res) => {
+    const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(302, `https://the-dump-bin.com/survey-admin/${qs}`);
   });
   const fm391Dir = path.join(__dirname, 'public', 'fm391-p05w3');
   app.use('/fm391-p05w3/assets', express.static(path.join(fm391Dir, 'assets'), { fallthrough: false }));
