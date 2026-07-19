@@ -9,17 +9,40 @@ const {
   requireSurveyAccess,
   requireSurveyRole,
   listAccessibleStores,
+  listAccessibleStoresDetailed,
   userHasStoreAccess,
+  buildSuggestions,
 } = require('../lib/survey-access');
 
 const router = express.Router();
 router.use(requireAuth, requireSurveyAccess);
 
 // Identity + scope bootstrap for the frontend
+// Returns only this user's stores/district + typeahead suggestion dictionary.
 router.get('/me', async (req, res, next) => {
   try {
-    const stores = await listAccessibleStores(req.surveyUser, req.user.roles);
-    res.json({ ok: true, user: req.surveyUser, stores });
+    const roles = req.user?.roles || [];
+    const stores = await listAccessibleStoresDetailed(req.surveyUser, roles);
+    const suggestions = await buildSuggestions(req.surveyUser, { kompassRoles: roles });
+    const storeNums = stores.map((s) => s.storeNum);
+    res.json({
+      ok: true,
+      user: {
+        email: req.surveyUser.email,
+        name: req.surveyUser.name,
+        role: req.surveyUser.role,
+        team: req.surveyUser.team,
+        district: req.surveyUser.district,
+        phone: req.surveyUser.phone || null,
+        title: req.surveyUser.title || null,
+        supervisorEmail: req.surveyUser.supervisor_email || null,
+        isMasterAdmin: !!req.surveyUser.isMasterAdmin,
+      },
+      // Back-compat: flat store numbers for older clients
+      stores: storeNums,
+      storeDetails: stores,
+      suggestions,
+    });
   } catch (e) { next(e); }
 });
 
@@ -52,7 +75,24 @@ router.get('/stores/:storeNum/context', async (req, res, next) => {
         WHERE r.store_num = $1 AND r.respondent = $2`,
       [storeNum, req.surveyUser.email]
     );
-    res.json({ ok: true, baseline: baseline.rows, myResponse: mine.rows[0] || null });
+    const suggestions = await buildSuggestions(req.surveyUser, {
+      storeNum,
+      kompassRoles: req.user?.roles || [],
+    });
+    const { rows: districtRows } = await pool.query(
+      `SELECT district FROM survey_store_districts WHERE store_num = $1`,
+      [storeNum]
+    );
+    res.json({
+      ok: true,
+      baseline: baseline.rows,
+      myResponse: mine.rows[0] || null,
+      store: {
+        storeNum,
+        district: districtRows[0]?.district || null,
+      },
+      suggestions,
+    });
   } catch (e) { next(e); }
 });
 
