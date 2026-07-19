@@ -184,15 +184,25 @@ router.get('/export.csv', async (req, res, next) => {
       const s = v == null ? '' : (Array.isArray(v) ? v.join('; ') : String(v));
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
-    const header = ['store', 'district', 'respondent', 'respondent_name', 'team', 'status', 'submitted_at',
-      ...cols.map(c => `${c.id} ${c.text}`)];
+    // include a comment column for any question that has at least one comment in the data
+    const hasComment = new Set();
+    for (const r of responses) for (const c of cols) if (r.answers[c.id + '_c']) hasComment.add(c.id);
+    const header = ['store', 'district', 'respondent', 'respondent_name', 'team', 'status', 'submitted_at'];
+    for (const c of cols) {
+      header.push(`${c.id} ${c.text}`);
+      if (hasComment.has(c.id)) header.push(`${c.id} comment`);
+    }
     const lines = [header.map(esc).join(',')];
     for (const r of responses) {
-      lines.push([
+      const row = [
         r.store_num, r.district, r.respondent, r.respondent_name, r.team || '', r.status,
         r.submitted_at ? new Date(r.submitted_at).toISOString() : '',
-        ...cols.map(c => r.answers[c.id]),
-      ].map(esc).join(','));
+      ];
+      for (const c of cols) {
+        row.push(r.answers[c.id]);
+        if (hasComment.has(c.id)) row.push(r.answers[c.id + '_c']);
+      }
+      lines.push(row.map(esc).join(','));
     }
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="survey-export-${new Date().toISOString().slice(0, 10)}.csv"`);

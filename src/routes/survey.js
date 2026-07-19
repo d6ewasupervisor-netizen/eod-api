@@ -104,4 +104,66 @@ router.get('/responses', requireSurveyRole('supervisor'), async (req, res, next)
   } catch (e) { next(e); }
 });
 
+// ---- Photos (optional attachments; base64 JSON, compressed client-side)
+const photoJson = express.json({ limit: '8mb' });
+
+router.post('/stores/:storeNum/photos', photoJson, async (req, res, next) => {
+  try {
+    const storeNum = Number(req.params.storeNum);
+    if (!(await userHasStoreAccess(req.surveyUser, req.user.roles, storeNum))) {
+      return res.status(403).json({ ok: false, error: 'No access to this store' });
+    }
+    const { questionId, mime, data, caption } = req.body || {};
+    if (!questionId || !mime || !data) return res.status(400).json({ ok: false, error: 'questionId, mime, data required' });
+    if (!/^image\/(jpeg|png|webp)$/.test(mime)) return res.status(400).json({ ok: false, error: 'Unsupported image type' });
+    const buf = Buffer.from(String(data), 'base64');
+    if (!buf.length || buf.length > 5 * 1024 * 1024) return res.status(400).json({ ok: false, error: 'Image empty or over 5MB' });
+    const { rows } = await pool.query(
+      `INSERT INTO survey_photos (store_num, respondent, question_id, mime, bytes, caption)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, question_id, caption, created_at`,
+      [storeNum, req.surveyUser.email, String(questionId).slice(0, 10), mime, buf, caption ? String(caption).slice(0, 300) : null]
+    );
+    res.json({ ok: true, photo: rows[0] });
+  } catch (e) { next(e); }
+});
+
+router.get('/stores/:storeNum/photos', async (req, res, next) => {
+  try {
+    const storeNum = Number(req.params.storeNum);
+    if (!(await userHasStoreAccess(req.surveyUser, req.user.roles, storeNum))) {
+      return res.status(403).json({ ok: false, error: 'No access to this store' });
+    }
+    const { rows } = await pool.query(
+      `SELECT id, respondent, question_id, caption, created_at FROM survey_photos
+        WHERE store_num = $1 ORDER BY created_at`,
+      [storeNum]
+    );
+    res.json({ ok: true, photos: rows });
+  } catch (e) { next(e); }
+});
+
+router.get('/photos/:id', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query('SELECT store_num, mime, bytes FROM survey_photos WHERE id = $1', [Number(req.params.id)]);
+    if (!rows.length) return res.status(404).json({ ok: false, error: 'Photo not found' });
+    if (!(await userHasStoreAccess(req.surveyUser, req.user.roles, rows[0].store_num))) {
+      return res.status(403).json({ ok: false, error: 'No access to this photo' });
+    }
+    res.setHeader('Content-Type', rows[0].mime);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.send(rows[0].bytes);
+  } catch (e) { next(e); }
+});
+
+router.delete('/photos/:id', async (req, res, next) => {
+  try {
+    const { rowCount } = await pool.query(
+      'DELETE FROM survey_photos WHERE id = $1 AND respondent = $2',
+      [Number(req.params.id), req.surveyUser.email]
+    );
+    if (!rowCount) return res.status(404).json({ ok: false, error: 'Photo not found or not yours' });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

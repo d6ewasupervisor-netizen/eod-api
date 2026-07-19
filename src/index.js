@@ -427,8 +427,11 @@ async function start() {
     '/fm391-p05w3/',
     '/dc-scan',
     '/dc-scan/',
-    // Survey admin dashboard shell (auth-gate.js + client session JWT);
-    // /api/survey/admin/* remains behind requireAuth + requireRole('admin').
+    // Survey shells (auth-gate.js + client session JWT);
+    // /api/survey/* remains behind requireAuth + roster/admin ACL.
+    '/survey',
+    '/survey/',
+    '/survey.html',
     '/survey-admin',
     '/survey-admin/',
     '/survey-admin.html',
@@ -511,6 +514,9 @@ async function start() {
   });
   app.get('/auth-gate.js', (_req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'auth-gate.js'));
+  });
+  app.get(['/survey', '/survey/', '/survey.html'], (_req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'survey.html'));
   });
   app.get(['/survey-admin', '/survey-admin/', '/survey-admin.html'], (_req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'survey-admin.html'));

@@ -268,9 +268,14 @@ document.getElementById('exp-csv').onclick = () => {
 };
 document.getElementById('exp-xlsx').onclick = () => {
   const cols = visibleQuestionCols();
+  const hasComment = new Set();
+  DATA.forEach(r => cols.forEach(c => { if (r.answers[c.id + '_c']) hasComment.add(c.id); }));
   const rows = DATA.map(r => {
     const o = { Store: r.store_num, District: r.district, Respondent: r.respondent_name, Team: r.team, Status: r.status, Submitted: r.submitted_at };
-    cols.forEach(c => o[`${c.id} ${c.text.slice(0, 40)}`] = Array.isArray(r.answers[c.id]) ? r.answers[c.id].join('; ') : (r.answers[c.id] ?? ''));
+    cols.forEach(c => {
+      o[`${c.id} ${c.text.slice(0, 40)}`] = Array.isArray(r.answers[c.id]) ? r.answers[c.id].join('; ') : (r.answers[c.id] ?? '');
+      if (hasComment.has(c.id)) o[`${c.id} comment`] = r.answers[c.id + '_c'] ?? '';
+    });
     return o;
   });
   const ws = XLSX.utils.json_to_sheet(rows);

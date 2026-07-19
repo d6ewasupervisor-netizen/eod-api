@@ -321,6 +321,7 @@
       "Grocery",
       "Pharmacy",
       "GM",
+      "Other",
       "None"
      ],
      "good": "None"
