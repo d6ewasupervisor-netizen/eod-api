@@ -2,321 +2,751 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Division 701 Store Survey</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0f5c8c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Division 701 Store Survey · Retail Odyssey</title>
+<link rel="icon" href="/survey-assets/ro-logo.png">
 <script src="/auth-gate.js"></script>
 <style>
   :root{
-    --ink:#202b36; --ink-soft:#63707e; --line:#d9e0e7; --paper:#f4f6f8; --card:#fff;
-    --accent:#0f5c8c; --accent-soft:#e3eef6; --good:#2e7d52; --saved:#2e7d52; --danger:#b3402a;
+    --ink:#1a2430; --ink-soft:#5c6b7a; --line:#d5dde6; --paper:#eef2f6; --card:#fff;
+    --accent:#0f5c8c; --accent-deep:#0a4063; --accent-soft:#e3eef6; --good:#2e7d52; --saved:#2e7d52; --danger:#b3402a;
+    --hdr: calc(env(safe-area-inset-top, 0px) + 64px);
+    --nav: calc(env(safe-area-inset-bottom, 0px) + 68px);
+    --tap: 48px;
   }
-  *{box-sizing:border-box}
-  html,body{margin:0;background:var(--paper);color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;font-size:16px}
-  header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);padding:12px 16px}
-  header .row{display:flex;align-items:center;gap:10px}
-  header h1{font-size:16px;margin:0;flex:1}
-  #save-state{font-size:12px;color:var(--ink-soft)}
-  #save-state.saved{color:var(--saved)}
-  .progress{height:4px;background:var(--line);border-radius:2px;margin-top:10px;overflow:hidden}
-  .progress i{display:block;height:100%;background:var(--accent);width:0;transition:width .25s}
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent}
+  html{height:100%; overscroll-behavior:none}
+  body{
+    margin:0; min-height:100%; background:var(--paper); color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif; font-size:16px; line-height:1.4;
+    overscroll-behavior-y:none; touch-action:pan-y;
+    padding-bottom:var(--nav);
+  }
+  /* Brand bar */
+  .brandbar{
+    position:sticky; top:0; z-index:20;
+    background:linear-gradient(180deg,#fff 0%,#f7fafc 100%);
+    border-bottom:2px solid var(--accent);
+    padding:8px 12px calc(8px) ;
+    padding-top:max(8px, env(safe-area-inset-top, 0px));
+  }
+  .brandbar .top{display:flex; align-items:center; gap:10px}
+  .brand-logo{height:36px; width:auto; display:block; flex-shrink:0}
+  .brand-titles{flex:1; min-width:0}
+  .brand-titles .co{font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); font-weight:700}
+  .brand-titles h1{font-size:15px; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  #save-state{font-size:11px; color:var(--ink-soft); white-space:nowrap; max-width:36%; text-align:right}
+  #save-state.saved{color:var(--saved); font-weight:600}
+  #save-state.warn{color:var(--danger); font-weight:600}
+  .progress{height:5px; background:var(--line); border-radius:3px; margin-top:8px; overflow:hidden}
+  .progress i{display:block; height:100%; background:linear-gradient(90deg,var(--accent),#1a8fbf); width:0; transition:width .25s}
   @media (prefers-reduced-motion:reduce){.progress i{transition:none}}
-  main{max-width:640px;margin:0 auto;padding:16px 16px 120px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
-  .sec-title{font-size:13px;letter-spacing:.6px;text-transform:uppercase;color:var(--ink-soft);margin:4px 0 12px}
-  .qtext{font-weight:600;margin-bottom:10px;line-height:1.35}
-  .opts{display:flex;flex-wrap:wrap;gap:8px}
-  .opt{border:1.5px solid var(--line);border-radius:10px;padding:12px 18px;background:#fff;font-size:16px;cursor:pointer;min-height:48px}
-  .opt[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);font-weight:600}
-  textarea,input[type=text]{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:12px;font-size:16px;font-family:inherit;background:#fff}
-  textarea{min-height:72px;resize:vertical}
-  .hint{font-size:13px;color:var(--ink-soft);margin-top:8px}
-  .chip{display:inline-block;border:1px dashed var(--accent);color:var(--accent);border-radius:16px;padding:4px 12px;font-size:13px;cursor:pointer;background:#fff}
+
+  main{max-width:640px; margin:0 auto; padding:12px 12px 24px}
+
+  .hero{
+    display:flex; gap:12px; align-items:center;
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:12px; margin-bottom:12px;
+    box-shadow:0 1px 2px rgba(15,92,140,.06);
+  }
+  .hero img{width:72px; height:72px; border-radius:12px; object-fit:cover; flex-shrink:0; background:#eef5fa}
+  .hero .meta{min-width:0; flex:1}
+  .hero .eyebrow{font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); font-weight:700}
+  .hero h2{margin:2px 0 4px; font-size:17px; line-height:1.25}
+  .hero .sub{font-size:13px; color:var(--ink-soft)}
+
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:14px; margin-bottom:12px;
+    box-shadow:0 1px 2px rgba(26,36,48,.04);
+  }
+  .sec-title{font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:var(--ink-soft); margin:2px 0 10px}
+  .qtext{font-weight:600; margin-bottom:10px; line-height:1.35; font-size:16px}
+  .opts{display:flex; flex-wrap:wrap; gap:8px}
+  .opt{
+    border:1.5px solid var(--line); border-radius:12px; padding:12px 16px; background:#fff;
+    font-size:16px; cursor:pointer; min-height:var(--tap); min-width:72px;
+    touch-action:manipulation; user-select:none;
+  }
+  .opt[aria-pressed="true"]{border-color:var(--accent); background:var(--accent-soft); font-weight:600; color:var(--accent-deep)}
+  textarea,input[type=text]{
+    width:100%; border:1.5px solid var(--line); border-radius:12px; padding:12px;
+    font-size:16px; font-family:inherit; background:#fff; /* 16px prevents iOS zoom */
+  }
+  textarea{min-height:80px; resize:vertical}
+  .hint{font-size:13px; color:var(--ink-soft); margin-top:8px}
+  .chip{
+    display:inline-block; border:1px dashed var(--accent); color:var(--accent);
+    border-radius:16px; padding:8px 12px; font-size:13px; cursor:pointer; background:#fff;
+    min-height:40px; touch-action:manipulation;
+  }
   details.comment{margin-top:10px}
-  details.comment summary{font-size:13px;color:var(--accent);cursor:pointer;list-style:none;min-height:32px;display:flex;align-items:center}
-  details.comment summary::before{content:"+ ";font-weight:700;margin-right:4px}
+  details.comment summary{
+    font-size:14px; color:var(--accent); cursor:pointer; list-style:none;
+    min-height:var(--tap); display:flex; align-items:center; touch-action:manipulation;
+  }
+  details.comment summary::before{content:"+ "; font-weight:700; margin-right:4px}
   details.comment[open] summary::before{content:"− "}
-  .photo-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
-  .photo-row img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
-  .photo-add{border:1.5px dashed var(--line);border-radius:8px;width:64px;height:64px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--ink-soft);background:#fff;cursor:pointer}
+  .photo-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; align-items:center}
+  .photo-row img{width:72px; height:72px; object-fit:cover; border-radius:10px; border:1px solid var(--line)}
+  .photo-add{
+    border:1.5px dashed var(--line); border-radius:10px; width:72px; height:72px;
+    display:flex; align-items:center; justify-content:center; font-size:26px;
+    color:var(--ink-soft); background:#fff; cursor:pointer; touch-action:manipulation;
+  }
   .thumb{position:relative}
-  .thumb button{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;background:var(--danger);color:#fff;border:0;font-size:12px;line-height:1;cursor:pointer;padding:0}
-  nav.stepnav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom));display:flex;gap:10px;z-index:5}
-  nav.stepnav button{flex:1;min-height:50px;font-size:16px;border-radius:10px;border:0;cursor:pointer}
-  #btn-back{background:#fff;border:1.5px solid var(--accent);color:var(--accent)}
-  #btn-next{background:var(--accent);color:#fff;font-weight:600}
+  .thumb button{
+    position:absolute; top:-8px; right:-8px; width:28px; height:28px; border-radius:50%;
+    background:var(--danger); color:#fff; border:0; font-size:16px; line-height:1;
+    cursor:pointer; padding:0; touch-action:manipulation;
+  }
+
+  nav.stepnav{
+    position:fixed; bottom:0; left:0; right:0; z-index:20;
+    background:rgba(255,255,255,.96); backdrop-filter:blur(8px);
+    border-top:1px solid var(--line);
+    padding:10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    display:flex; gap:10px;
+  }
+  nav.stepnav button{
+    flex:1; min-height:52px; font-size:16px; font-weight:600; border-radius:12px;
+    border:0; cursor:pointer; touch-action:manipulation;
+  }
+  #btn-back{background:#fff; border:1.5px solid var(--accent); color:var(--accent)}
+  #btn-next{background:var(--accent); color:#fff}
   #btn-next.submit{background:var(--good)}
-  .store-btn{display:block;width:100%;text-align:left;background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:16px;font-size:16px;margin-bottom:10px;cursor:pointer}
-  .store-btn .done{color:var(--good);font-size:13px;font-weight:600}
-  .store-btn .draft{color:var(--accent);font-size:13px;font-weight:600}
-  .review-item{padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+  #btn-next:disabled,#btn-back:disabled{opacity:.55}
+
+  .store-btn{
+    display:flex; gap:12px; align-items:center; width:100%; text-align:left;
+    background:#fff; border:1.5px solid var(--line); border-radius:14px;
+    padding:14px; font-size:16px; margin-bottom:10px; cursor:pointer;
+    min-height:var(--tap); touch-action:manipulation;
+  }
+  .store-btn:active{border-color:var(--accent); background:var(--accent-soft)}
+  .store-ico{
+    width:48px; height:48px; border-radius:10px; background:var(--accent-soft);
+    display:flex; align-items:center; justify-content:center; font-weight:700; color:var(--accent); flex-shrink:0;
+  }
+  .store-btn .done{color:var(--good); font-size:13px; font-weight:600}
+  .store-btn .draft{color:var(--accent); font-size:13px; font-weight:600}
+  .store-btn .label{font-weight:600}
+  .review-item{padding:12px 0; border-bottom:1px solid var(--line); font-size:14px}
   .review-item .a{font-weight:600}
   .missing{color:var(--danger)}
-  button:focus-visible,.opt:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .welcome{display:flex; gap:12px; align-items:flex-start}
+  .welcome img{width:56px; height:auto}
+  .foot-brand{
+    text-align:center; font-size:11px; color:var(--ink-soft); margin:20px 0 8px;
+    letter-spacing:.04em; text-transform:uppercase;
+  }
+  .guard-toast{
+    position:fixed; left:50%; bottom:calc(var(--nav) + 12px); transform:translateX(-50%);
+    background:var(--accent-deep); color:#fff; padding:10px 16px; border-radius:20px;
+    font-size:13px; z-index:40; opacity:0; pointer-events:none; transition:opacity .2s;
+    max-width:90%; text-align:center;
+  }
+  .guard-toast.show{opacity:1}
+  button:focus-visible,.opt:focus-visible,summary:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+  @media (max-width:380px){
+    .hero img{width:56px; height:56px}
+    .brand-titles h1{font-size:14px}
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="row">
-    <h1 id="hdr-title">Division 701 Store Survey</h1>
+<header class="brandbar">
+  <div class="top">
+    <img class="brand-logo" src="/survey-assets/ro-logo.png" alt="The Retail Odyssey Company" width="120" height="36">
+    <div class="brand-titles">
+      <div class="co">Retail Odyssey</div>
+      <h1 id="hdr-title">Division 701 Store Survey</h1>
+    </div>
     <span id="save-state" role="status" aria-live="polite"></span>
   </div>
   <div class="progress" aria-hidden="true"><i id="prog"></i></div>
 </header>
 <main id="main"></main>
 <nav class="stepnav" id="stepnav" hidden>
-  <button id="btn-back">Back</button>
-  <button id="btn-next">Next</button>
+  <button type="button" id="btn-back">Back</button>
+  <button type="button" id="btn-next">Next</button>
 </nav>
+<div class="guard-toast" id="guard-toast" role="status" aria-live="polite"></div>
 
 <script>
-const API = (location.hostname === 'localhost') ? 'http://localhost:3001' : 'https://eod-api.the-dump-bin.com';
-const authHeaders = () => ({ 'Authorization': 'Bearer ' + (localStorage.getItem('dumpBinSession') || ''), 'Content-Type': 'application/json' });
+(function () {
+'use strict';
+
+const ASSET = '/survey-assets';
+const SECTION_ART = {
+  A: ASSET + '/section-A.jpg',
+  B: ASSET + '/section-B.jpg',
+  C: ASSET + '/section-C.jpg',
+  D: ASSET + '/section-D.jpg',
+  E: ASSET + '/section-E.jpg',
+  F: ASSET + '/section-F.jpg',
+  G: ASSET + '/section-G.jpg',
+  H: ASSET + '/section-H.jpg',
+  I: ASSET + '/section-I.jpg',
+  J: ASSET + '/section-J.jpg',
+  K: ASSET + '/section-K.jpg',
+};
+
+function resolveApiBase() {
+  const h = (location.hostname || '').toLowerCase();
+  if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:3001';
+  if (h === 'eod-api.the-dump-bin.com' || h.endsWith('.up.railway.app')) return '';
+  return 'https://eod-api.the-dump-bin.com';
+}
+const API = resolveApiBase();
+
+const authHeaders = () => ({
+  Authorization: 'Bearer ' + (localStorage.getItem('dumpBinSession') || ''),
+  'Content-Type': 'application/json',
+});
+
 async function api(path, opts = {}) {
   const r = await fetch(API + path, { headers: authHeaders(), ...opts });
-  if (r.status === 401) { location.href = '/signin.html?returnTo=' + encodeURIComponent(location.pathname); throw new Error('auth'); }
+  if (r.status === 401) {
+    location.href = 'https://the-dump-bin.com/signin.html?returnTo=' + encodeURIComponent(location.href);
+    throw new Error('auth');
+  }
   return r.json();
 }
 
-let ME = null, SPEC = null, STORE = null, SECTION = -1; // -1 = store picker, sections.length = review
-let ANSWERS = {}, PHOTOS = [], BASELINE = {}, saveTimer = null, dirty = false;
+let ME = null, SPEC = null, STORE = null, SECTION = -1;
+let ANSWERS = {}, PHOTOS = [], BASELINE = {}, saveTimer = null, dirty = false, saving = false;
+let historyReady = false;
+let lastToast = 0;
 
-const $ = sel => document.querySelector(sel);
+const $ = (sel) => document.querySelector(sel);
 const main = $('#main');
 
+function toast(msg) {
+  const el = $('#guard-toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+// ─── navigation guards ───────────────────────────────────────────────────────
+function pushAppState(replace) {
+  if (!historyReady) return;
+  const state = { app: 'survey', store: STORE, section: SECTION };
+  const url = STORE
+    ? (location.pathname + '?store=' + STORE + (SECTION >= 0 ? '&sec=' + SECTION : ''))
+    : location.pathname;
+  try {
+    if (replace) history.replaceState(state, '', url);
+    else history.pushState(state, '', url);
+  } catch (_) {}
+}
+
+function installGuards() {
+  // Seed a history entry so the first system-back stays in-app
+  try {
+    history.replaceState({ app: 'survey', store: null, section: -1 }, '', location.pathname);
+    history.pushState({ app: 'survey', store: null, section: -1 }, '', location.pathname);
+  } catch (_) {}
+  historyReady = true;
+
+  window.addEventListener('popstate', async (e) => {
+    // Always try to keep work safe first
+    if (dirty || STORE != null) await saveDraft(false, true);
+
+    if (STORE != null && SECTION > 0) {
+      SECTION--;
+      renderSection(true);
+      pushAppState(true);
+      toast('Saved — use Back to leave this store');
+      return;
+    }
+    if (STORE != null && SECTION === 0) {
+      await saveDraft(false, true);
+      await renderPicker(true);
+      pushAppState(true);
+      toast('Progress saved');
+      return;
+    }
+    // On store picker: re-push so another back needs a second gesture; warn once
+    pushAppState(false);
+    const now = Date.now();
+    if (now - lastToast > 1500) {
+      lastToast = now;
+      toast('Stay in the survey — use the buttons below to move around');
+    }
+  });
+
+  window.addEventListener('beforeunload', (e) => {
+    if (dirty || STORE != null) {
+      // Fire-and-forget beacon-style save where possible
+      try { saveDraft(false, true); } catch (_) {}
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && (dirty || STORE != null)) {
+      saveDraft(false, true);
+    }
+  });
+
+  // Soften accidental edge overscroll; cannot fully block iOS edge-swipe without app shell
+  document.addEventListener('touchstart', () => {}, { passive: true });
+}
+
+// ─── survey logic ────────────────────────────────────────────────────────────
 function visibleBranches(q) {
   const v = ANSWERS[q.id];
-  return (q.branches || []).filter(b => {
+  return (q.branches || []).filter((b) => {
     const w = Array.isArray(b.when) ? b.when : [b.when];
     return v != null && w.includes(v);
   });
 }
 function sectionQuestions(sec) {
   const out = [];
-  for (const q of sec.questions) { out.push(q); out.push(...visibleBranches(q)); }
+  for (const q of sec.questions) {
+    out.push(q);
+    out.push(...visibleBranches(q));
+  }
   return out;
 }
 function answeredCount() {
   let total = 0, done = 0;
-  for (const sec of SPEC.sections) for (const q of sectionQuestions(sec)) {
-    if (q.optional) continue;
-    total++;
-    const v = ANSWERS[q.id];
-    if (v != null && v !== '' && !(Array.isArray(v) && !v.length)) done++;
+  for (const sec of SPEC.sections) {
+    for (const q of sectionQuestions(sec)) {
+      if (q.optional) continue;
+      total++;
+      const v = ANSWERS[q.id];
+      if (v != null && v !== '' && !(Array.isArray(v) && !v.length)) done++;
+    }
   }
   return { total, done };
 }
 function setProgress() {
-  if (SECTION < 0 || !SPEC) { $('#prog').style.width = '0'; return; }
+  if (SECTION < 0 || !SPEC) {
+    $('#prog').style.width = '0';
+    return;
+  }
   const pct = SECTION >= SPEC.sections.length ? 100 : Math.round((SECTION / SPEC.sections.length) * 100);
   $('#prog').style.width = pct + '%';
 }
 
-// ---- autosave: after every change, debounced 800ms; flush on nav
 function markDirty() {
   dirty = true;
-  $('#save-state').textContent = 'Saving…'; $('#save-state').className = '';
+  $('#save-state').textContent = 'Saving…';
+  $('#save-state').className = '';
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveDraft, 800);
+  saveTimer = setTimeout(() => saveDraft(false), 800);
 }
-async function saveDraft(submit = false) {
-  if (!STORE) return;
+
+async function saveDraft(submit = false, silent = false) {
+  if (!STORE) return null;
   clearTimeout(saveTimer);
+  if (saving) return null;
+  saving = true;
   try {
     const r = await api(`/api/survey/stores/${STORE}/response`, {
       method: 'PUT',
-      body: JSON.stringify({ answers: ANSWERS, photos: PHOTOS.map(p => ({ id: p.id, questionId: p.question_id })), submit }),
+      body: JSON.stringify({
+        answers: ANSWERS,
+        photos: PHOTOS.map((p) => ({ id: p.id, questionId: p.question_id })),
+        submit,
+      }),
     });
     dirty = false;
-    $('#save-state').textContent = submit ? 'Submitted ✓' : 'Saved ✓';
-    $('#save-state').className = 'saved';
+    if (!silent) {
+      $('#save-state').textContent = submit ? 'Submitted ✓' : 'Saved ✓';
+      $('#save-state').className = 'saved';
+    }
     return r;
   } catch (e) {
-    $('#save-state').textContent = 'Offline — will retry';
-    saveTimer = setTimeout(() => saveDraft(submit), 5000);
+    if (!silent) {
+      $('#save-state').textContent = 'Offline — will retry';
+      $('#save-state').className = 'warn';
+    }
+    saveTimer = setTimeout(() => saveDraft(submit, silent), 5000);
+    return null;
+  } finally {
+    saving = false;
   }
 }
 
-// ---- store picker
-async function renderPicker() {
-  SECTION = -1; STORE = null; setProgress();
+async function renderPicker(fromHistory) {
+  SECTION = -1;
+  STORE = null;
+  setProgress();
   $('#stepnav').hidden = true;
   $('#hdr-title').textContent = 'Division 701 Store Survey';
-  const statuses = await Promise.all(ME.stores.map(async s => {
-    try { const c = await api(`/api/survey/stores/${s}/context`); return [s, c.myResponse]; }
-    catch { return [s, null]; }
-  }));
-  main.innerHTML = `<div class="card"><strong>Hi ${ME.user.name.split(' ')[0]}.</strong>
-    <div class="hint">Pick a store to answer for. Your work saves automatically after every answer — you can leave and come back any time.</div></div>` +
-    statuses.map(([s, resp]) => `<button class="store-btn" data-store="${s}">Store ${s}
-      ${resp ? (resp.status === 'submitted' ? '<div class="done">Submitted — tap to review or update</div>' : '<div class="draft">Draft in progress</div>') : ''}
-    </button>`).join('');
-  main.querySelectorAll('.store-btn').forEach(b => b.onclick = () => openStore(Number(b.dataset.store)));
+  const statuses = await Promise.all(
+    ME.stores.map(async (s) => {
+      try {
+        const c = await api(`/api/survey/stores/${s}/context`);
+        return [s, c.myResponse];
+      } catch {
+        return [s, null];
+      }
+    })
+  );
+  const first = (ME.user.name || '').split(' ')[0] || 'there';
+  main.innerHTML =
+    `<div class="card welcome">
+      <img src="${ASSET}/ro-logo.png" alt="Retail Odyssey" width="56" height="56">
+      <div>
+        <strong>Hi ${first}.</strong>
+        <div class="hint">Pick a store. Answers save after every tap — if the connection drops or you leave, you can pick up where you left off.</div>
+      </div>
+    </div>` +
+    statuses
+      .map(
+        ([s, resp]) => `<button type="button" class="store-btn" data-store="${s}">
+      <span class="store-ico">${String(s).slice(-2)}</span>
+      <span>
+        <div class="label">Store ${s}</div>
+        ${
+          resp
+            ? resp.status === 'submitted'
+              ? '<div class="done">Submitted — tap to review or update</div>'
+              : '<div class="draft">Draft in progress</div>'
+            : '<div class="hint">Not started</div>'
+        }
+      </span>
+    </button>`
+      )
+      .join('') +
+    `<div class="foot-brand">The Retail Odyssey Company · Division 701</div>`;
+  main.querySelectorAll('.store-btn').forEach((b) => {
+    b.onclick = () => openStore(Number(b.dataset.store));
+  });
+  if (!fromHistory) pushAppState(true);
+  window.scrollTo(0, 0);
 }
 
 async function openStore(store) {
+  await saveDraft(false, true);
   STORE = store;
   const ctx = await api(`/api/survey/stores/${store}/context`);
   ANSWERS = ctx.myResponse ? { ...ctx.myResponse.answers } : {};
   const ph = await api(`/api/survey/stores/${store}/photos`);
-  PHOTOS = (ph.photos || []).filter(p => p.respondent === ME.user.email);
+  PHOTOS = (ph.photos || []).filter((p) => p.respondent === ME.user.email);
   BASELINE = {};
-  for (const b of (ctx.baseline || [])) Object.assign(BASELINE, b.answers);
+  for (const b of ctx.baseline || []) Object.assign(BASELINE, b.answers);
   SECTION = 0;
   renderSection();
+  pushAppState(false);
 }
 
-// ---- question renderers (every question gets an optional comment; photos optional)
 function commentBlock(q) {
-  const key = q.id + '_c', val = ANSWERS[key] || '';
+  const key = q.id + '_c';
+  const val = ANSWERS[key] || '';
   return `<details class="comment" ${val ? 'open' : ''}><summary>Add a comment</summary>
-    <textarea data-comment="${q.id}" placeholder="Anything worth noting — exceptions, context, how it really works at this store.">${val}</textarea>
+    <textarea data-comment="${q.id}" rows="3" placeholder="Anything worth noting — exceptions, context, how it really works here.">${esc(val)}</textarea>
   </details>`;
 }
 function photoBlock(q) {
   if (!q.photo) return '';
-  const mine = PHOTOS.filter(p => p.question_id === q.id);
+  const mine = PHOTOS.filter((p) => p.question_id === q.id);
+  const tok = encodeURIComponent(localStorage.getItem('dumpBinSession') || '');
   return `<div class="photo-row" data-photos="${q.id}">
-    ${mine.map(p => `<span class="thumb"><img src="${API}/api/survey/photos/${p.id}?access_token=${encodeURIComponent(localStorage.getItem('dumpBinSession') || '')}" alt="Photo for ${q.id}"><button data-del="${p.id}" aria-label="Remove photo">×</button></span>`).join('')}
-    <button class="photo-add" data-add="${q.id}" aria-label="Add photo">📷</button>
-  </div><div class="hint">Photo of the area and surroundings — optional but helpful.</div>`;
+    ${mine
+      .map(
+        (p) =>
+          `<span class="thumb"><img src="${API}/api/survey/photos/${p.id}?access_token=${tok}" alt="Photo for ${q.id}"><button type="button" data-del="${p.id}" aria-label="Remove photo">×</button></span>`
+      )
+      .join('')}
+    <button type="button" class="photo-add" data-add="${q.id}" aria-label="Add photo">📷</button>
+  </div><div class="hint">Photo optional — camera opens facing the shelf. Compressed before upload for store wifi.</div>`;
 }
 function baselineChip(q) {
   const b = BASELINE[q.id];
   if (b == null || ANSWERS[q.id] != null) return '';
-  return `<div class="hint">2025 answer: <button class="chip" data-chip="${q.id}" data-val="${b}">${b} — tap to use</button></div>`;
+  return `<div class="hint">2025 answer: <button type="button" class="chip" data-chip="${q.id}" data-val="${escAttr(String(b))}">${esc(String(b))} — tap to use</button></div>`;
+}
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+function escAttr(s) {
+  return esc(s).replace(/"/g, '&quot;');
 }
 function questionHtml(q) {
   let body = '';
   if (q.type === 'yesno' || q.type === 'choice') {
     const opts = q.type === 'yesno' ? ['Yes', 'No'] : q.options;
-    body = `<div class="opts" role="group" aria-label="${q.text}">` +
-      opts.map(o => `<button class="opt" data-q="${q.id}" data-val="${o}" aria-pressed="${ANSWERS[q.id] === o}">${o}</button>`).join('') + '</div>';
+    body =
+      `<div class="opts" role="group" aria-label="${escAttr(q.text)}">` +
+      opts
+        .map(
+          (o) =>
+            `<button type="button" class="opt" data-q="${q.id}" data-val="${escAttr(o)}" aria-pressed="${ANSWERS[q.id] === o}">${esc(o)}</button>`
+        )
+        .join('') +
+      '</div>';
   } else if (q.type === 'multiselect') {
     const cur = ANSWERS[q.id] || [];
-    body = `<div class="opts">` + q.options.map(o =>
-      `<button class="opt" data-mq="${q.id}" data-val="${o}" aria-pressed="${cur.includes(o)}">${o}</button>`).join('') + '</div>';
+    body =
+      `<div class="opts">` +
+      q.options
+        .map(
+          (o) =>
+            `<button type="button" class="opt" data-mq="${q.id}" data-val="${escAttr(o)}" aria-pressed="${cur.includes(o)}">${esc(o)}</button>`
+        )
+        .join('') +
+      '</div>';
   } else {
-    body = `<input type="text" data-tq="${q.id}" value="${(ANSWERS[q.id] || '').replace(/"/g, '&quot;')}" placeholder="Type your answer">`;
+    body = `<input type="text" data-tq="${q.id}" value="${escAttr(ANSWERS[q.id] || '')}" placeholder="Type your answer" autocomplete="off" enterkeyhint="done">`;
   }
-  const detail = (q.detailOn && ANSWERS[q.id] === q.detailOn)
-    ? `<div style="margin-top:8px"><input type="text" data-tq="${q.id}_d" value="${(ANSWERS[q.id + '_d'] || '').replace(/"/g, '&quot;')}" placeholder="Please explain"></div>` : '';
+  const detail =
+    q.detailOn && ANSWERS[q.id] === q.detailOn
+      ? `<div style="margin-top:8px"><input type="text" data-tq="${q.id}_d" value="${escAttr(ANSWERS[q.id + '_d'] || '')}" placeholder="Please explain" autocomplete="off"></div>`
+      : '';
   return `<div class="card" data-qcard="${q.id}">
-    <div class="qtext">${q.id.replace(/^Q/, '')}. ${q.text}${q.optional ? ' <span class="hint">(optional)</span>' : ''}</div>
+    <div class="qtext">${q.id.replace(/^Q/, '')}. ${esc(q.text)}${q.optional ? ' <span class="hint">(optional)</span>' : ''}</div>
     ${body}${detail}${baselineChip(q)}${photoBlock(q)}${commentBlock(q)}
   </div>`;
 }
 
-function renderSection() {
+function sectionHero(sec) {
+  const art = SECTION_ART[sec.id] || ASSET + '/ro-logo.png';
+  const n = SPEC.sections.length;
+  const idx = SPEC.sections.findIndex((s) => s.id === sec.id) + 1;
+  return `<div class="hero">
+    <img src="${art}" alt="" width="72" height="72" loading="eager">
+    <div class="meta">
+      <div class="eyebrow">Section ${sec.id} · ${idx} of ${n}</div>
+      <h2>${esc(sec.title)}</h2>
+      <div class="sub">Store ${STORE} · answers save as you go</div>
+    </div>
+  </div>`;
+}
+
+function renderSection(fromHistory) {
   setProgress();
   $('#stepnav').hidden = false;
-  if (SECTION >= SPEC.sections.length) return renderReview();
+  if (SECTION >= SPEC.sections.length) return renderReview(fromHistory);
   const sec = SPEC.sections[SECTION];
-  $('#hdr-title').textContent = `Store ${STORE} — ${sec.title}`;
-  main.innerHTML = `<div class="sec-title">Section ${sec.id} of ${SPEC.sections[SPEC.sections.length - 1].id} · ${sec.title}</div>` +
-    sectionQuestions(sec).map(questionHtml).join('');
+  $('#hdr-title').textContent = `Store ${STORE} · ${sec.title}`;
+  main.innerHTML = sectionHero(sec) + sectionQuestions(sec).map(questionHtml).join('');
   $('#btn-back').textContent = SECTION === 0 ? 'All stores' : 'Back';
   $('#btn-next').textContent = SECTION === SPEC.sections.length - 1 ? 'Review' : 'Next';
   $('#btn-next').className = '';
   wire();
-  window.scrollTo(0, 0);
+  if (!fromHistory) pushAppState(true);
+  window.scrollTo({ top: 0, behavior: 'instant' in document.documentElement.style ? 'instant' : 'auto' });
 }
 
 function wire() {
-  main.querySelectorAll('.opt[data-q]').forEach(b => b.onclick = () => {
-    ANSWERS[b.dataset.q] = b.dataset.val;
-    markDirty(); renderSection(); // re-render for branches/detail
+  main.querySelectorAll('.opt[data-q]').forEach((b) => {
+    b.onclick = () => {
+      ANSWERS[b.dataset.q] = b.dataset.val;
+      markDirty();
+      renderSection(true);
+    };
   });
-  main.querySelectorAll('.opt[data-mq]').forEach(b => b.onclick = () => {
-    const id = b.dataset.mq, val = b.dataset.val;
-    let cur = ANSWERS[id] || [];
-    if (val === 'None') cur = cur.includes('None') ? [] : ['None'];
-    else { cur = cur.filter(x => x !== 'None'); cur = cur.includes(val) ? cur.filter(x => x !== val) : [...cur, val]; }
-    ANSWERS[id] = cur; markDirty(); renderSection();
+  main.querySelectorAll('.opt[data-mq]').forEach((b) => {
+    b.onclick = () => {
+      const id = b.dataset.mq;
+      const val = b.dataset.val;
+      let cur = ANSWERS[id] || [];
+      if (val === 'None') cur = cur.includes('None') ? [] : ['None'];
+      else {
+        cur = cur.filter((x) => x !== 'None');
+        cur = cur.includes(val) ? cur.filter((x) => x !== val) : [...cur, val];
+      }
+      ANSWERS[id] = cur;
+      markDirty();
+      renderSection(true);
+    };
   });
-  main.querySelectorAll('input[data-tq]').forEach(i => i.oninput = () => { ANSWERS[i.dataset.tq] = i.value; markDirty(); });
-  main.querySelectorAll('textarea[data-comment]').forEach(t => t.oninput = () => { ANSWERS[t.dataset.comment + '_c'] = t.value; markDirty(); });
-  main.querySelectorAll('.chip[data-chip]').forEach(c => c.onclick = () => { ANSWERS[c.dataset.chip] = c.dataset.val; markDirty(); renderSection(); });
-  main.querySelectorAll('[data-add]').forEach(b => b.onclick = () => addPhoto(b.dataset.add));
-  main.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
-    await api('/api/survey/photos/' + b.dataset.del, { method: 'DELETE' });
-    PHOTOS = PHOTOS.filter(p => p.id !== Number(b.dataset.del));
-    markDirty(); renderSection();
+  main.querySelectorAll('input[data-tq]').forEach((i) => {
+    i.oninput = () => {
+      ANSWERS[i.dataset.tq] = i.value;
+      markDirty();
+    };
+  });
+  main.querySelectorAll('textarea[data-comment]').forEach((t) => {
+    t.oninput = () => {
+      ANSWERS[t.dataset.comment + '_c'] = t.value;
+      markDirty();
+    };
+  });
+  main.querySelectorAll('.chip[data-chip]').forEach((c) => {
+    c.onclick = () => {
+      ANSWERS[c.dataset.chip] = c.dataset.val;
+      markDirty();
+      renderSection(true);
+    };
+  });
+  main.querySelectorAll('[data-add]').forEach((b) => {
+    b.onclick = () => addPhoto(b.dataset.add);
+  });
+  main.querySelectorAll('[data-del]').forEach((b) => {
+    b.onclick = async () => {
+      await api('/api/survey/photos/' + b.dataset.del, { method: 'DELETE' });
+      PHOTOS = PHOTOS.filter((p) => p.id !== Number(b.dataset.del));
+      markDirty();
+      renderSection(true);
+    };
   });
 }
 
-// ---- photo capture + client-side compression (~1280px jpeg)
 function addPhoto(questionId) {
   const input = document.createElement('input');
-  input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.capture = 'environment';
   input.onchange = async () => {
-    const file = input.files[0]; if (!file) return;
+    const file = input.files[0];
+    if (!file) return;
     $('#save-state').textContent = 'Uploading photo…';
-    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
-    const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
-    const cv = document.createElement('canvas');
-    cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
-    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-    const dataUrl = cv.toDataURL('image/jpeg', 0.72);
-    const b64 = dataUrl.split(',')[1];
-    const r = await api(`/api/survey/stores/${STORE}/photos`, {
-      method: 'POST', body: JSON.stringify({ questionId, mime: 'image/jpeg', data: b64 }),
-    });
-    if (r.ok) { PHOTOS.push({ ...r.photo, respondent: ME.user.email }); markDirty(); renderSection(); }
-    else { $('#save-state').textContent = r.error || 'Photo failed'; }
+    $('#save-state').className = '';
+    try {
+      const img = await new Promise((res, rej) => {
+        const i = new Image();
+        i.onload = () => res(i);
+        i.onerror = rej;
+        i.src = URL.createObjectURL(file);
+      });
+      const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * scale);
+      cv.height = Math.round(img.height * scale);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      const dataUrl = cv.toDataURL('image/jpeg', 0.72);
+      const b64 = dataUrl.split(',')[1];
+      const r = await api(`/api/survey/stores/${STORE}/photos`, {
+        method: 'POST',
+        body: JSON.stringify({ questionId, mime: 'image/jpeg', data: b64 }),
+      });
+      if (r.ok) {
+        PHOTOS.push({ ...r.photo, respondent: ME.user.email });
+        markDirty();
+        renderSection(true);
+      } else {
+        $('#save-state').textContent = r.error || 'Photo failed';
+        $('#save-state').className = 'warn';
+      }
+    } catch (e) {
+      $('#save-state').textContent = 'Photo failed';
+      $('#save-state').className = 'warn';
+    }
   };
   input.click();
 }
 
-// ---- review + submit
-function renderReview() {
-  $('#hdr-title').textContent = `Store ${STORE} — Review`;
+function renderReview(fromHistory) {
+  $('#hdr-title').textContent = `Store ${STORE} · Review`;
   const { total, done } = answeredCount();
   let items = '';
-  for (const sec of SPEC.sections) for (const q of sectionQuestions(sec)) {
-    const v = ANSWERS[q.id];
-    const disp = v == null || v === '' || (Array.isArray(v) && !v.length)
-      ? (q.optional ? '<span class="hint">skipped</span>' : '<span class="missing">not answered</span>')
-      : `<span class="a">${Array.isArray(v) ? v.join(', ') : v}</span>`;
-    const c = ANSWERS[q.id + '_c'] ? `<div class="hint">💬 ${ANSWERS[q.id + '_c']}</div>` : '';
-    items += `<div class="review-item">${q.id.replace(/^Q/, '')}. ${q.text}<br>${disp}${c}</div>`;
+  for (const sec of SPEC.sections) {
+    for (const q of sectionQuestions(sec)) {
+      const v = ANSWERS[q.id];
+      const disp =
+        v == null || v === '' || (Array.isArray(v) && !v.length)
+          ? q.optional
+            ? '<span class="hint">skipped</span>'
+            : '<span class="missing">not answered</span>'
+          : `<span class="a">${esc(Array.isArray(v) ? v.join(', ') : String(v))}</span>`;
+      const c = ANSWERS[q.id + '_c'] ? `<div class="hint">💬 ${esc(ANSWERS[q.id + '_c'])}</div>` : '';
+      items += `<div class="review-item">${q.id.replace(/^Q/, '')}. ${esc(q.text)}<br>${disp}${c}</div>`;
+    }
   }
-  main.innerHTML = `<div class="card"><strong>${done} of ${total} questions answered.</strong>
-    <div class="hint">${done < total ? 'You can submit anyway — unanswered items stay blank — or go back and finish.' : 'Everything answered. Submit when ready.'}</div></div>
-    <div class="card">${items}</div>`;
+  main.innerHTML = `<div class="hero">
+      <img src="${ASSET}/ro-logo.png" alt="Retail Odyssey" width="72" height="72">
+      <div class="meta">
+        <div class="eyebrow">Review · Store ${STORE}</div>
+        <h2>${done} of ${total} answered</h2>
+        <div class="sub">${done < total ? 'You can submit with blanks, or go back and finish.' : 'Looks complete — submit when ready.'}</div>
+      </div>
+    </div>
+    <div class="card">${items}</div>
+    <div class="foot-brand">The Retail Odyssey Company</div>`;
   $('#btn-back').textContent = 'Back';
   $('#btn-next').textContent = 'Submit for this store';
   $('#btn-next').className = 'submit';
+  if (!fromHistory) pushAppState(true);
   window.scrollTo(0, 0);
 }
 
 $('#btn-back').onclick = async () => {
-  await saveDraft();
-  if (SECTION <= 0) return renderPicker();
-  SECTION--; renderSection();
-};
-$('#btn-next').onclick = async () => {
-  if (SECTION >= SPEC.sections.length) {
-    const r = await saveDraft(true);
-    if (r && r.ok) {
-      main.innerHTML = `<div class="card"><strong>Store ${STORE} submitted. ✓</strong>
-        <div class="hint">You can reopen it any time to update answers — updates replace your submission for this store.</div></div>`;
-      $('#stepnav').hidden = true;
-      setTimeout(renderPicker, 1400);
+  $('#btn-back').disabled = true;
+  try {
+    await saveDraft();
+    if (SECTION <= 0) {
+      await renderPicker();
+      return;
     }
-    return;
+    SECTION--;
+    renderSection();
+  } finally {
+    $('#btn-back').disabled = false;
   }
-  await saveDraft();
-  SECTION++; renderSection();
 };
-window.addEventListener('beforeunload', e => { if (dirty) { saveDraft(); } });
+
+$('#btn-next').onclick = async () => {
+  $('#btn-next').disabled = true;
+  try {
+    if (SECTION >= SPEC.sections.length) {
+      const r = await saveDraft(true);
+      if (r && r.ok) {
+        main.innerHTML = `<div class="card welcome">
+          <img src="${ASSET}/ro-logo.png" alt="" width="56">
+          <div>
+            <strong>Store ${STORE} submitted. ✓</strong>
+            <div class="hint">You can reopen it any time to update — updates replace your answers for this store.</div>
+          </div>
+        </div>`;
+        $('#stepnav').hidden = true;
+        dirty = false;
+        setTimeout(() => renderPicker(), 1400);
+      }
+      return;
+    }
+    await saveDraft();
+    SECTION++;
+    renderSection();
+  } finally {
+    $('#btn-next').disabled = false;
+  }
+};
 
 (async function init() {
+  installGuards();
   try {
     const [me, q] = await Promise.all([api('/api/survey/me'), api('/api/survey/questions')]);
-    if (!me.ok) { main.innerHTML = `<div class="card">${me.error || 'You are not on the survey roster. Contact me if that seems wrong.'}</div>`; return; }
-    ME = me; SPEC = q.questionSet.spec;
-    renderPicker();
-  } catch (e) { console.error(e); }
+    if (!me.ok) {
+      main.innerHTML = `<div class="card">${esc(me.error || 'You are not on the survey roster.')}</div>`;
+      return;
+    }
+    ME = me;
+    SPEC = q.questionSet.spec;
+    // Optional deep link ?store=
+    const sp = new URLSearchParams(location.search);
+    const deepStore = Number(sp.get('store'));
+    if (deepStore && ME.stores.includes(deepStore)) {
+      await openStore(deepStore);
+      const sec = Number(sp.get('sec'));
+      if (Number.isFinite(sec) && sec >= 0 && sec < SPEC.sections.length) {
+        SECTION = sec;
+        renderSection(true);
+      }
+    } else {
+      await renderPicker();
+    }
+  } catch (e) {
+    console.error(e);
+    main.innerHTML = `<div class="card">Could not load the survey. Check your connection and try again.</div>`;
+  }
+})();
 })();
 </script>
 </body>

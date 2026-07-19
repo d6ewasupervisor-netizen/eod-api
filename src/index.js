@@ -437,6 +437,8 @@ async function start() {
     '/survey-admin.html',
     '/health',
   ];
+  // Brand art + logo for survey / survey-admin (public static)
+  // Handled via PUBLIC_PREFIXES below (/survey-assets/).
   const PUBLIC_PREFIXES = [
     '/api/shift-request/',
     '/extension/download/',
@@ -455,6 +457,7 @@ async function start() {
     '/fm391-p05w3/assets/',
     '/api/fm391-p05w3/',
     '/dc-scan/assets/',
+    '/survey-assets/',
   ];
   const PUBLIC_REGEXES = [
     /^\/api\/signoff-photos\/[^\/]+\/image\/?$/,
@@ -515,6 +518,10 @@ async function start() {
   app.get('/auth-gate.js', (_req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'auth-gate.js'));
   });
+  app.use('/survey-assets', express.static(path.join(__dirname, 'public', 'survey-assets'), {
+    maxAge: '7d',
+    fallthrough: false,
+  }));
   app.get(['/survey', '/survey/', '/survey.html'], (_req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'survey.html'));
   });

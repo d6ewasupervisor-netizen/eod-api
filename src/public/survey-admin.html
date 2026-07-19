@@ -2,44 +2,58 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Survey Admin — Division 701</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0f5c8c">
+<title>Survey Admin — Division 701 · Retail Odyssey</title>
+<link rel="icon" href="/survey-assets/ro-logo.png">
 <script src="/auth-gate.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
-    --ink:#1c2733; --ink-soft:#5a6b7d; --line:#d8dfe6; --paper:#f6f8fa; --card:#ffffff;
-    --accent:#0f5c8c; --good:#2e7d52; --bad:#b3402a; --warn:#c98a1b; --focus:#0f5c8c;
+    --ink:#1c2733; --ink-soft:#5a6b7d; --line:#d8dfe6; --paper:#eef2f6; --card:#ffffff;
+    --accent:#0f5c8c; --accent-deep:#0a4063; --good:#2e7d52; --bad:#b3402a; --warn:#c98a1b; --focus:#0f5c8c;
   }
-  *{box-sizing:border-box}
-  body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;background:var(--paper);color:var(--ink);font-size:14px}
-  header{background:var(--card);border-bottom:2px solid var(--accent);padding:14px 22px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-  header h1{font-size:18px;margin:0;letter-spacing:.2px}
-  header .who{color:var(--ink-soft);margin-left:auto;font-size:13px}
-  main{max-width:1280px;margin:0 auto;padding:18px 22px 60px}
-  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
-  .card .big{font-size:26px;font-weight:600}
-  .card .lbl{color:var(--ink-soft);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
-  h2{font-size:15px;margin:22px 0 10px;color:var(--ink)}
-  .trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
-  .trend-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px}
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html{overscroll-behavior:none}
+  body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;background:var(--paper);color:var(--ink);font-size:15px;overscroll-behavior-y:none}
+  header.brand{
+    position:sticky;top:0;z-index:10;background:linear-gradient(180deg,#fff,#f7fafc);
+    border-bottom:2px solid var(--accent);
+    padding:10px 14px calc(10px);
+    padding-top:max(10px, env(safe-area-inset-top, 0px));
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  header.brand .logo{height:36px;width:auto}
+  header.brand .titles{flex:1;min-width:140px}
+  header.brand .co{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.brand h1{font-size:16px;margin:0;letter-spacing:.2px}
+  header.brand .who{color:var(--ink-soft);font-size:12px;word-break:break-all}
+  main{max-width:1280px;margin:0 auto;padding:14px 12px calc(40px + env(safe-area-inset-bottom,0px))}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 14px;box-shadow:0 1px 2px rgba(15,92,140,.05)}
+  .card .big{font-size:24px;font-weight:600}
+  .card .lbl{color:var(--ink-soft);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  h2{font-size:15px;margin:20px 0 10px;color:var(--ink);display:flex;align-items:center;gap:8px}
+  h2 .sec-ico{width:28px;height:28px;border-radius:8px;object-fit:cover}
+  .trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:12px}
+  .trend-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
   .trend-card .qtext{font-size:13px;min-height:36px;margin-bottom:8px}
   .rate{font-weight:700}
   .rate.bad{color:var(--bad)} .rate.warn{color:var(--warn)} .rate.good{color:var(--good)}
   .delta{font-size:12px;color:var(--ink-soft)}
-  .filters{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:14px}
+  .filters{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr));gap:10px;margin-bottom:12px}
   .filters label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:4px}
-  .filters select,.filters input{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;font-size:13px}
-  .filters select[multiple]{height:96px}
+  .filters select,.filters input{width:100%;padding:10px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:16px}
+  .filters select[multiple]{height:110px;font-size:14px}
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 14px}
-  button{background:var(--accent);color:#fff;border:0;border-radius:6px;padding:8px 14px;font-size:13px;cursor:pointer}
-  button.secondary{background:#fff;color:var(--accent);border:1px solid var(--accent)}
+  button{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:600;cursor:pointer;min-height:44px;touch-action:manipulation}
+  button.secondary{background:#fff;color:var(--accent);border:1.5px solid var(--accent)}
   button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
-  .viewbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .viewbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%}
+  .viewbar input,.viewbar select{min-height:44px;font-size:16px;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
   table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:13px}
-  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
   th{background:#eef2f6;cursor:pointer;user-select:none;white-space:nowrap;position:sticky;top:0}
   th .dir{color:var(--accent)}
   tr:hover td{background:#f2f6fa}
@@ -47,15 +61,25 @@
   .heat{display:inline-block;width:56px;height:10px;border-radius:5px;background:linear-gradient(90deg,var(--good),var(--warn),var(--bad));position:relative;vertical-align:middle;margin-right:6px}
   .heat i{position:absolute;top:-3px;width:2px;height:16px;background:var(--ink)}
   .muted{color:var(--ink-soft)}
-  .tablewrap{max-height:560px;overflow:auto;border-radius:8px}
+  .tablewrap{max-height:min(70vh,560px);overflow:auto;border-radius:12px;-webkit-overflow-scrolling:touch}
   #status{font-size:13px;color:var(--ink-soft);margin-left:auto}
+  .foot-brand{text-align:center;font-size:11px;color:var(--ink-soft);margin:24px 0 8px;letter-spacing:.04em;text-transform:uppercase}
+  @media (max-width:640px){
+    .toolbar button{flex:1 1 calc(50% - 8px)}
+    .viewbar{flex-direction:column;align-items:stretch}
+    .viewbar input,.viewbar select{width:100%}
+    #status{margin-left:0;width:100%}
+  }
   @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} }
 </style>
 </head>
 <body>
-<header>
-  <h1>Division 701 — Survey Admin</h1>
-  <span class="muted">In-store best practices, v2</span>
+<header class="brand">
+  <img class="logo" src="/survey-assets/ro-logo.png" alt="The Retail Odyssey Company" width="120" height="36">
+  <div class="titles">
+    <div class="co">Retail Odyssey · Division 701</div>
+    <h1>Survey Admin</h1>
+  </div>
   <span class="who" id="who"></span>
 </header>
 <main>
@@ -66,10 +90,10 @@
     <div class="card"><div class="big" id="c-base">21</div><div class="lbl">2025 baseline stores</div></div>
   </div>
 
-  <h2>Top trending problem questions</h2>
+  <h2><img class="sec-ico" src="/survey-assets/section-J.jpg" alt="" width="28" height="28"> Top trending problem questions</h2>
   <div class="trend-grid" id="trending"></div>
 
-  <h2>Explore responses</h2>
+  <h2><img class="sec-ico" src="/survey-assets/section-E.jpg" alt="" width="28" height="28"> Explore responses</h2>
   <div class="filters">
     <div><label for="f-district">Districts</label><select id="f-district" multiple></select></div>
     <div><label for="f-store">Stores</label><select id="f-store" multiple></select></div>
@@ -107,17 +131,29 @@
   </div>
 
   <div class="tablewrap"><table id="grid"><thead></thead><tbody></tbody></table></div>
+  <div class="foot-brand">The Retail Odyssey Company · In-store best practices v2</div>
 </main>
 
 <script>
-const API = (location.hostname === 'localhost') ? 'http://localhost:3001' : 'https://eod-api.the-dump-bin.com';
+const API = (function () {
+  const h = (location.hostname || '').toLowerCase();
+  if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:3001';
+  if (h === 'eod-api.the-dump-bin.com' || h.endsWith('.up.railway.app')) return '';
+  return 'https://eod-api.the-dump-bin.com';
+})();
 const authHeaders = () => ({ 'Authorization': 'Bearer ' + (localStorage.getItem('dumpBinSession') || ''), 'Content-Type': 'application/json' });
 let SPEC = null, QLIST = [], DATA = [], SORT = { col: 'store_num', dir: 1 };
 
 async function api(path, opts = {}) {
   const r = await fetch(API + path, { headers: authHeaders(), ...opts });
-  if (r.status === 401) { location.href = '/signin.html?returnTo=' + encodeURIComponent(location.pathname); throw new Error('auth'); }
-  if (r.status === 403) { document.body.innerHTML = '<main style="padding:40px;font-family:sans-serif">This page requires admin access. Ask me if you believe you should have it.</main>'; throw new Error('forbidden'); }
+  if (r.status === 401) {
+    location.href = 'https://the-dump-bin.com/signin.html?returnTo=' + encodeURIComponent(location.href);
+    throw new Error('auth');
+  }
+  if (r.status === 403) {
+    document.body.innerHTML = '<main style="padding:40px;font-family:sans-serif"><img src="/survey-assets/ro-logo.png" alt="" style="height:40px"><p>This page requires admin access. Ask Tyson if you believe you should have it.</p></main>';
+    throw new Error('forbidden');
+  }
   return r.json();
 }
 
