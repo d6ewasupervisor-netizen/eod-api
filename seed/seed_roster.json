@@ -568,9 +568,9 @@
    "phone": "2533476717",
    "title": "Traveling Merchandiser Team Lead",
    "role": "lead",
-   "team": "Traveling Team Seattle 2",
+   "team": "Kompass 8C",
    "supervisor_email": "kgingrasso@retailodyssey.com",
-   "district": "Traveling"
+   "district": "8"
   },
   {
    "workday_id": "800243740",
@@ -634,9 +634,9 @@
    "phone": "4252737470",
    "title": "Traveling Merchandiser US",
    "role": "member",
-   "team": "Traveling Team Seattle 2",
+   "team": "Kompass 8C",
    "supervisor_email": "kgingrasso@retailodyssey.com",
-   "district": "Traveling"
+   "district": "8"
   },
   {
    "workday_id": "800503615",
@@ -1481,9 +1481,9 @@
    "phone": "2065399212",
    "title": "Traveling Merchandiser US",
    "role": "member",
-   "team": "Traveling Team Seattle 2",
+   "team": "Kompass 8C",
    "supervisor_email": "kgingrasso@retailodyssey.com",
-   "district": "Traveling"
+   "district": "8"
   },
   {
    "workday_id": "800393756",
@@ -1613,9 +1613,9 @@
    "phone": "4252686235",
    "title": "Traveling Merchandiser US",
    "role": "member",
-   "team": "Traveling Team Seattle 2",
+   "team": "Kompass 8C",
    "supervisor_email": "kgingrasso@retailodyssey.com",
-   "district": "Traveling"
+   "district": "8"
   },
   {
    "workday_id": "800681191",
@@ -1668,9 +1668,9 @@
    "phone": "2068397564",
    "title": "Traveling Merchandiser US",
    "role": "member",
-   "team": "Traveling Team Seattle 2",
+   "team": "Kompass 8C",
    "supervisor_email": "kgingrasso@retailodyssey.com",
-   "district": "Traveling"
+   "district": "8"
   },
   {
    "workday_id": "800355379",
@@ -1822,9 +1822,9 @@
    "phone": "2068514021",
    "title": "Traveling Merchandiser US",
    "role": "member",
-   "team": "Traveling Team Seattle 2",
+   "team": "Kompass 8C",
    "supervisor_email": "kgingrasso@retailodyssey.com",
-   "district": "Traveling"
+   "district": "8"
   },
   {
    "workday_id": "800637310",
@@ -2988,9 +2988,9 @@
    "phone": "2533262907",
    "title": "Merchandiser Retail Team Lead",
    "role": "member",
-   "team": "Traveling Team Seattle 2",
+   "team": "Kompass 8C",
    "supervisor_email": "tyson.gauthier@retailodyssey.com",
-   "district": "Traveling"
+   "district": "8"
   },
   {
    "workday_id": "800658320",
@@ -5321,47 +5321,80 @@
   ]
  },
  "store_supervisors": {
-  "281": [
-   "raechel.roberts@retailodyssey.com"
+  "5": [
+   "ky.stanley@retailodyssey.com"
   ],
-  "30": [
-   "raechel.roberts@retailodyssey.com"
+  "11": [
+   "seth.newman@retailodyssey.com",
+   "shelly.peck@retailodyssey.com"
   ],
-  "165": [
-   "raechel.roberts@retailodyssey.com"
+  "13": [
+   "melissa.langland@retailodyssey.com"
   ],
-  "126": [
-   "raechel.roberts@retailodyssey.com"
+  "17": [
+   "seth.newman@retailodyssey.com",
+   "shelly.peck@retailodyssey.com"
   ],
-  "195": [
-   "raechel.roberts@retailodyssey.com"
+  "18": [
+   "seth.newman@retailodyssey.com",
+   "shelly.peck@retailodyssey.com"
   ],
-  "196": [
-   "raechel.roberts@retailodyssey.com"
-  ],
-  "650": [
-   "raechel.roberts@retailodyssey.com"
+  "19": [
+   "tyson.gauthier@retailodyssey.com"
   ],
   "21": [
    "raechel.roberts@retailodyssey.com"
   ],
-  "464": [
+  "23": [
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "24": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "25": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "28": [
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "30": [
    "raechel.roberts@retailodyssey.com"
   ],
-  "485": [
-   "seth.newman@retailodyssey.com",
-   "shelly.peck@retailodyssey.com"
+  "31": [
+   "tyson.gauthier@retailodyssey.com"
   ],
-  "158": [
-   "seth.newman@retailodyssey.com",
-   "shelly.peck@retailodyssey.com"
+  "35": [
+   "james.carr@retailodyssey.com"
+  ],
+  "40": [
+   "james.carr@retailodyssey.com"
+  ],
+  "41": [
+   "kim.lawler@retailodyssey.com"
+  ],
+  "49": [
+   "april.gauthier@retailodyssey.com"
   ],
   "50": [
    "raechel.roberts@retailodyssey.com"
   ],
-  "662": [
-   "jgruidl@retailodyssey.com",
+  "53": [
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "60": [
+   "james.carr@retailodyssey.com",
    "seth.newman@retailodyssey.com"
+  ],
+  "63": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "70": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "71": [
+   "seth.newman@retailodyssey.com",
+   "shelly.peck@retailodyssey.com"
   ],
   "75": [
    "amy.preston@retailodyssey.com",
@@ -5369,10 +5402,27 @@
    "michelle.lerat@retailodyssey.com",
    "seth.newman@retailodyssey.com"
   ],
-  "600": [
+  "90": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "93": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "111": [
+   "kim.lawler@retailodyssey.com"
+  ],
+  "122": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "125": [
    "amy.preston@retailodyssey.com",
-   "dustin.hooker@retailodyssey.com",
-   "michelle.lerat@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "126": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "127": [
+   "amy.preston@retailodyssey.com",
    "seth.newman@retailodyssey.com"
   ],
   "135": [
@@ -5381,129 +5431,222 @@
    "michelle.lerat@retailodyssey.com",
    "seth.newman@retailodyssey.com"
   ],
-  "663": [
-   "amy.preston@retailodyssey.com",
-   "dustin.hooker@retailodyssey.com",
+  "140": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "143": [
+   "james.carr@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "150": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "153": [
+   "james.carr@retailodyssey.com",
    "michelle.lerat@retailodyssey.com"
   ],
-  "439": [
+  "156": [
+   "jgruidl@retailodyssey.com"
+  ],
+  "158": [
+   "seth.newman@retailodyssey.com",
+   "shelly.peck@retailodyssey.com"
+  ],
+  "163": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "165": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "171": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
+  ],
+  "180": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "185": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "186": [
+   "kim.lawler@retailodyssey.com"
+  ],
+  "195": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "196": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "198": [
    "jgruidl@retailodyssey.com",
    "seth.newman@retailodyssey.com"
+  ],
+  "208": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "209": [
+   "kgingrasso@retailodyssey.com",
+   "melissa.langland@retailodyssey.com"
+  ],
+  "210": [
+   "kgingrasso@retailodyssey.com",
+   "melissa.langland@retailodyssey.com"
+  ],
+  "214": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "215": [
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "218": [
+   "james.carr@retailodyssey.com"
+  ],
+  "220": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "224": [
+   "seth.newman@retailodyssey.com"
+  ],
+  "225": [
+   "ky.stanley@retailodyssey.com"
   ],
   "226": [
    "jgruidl@retailodyssey.com",
    "seth.newman@retailodyssey.com"
   ],
-  "255": [
-   "amy.preston@retailodyssey.com"
-  ],
-  "208": [
-   "amy.preston@retailodyssey.com"
-  ],
-  "660": [
-   "amy.preston@retailodyssey.com",
-   "seth.newman@retailodyssey.com"
-  ],
-  "614": [
-   "amy.preston@retailodyssey.com"
-  ],
-  "150": [
-   "amy.preston@retailodyssey.com"
+  "227": [
+   "ky.stanley@retailodyssey.com"
   ],
   "236": [
    "amy.preston@retailodyssey.com"
   ],
-  "125": [
-   "amy.preston@retailodyssey.com",
-   "seth.newman@retailodyssey.com"
+  "240": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "242": [
+   "james.carr@retailodyssey.com"
+  ],
+  "255": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "260": [
+   "jgruidl@retailodyssey.com"
+  ],
+  "265": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
+  ],
+  "281": [
+   "raechel.roberts@retailodyssey.com"
+  ],
+  "285": [
+   "james.carr@retailodyssey.com"
+  ],
+  "286": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "325": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "328": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "351": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "355": [
+   "ky.stanley@retailodyssey.com"
+  ],
+  "360": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "372": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "375": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
   ],
   "377": [
    "bethany.skriiko@retailodyssey.com",
    "james.carr@retailodyssey.com",
    "seth.newman@retailodyssey.com"
   ],
-  "156": [
+  "383": [
    "jgruidl@retailodyssey.com"
   ],
-  "19": [
+  "390": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
+  ],
+  "391": [
+   "kgingrasso@retailodyssey.com",
    "tyson.gauthier@retailodyssey.com"
   ],
-  "90": [
+  "393": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "417": [
    "ky.stanley@retailodyssey.com"
-  ],
-  "185": [
-   "amy.preston@retailodyssey.com"
-  ],
-  "260": [
-   "jgruidl@retailodyssey.com"
-  ],
-  "171": [
-   "kgingrasso@retailodyssey.com",
-   "kim.lawler@retailodyssey.com"
-  ],
-  "604": [
-   "kgingrasso@retailodyssey.com",
-   "kim.lawler@retailodyssey.com"
-  ],
-  "615": [
-   "kgingrasso@retailodyssey.com",
-   "kim.lawler@retailodyssey.com"
-  ],
-  "186": [
-   "kim.lawler@retailodyssey.com"
   ],
   "424": [
    "kgingrasso@retailodyssey.com",
    "kim.lawler@retailodyssey.com"
   ],
-  "613": [
+  "439": [
    "jgruidl@retailodyssey.com",
    "seth.newman@retailodyssey.com"
   ],
-  "383": [
-   "jgruidl@retailodyssey.com"
+  "449": [
+   "jgruidl@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
   ],
-  "31": [
-   "tyson.gauthier@retailodyssey.com"
+  "457": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "458": [
+   "kgingrasso@retailodyssey.com",
+   "melissa.langland@retailodyssey.com"
   ],
   "459": [
    "tyson.gauthier@retailodyssey.com"
   ],
-  "23": [
-   "tyson.gauthier@retailodyssey.com"
+  "460": [
+   "amy.preston@retailodyssey.com"
   ],
-  "163": [
-   "april.gauthier@retailodyssey.com"
+  "462": [
+   "james.carr@retailodyssey.com"
   ],
-  "286": [
-   "april.gauthier@retailodyssey.com"
+  "464": [
+   "raechel.roberts@retailodyssey.com"
   ],
-  "654": [
-   "april.gauthier@retailodyssey.com"
+  "482": [
+   "james.carr@retailodyssey.com"
   ],
-  "691": [
-   "kgingrasso@retailodyssey.com",
-   "kim.lawler@retailodyssey.com"
-  ],
-  "649": [
-   "seth.newman@retailodyssey.com"
-  ],
-  "653": [
-   "seth.newman@retailodyssey.com"
-  ],
-  "17": [
+  "485": [
    "seth.newman@retailodyssey.com",
    "shelly.peck@retailodyssey.com"
   ],
-  "655": [
-   "kgingrasso@retailodyssey.com",
+  "486": [
+   "april.gauthier@retailodyssey.com"
+  ],
+  "516": [
+   "james.carr@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "600": [
+   "amy.preston@retailodyssey.com",
+   "dustin.hooker@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "603": [
    "kim.lawler@retailodyssey.com"
   ],
-  "265": [
-   "kgingrasso@retailodyssey.com",
-   "kim.lawler@retailodyssey.com"
-  ],
-  "390": [
+  "604": [
    "kgingrasso@retailodyssey.com",
    "kim.lawler@retailodyssey.com"
   ],
@@ -5511,183 +5654,41 @@
    "kgingrasso@retailodyssey.com",
    "kim.lawler@retailodyssey.com"
   ],
-  "111": [
-   "kim.lawler@retailodyssey.com"
-  ],
-  "41": [
-   "kim.lawler@retailodyssey.com"
-  ],
-  "603": [
-   "kim.lawler@retailodyssey.com"
-  ],
-  "209": [
-   "kgingrasso@retailodyssey.com",
-   "melissa.langland@retailodyssey.com"
-  ],
-  "665": [
-   "kim.lawler@retailodyssey.com"
-  ],
-  "458": [
-   "kgingrasso@retailodyssey.com",
-   "melissa.langland@retailodyssey.com"
-  ],
-  "659": [
-   "kim.lawler@retailodyssey.com"
-  ],
-  "210": [
-   "kgingrasso@retailodyssey.com",
-   "melissa.langland@retailodyssey.com"
-  ],
-  "681": [
-   "kgingrasso@retailodyssey.com",
-   "melissa.langland@retailodyssey.com"
-  ],
-  "180": [
-   "melissa.langland@retailodyssey.com"
-  ],
-  "457": [
-   "melissa.langland@retailodyssey.com"
-  ],
-  "122": [
-   "melissa.langland@retailodyssey.com"
-  ],
   "608": [
    "melissa.langland@retailodyssey.com"
   ],
-  "24": [
-   "melissa.langland@retailodyssey.com"
-  ],
-  "25": [
-   "melissa.langland@retailodyssey.com"
-  ],
-  "355": [
-   "ky.stanley@retailodyssey.com"
-  ],
-  "13": [
-   "melissa.langland@retailodyssey.com"
-  ],
-  "325": [
-   "ky.stanley@retailodyssey.com"
-  ],
-  "417": [
-   "ky.stanley@retailodyssey.com"
-  ],
-  "328": [
-   "ky.stanley@retailodyssey.com"
-  ],
-  "225": [
-   "ky.stanley@retailodyssey.com"
-  ],
-  "5": [
-   "ky.stanley@retailodyssey.com"
-  ],
-  "70": [
-   "ky.stanley@retailodyssey.com"
-  ],
-  "227": [
-   "ky.stanley@retailodyssey.com"
-  ],
-  "360": [
-   "amy.preston@retailodyssey.com"
-  ],
-  "460": [
-   "amy.preston@retailodyssey.com"
-  ],
-  "127": [
-   "amy.preston@retailodyssey.com",
+  "613": [
+   "jgruidl@retailodyssey.com",
    "seth.newman@retailodyssey.com"
   ],
-  "93": [
+  "614": [
    "amy.preston@retailodyssey.com"
   ],
-  "140": [
-   "amy.preston@retailodyssey.com"
+  "615": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
   ],
-  "372": [
-   "amy.preston@retailodyssey.com"
-  ],
-  "240": [
-   "james.carr@retailodyssey.com",
-   "michelle.lerat@retailodyssey.com"
-  ],
-  "63": [
-   "james.carr@retailodyssey.com",
-   "michelle.lerat@retailodyssey.com"
-  ],
-  "35": [
-   "james.carr@retailodyssey.com"
-  ],
-  "482": [
-   "james.carr@retailodyssey.com"
-  ],
-  "375": [
-   "james.carr@retailodyssey.com",
-   "michelle.lerat@retailodyssey.com"
-  ],
-  "462": [
-   "james.carr@retailodyssey.com"
-  ],
-  "220": [
-   "james.carr@retailodyssey.com",
-   "michelle.lerat@retailodyssey.com"
-  ],
-  "393": [
-   "james.carr@retailodyssey.com",
-   "michelle.lerat@retailodyssey.com"
-  ],
-  "661": [
-   "james.carr@retailodyssey.com",
+  "649": [
    "seth.newman@retailodyssey.com"
   ],
-  "60": [
-   "james.carr@retailodyssey.com",
-   "seth.newman@retailodyssey.com"
-  ],
-  "218": [
-   "james.carr@retailodyssey.com"
-  ],
-  "242": [
-   "james.carr@retailodyssey.com"
+  "650": [
+   "raechel.roberts@retailodyssey.com"
   ],
   "651": [
    "james.carr@retailodyssey.com"
   ],
-  "449": [
-   "jgruidl@retailodyssey.com",
-   "seth.newman@retailodyssey.com"
-  ],
-  "685": [
-   "jgruidl@retailodyssey.com",
-   "seth.newman@retailodyssey.com"
-  ],
-  "198": [
-   "jgruidl@retailodyssey.com",
-   "seth.newman@retailodyssey.com"
-  ],
-  "28": [
-   "tyson.gauthier@retailodyssey.com"
-  ],
-  "351": [
+  "652": [
    "april.gauthier@retailodyssey.com"
   ],
-  "49": [
+  "653": [
+   "seth.newman@retailodyssey.com"
+  ],
+  "654": [
    "april.gauthier@retailodyssey.com"
   ],
-  "215": [
-   "tyson.gauthier@retailodyssey.com"
-  ],
-  "53": [
-   "tyson.gauthier@retailodyssey.com"
-  ],
-  "682": [
-   "tyson.gauthier@retailodyssey.com"
-  ],
-  "214": [
-   "april.gauthier@retailodyssey.com"
-  ],
-  "18": [
-   "seth.newman@retailodyssey.com",
-   "shelly.peck@retailodyssey.com"
+  "655": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
   ],
   "656": [
    "seth.newman@retailodyssey.com",
@@ -5696,188 +5697,187 @@
   "657": [
    "april.gauthier@retailodyssey.com"
   ],
-  "486": [
-   "april.gauthier@retailodyssey.com"
+  "658": [
+   "kgingrasso@retailodyssey.com",
+   "tyson.gauthier@retailodyssey.com"
   ],
-  "652": [
-   "april.gauthier@retailodyssey.com"
+  "659": [
+   "kim.lawler@retailodyssey.com"
   ],
-  "11": [
-   "seth.newman@retailodyssey.com",
-   "shelly.peck@retailodyssey.com"
+  "660": [
+   "amy.preston@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
   ],
-  "71": [
-   "seth.newman@retailodyssey.com",
-   "shelly.peck@retailodyssey.com"
+  "661": [
+   "james.carr@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
   ],
-  "224": [
+  "662": [
+   "jgruidl@retailodyssey.com",
+   "seth.newman@retailodyssey.com"
+  ],
+  "663": [
+   "amy.preston@retailodyssey.com",
+   "dustin.hooker@retailodyssey.com",
+   "michelle.lerat@retailodyssey.com"
+  ],
+  "665": [
+   "kim.lawler@retailodyssey.com"
+  ],
+  "667": [
+   "melissa.langland@retailodyssey.com"
+  ],
+  "681": [
+   "kgingrasso@retailodyssey.com",
+   "melissa.langland@retailodyssey.com"
+  ],
+  "682": [
+   "tyson.gauthier@retailodyssey.com"
+  ],
+  "683": [
+   "amy.preston@retailodyssey.com"
+  ],
+  "685": [
+   "jgruidl@retailodyssey.com",
    "seth.newman@retailodyssey.com"
   ],
   "688": [
    "melissa.langland@retailodyssey.com"
   ],
-  "667": [
-   "melissa.langland@retailodyssey.com"
-  ],
-  "683": [
-   "amy.preston@retailodyssey.com"
-  ],
-  "153": [
-   "james.carr@retailodyssey.com",
-   "michelle.lerat@retailodyssey.com"
+  "691": [
+   "kgingrasso@retailodyssey.com",
+   "kim.lawler@retailodyssey.com"
   ],
   "694": [
    "james.carr@retailodyssey.com",
    "michelle.lerat@retailodyssey.com"
-  ],
-  "285": [
-   "james.carr@retailodyssey.com"
-  ],
-  "40": [
-   "james.carr@retailodyssey.com"
-  ],
-  "516": [
-   "james.carr@retailodyssey.com",
-   "michelle.lerat@retailodyssey.com"
-  ],
-  "143": [
-   "james.carr@retailodyssey.com",
-   "seth.newman@retailodyssey.com"
-  ],
-  "391": [
-   "kgingrasso@retailodyssey.com",
-   "tyson.gauthier@retailodyssey.com"
-  ],
-  "658": [
-   "kgingrasso@retailodyssey.com",
-   "tyson.gauthier@retailodyssey.com"
   ]
  },
  "store_districts": {
-  "281": "10",
-  "30": "10",
-  "165": "10",
-  "126": "10",
-  "195": "10",
-  "196": "10",
-  "650": "10",
-  "21": "10",
-  "464": "10",
-  "485": "7",
-  "158": "7",
-  "50": "10",
-  "662": "9",
-  "75": "2",
-  "600": "2",
-  "135": "2",
-  "663": "2",
-  "439": "9",
-  "226": "9",
-  "255": "2",
-  "208": "2",
-  "660": "2",
-  "614": "2",
-  "150": "2",
-  "236": "2",
-  "125": "2",
-  "377": "1",
-  "156": "9",
-  "19": "8",
-  "90": "3",
-  "185": "2",
-  "260": "9",
-  "171": "5",
-  "604": "5",
-  "615": "5",
-  "186": "5",
-  "424": "5",
-  "613": "9",
-  "383": "9",
-  "31": "8",
-  "459": "8",
-  "23": "8",
-  "163": "6",
-  "286": "6",
-  "654": "6",
-  "691": "5",
-  "649": "7",
-  "653": "7",
+  "5": "3",
+  "11": "7",
+  "13": "4",
   "17": "7",
-  "655": "5",
-  "265": "5",
-  "390": "5",
-  "605": "5",
-  "111": "5",
-  "41": "5",
-  "603": "5",
-  "209": "4",
-  "665": "5",
-  "458": "4",
-  "659": "5",
-  "210": "4",
-  "681": "4",
-  "180": "4",
-  "457": "4",
-  "122": "4",
-  "608": "4",
+  "18": "7",
+  "19": "8",
+  "21": "10",
+  "23": "8",
   "24": "4",
   "25": "4",
-  "355": "3",
-  "13": "4",
-  "325": "3",
-  "417": "3",
-  "328": "3",
-  "225": "3",
-  "5": "3",
-  "70": "3",
-  "227": "3",
-  "360": "2",
-  "460": "2",
-  "127": "2",
-  "93": "2",
-  "140": "2",
-  "372": "2",
-  "240": "1",
-  "63": "1",
-  "35": "1",
-  "482": "1",
-  "375": "1",
-  "462": "1",
-  "220": "1",
-  "393": "1",
-  "661": "1",
-  "60": "1",
-  "218": "1",
-  "242": "1",
-  "651": "1",
-  "449": "9",
-  "685": "9",
-  "198": "9",
   "28": "8",
-  "351": "6",
+  "30": "10",
+  "31": "8",
+  "35": "1",
+  "40": "1",
+  "41": "5",
   "49": "6",
-  "215": "8",
+  "50": "10",
   "53": "8",
-  "682": "8",
+  "60": "1",
+  "63": "1",
+  "70": "3",
+  "71": "7",
+  "75": "2",
+  "90": "3",
+  "93": "2",
+  "111": "5",
+  "122": "4",
+  "125": "2",
+  "126": "10",
+  "127": "2",
+  "135": "2",
+  "140": "2",
+  "143": "1",
+  "150": "2",
+  "153": "1",
+  "156": "9",
+  "158": "7",
+  "163": "6",
+  "165": "10",
+  "171": "5",
+  "180": "4",
+  "185": "2",
+  "186": "5",
+  "195": "10",
+  "196": "10",
+  "198": "9",
+  "208": "2",
+  "209": "4",
+  "210": "4",
   "214": "6",
-  "18": "7",
+  "215": "8",
+  "218": "1",
+  "220": "1",
+  "224": "7",
+  "225": "3",
+  "226": "9",
+  "227": "3",
+  "236": "2",
+  "240": "1",
+  "242": "1",
+  "255": "2",
+  "260": "9",
+  "265": "5",
+  "281": "10",
+  "285": "1",
+  "286": "6",
+  "325": "3",
+  "328": "3",
+  "351": "6",
+  "355": "3",
+  "360": "2",
+  "372": "2",
+  "375": "1",
+  "377": "1",
+  "383": "9",
+  "390": "5",
+  "391": "8",
+  "393": "1",
+  "417": "3",
+  "424": "5",
+  "439": "9",
+  "449": "9",
+  "457": "4",
+  "458": "4",
+  "459": "8",
+  "460": "2",
+  "462": "1",
+  "464": "10",
+  "482": "1",
+  "485": "7",
+  "486": "6",
+  "516": "1",
+  "600": "2",
+  "603": "5",
+  "604": "5",
+  "605": "5",
+  "608": "4",
+  "613": "9",
+  "614": "2",
+  "615": "5",
+  "649": "7",
+  "650": "10",
+  "651": "1",
+  "652": "6",
+  "653": "7",
+  "654": "6",
+  "655": "5",
   "656": "7",
   "657": "6",
-  "486": "6",
-  "652": "6",
-  "11": "7",
-  "71": "7",
-  "224": "7",
-  "688": "4",
+  "658": "8",
+  "659": "5",
+  "660": "2",
+  "661": "1",
+  "662": "9",
+  "663": "2",
+  "665": "5",
   "667": "4",
+  "681": "4",
+  "682": "8",
   "683": "2",
-  "153": "1",
-  "694": "1",
-  "285": "1",
-  "40": "1",
-  "516": "1",
-  "143": "1",
-  "391": "Traveling",
-  "658": "Traveling"
+  "685": "9",
+  "688": "4",
+  "691": "5",
+  "694": "1"
  }
 }

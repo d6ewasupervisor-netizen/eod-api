@@ -40,7 +40,7 @@ async function main() {
     }
     console.log(`roster upserted: ${n}`);
 
-    // 1b. Store districts (derived from team names; traveling-team stores labeled 'Traveling')
+    // 1b. Store districts (derived from team names; Traveling Team Seattle 2 = Kompass 8C / district 8)
     n = 0;
     for (const [store, district] of Object.entries(roster.store_districts || {})) {
       await client.query(

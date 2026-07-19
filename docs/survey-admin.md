@@ -10,7 +10,7 @@ Note: supervisors on the roster can ALSO take the survey — store access rows a
 ## Districts (confirmed rule)
 District = digits in team name (`Kompass 6B` -> district 6). Derived from the schedule export:
 - 10 districts, 123 stores, **zero** stores split across districts.
-- `Traveling Team Seattle 2` (7 people; stores 391, 658) has no district digit -> labeled `Traveling`.
+- Traveling Team Seattle 2 is **Kompass 8C** (district 8): 7 people; stores 391, 658.
 Materialized in `survey_store_districts` + `survey_roster.district` at seed time.
 
 ## Trending definition (confirmed: option a)
