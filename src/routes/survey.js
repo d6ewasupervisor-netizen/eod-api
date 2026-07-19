@@ -1,7 +1,4 @@
-// Survey routes — mount in src/index.js AFTER the global gate:
-//   const surveyRouter = require('./routes/survey');
-//   app.use('/api/survey', surveyRouter);
-// Do NOT add /api/survey to PUBLIC_PATHS/PREFIXES.
+// Survey routes — mount AFTER global gate; NOT on PUBLIC_PATHS.
 const express = require('express');
 const { requireAuth } = require('../auth-middleware');
 const { pool } = require('../lib/db');
@@ -9,22 +6,51 @@ const {
   requireSurveyAccess,
   requireSurveyRole,
   listAccessibleStores,
-  listAccessibleStoresDetailed,
+  listSuggestedStores,
+  listCatalogStores,
+  listCatalogDistricts,
+  listCatalogTeams,
   userHasStoreAccess,
   buildSuggestions,
+  archiveResponseSnapshot,
 } = require('../lib/survey-access');
 
 const router = express.Router();
 router.use(requireAuth, requireSurveyAccess);
 
-// Identity + scope bootstrap for the frontend
-// Returns only this user's stores/district + typeahead suggestion dictionary.
+/** Bootstrap: identity, schedule suggestions, full catalog for overrides. */
 router.get('/me', async (req, res, next) => {
   try {
     const roles = req.user?.roles || [];
-    const stores = await listAccessibleStoresDetailed(req.surveyUser, roles);
-    const suggestions = await buildSuggestions(req.surveyUser, { kompassRoles: roles });
-    const storeNums = stores.map((s) => s.storeNum);
+    const [suggested, catalog, districts, teams, suggestions, myStatuses] = await Promise.all([
+      listSuggestedStores(req.surveyUser),
+      listCatalogStores(),
+      listCatalogDistricts(),
+      listCatalogTeams(),
+      buildSuggestions(req.surveyUser, { kompassRoles: roles }),
+      pool.query(
+        `SELECT r.store_num, r.status, r.updated_at, r.submitted_at
+           FROM survey_responses r
+           JOIN survey_question_sets q ON q.id = r.question_set_id AND q.active = TRUE
+          WHERE r.respondent = $1`,
+        [req.surveyUser.email]
+      ),
+    ]);
+    const statusByStore = new Map(
+      myStatuses.rows.map((r) => [Number(r.store_num), r])
+    );
+    const suggestedNums = new Set(suggested.map((s) => s.storeNum));
+    const storeDetails = catalog.map((s) => {
+      const st = statusByStore.get(s.storeNum);
+      return {
+        storeNum: s.storeNum,
+        district: s.district,
+        suggested: suggestedNums.has(s.storeNum),
+        status: st?.status || null,
+        updatedAt: st?.updated_at || null,
+        submittedAt: st?.submitted_at || null,
+      };
+    });
     res.json({
       ok: true,
       user: {
@@ -34,18 +60,18 @@ router.get('/me', async (req, res, next) => {
         team: req.surveyUser.team,
         district: req.surveyUser.district,
         title: req.surveyUser.title || null,
-        supervisorEmail: req.surveyUser.supervisor_email || null,
         isMasterAdmin: !!req.surveyUser.isMasterAdmin,
       },
-      // Back-compat: flat store numbers for older clients
-      stores: storeNums,
-      storeDetails: stores,
+      suggestedStores: suggested.map((s) => s.storeNum),
+      storeDetails,
+      catalog: { districts, teams, stores: catalog },
+      // back-compat
+      stores: storeDetails.map((s) => s.storeNum),
       suggestions,
     });
   } catch (e) { next(e); }
 });
 
-// Active question set
 router.get('/questions', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -56,22 +82,29 @@ router.get('/questions', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Baseline (2025) + any current responses for a store — read-only historical + prefill source
 router.get('/stores/:storeNum/context', async (req, res, next) => {
   try {
     const storeNum = Number(req.params.storeNum);
     if (!(await userHasStoreAccess(req.surveyUser, req.user.roles, storeNum))) {
-      return res.status(403).json({ ok: false, error: 'No access to this store' });
+      return res.status(403).json({ ok: false, error: 'Unknown store' });
     }
     const baseline = await pool.query(
       'SELECT respondent, submitted, answers, source FROM survey_baseline WHERE store_num = $1 ORDER BY submitted DESC',
       [storeNum]
     );
     const mine = await pool.query(
-      `SELECT r.id, r.answers, r.photos, r.status, r.submitted_at
+      `SELECT r.id, r.answers, r.photos, r.status, r.submitted_at, r.updated_at, r.question_set_id
          FROM survey_responses r
          JOIN survey_question_sets q ON q.id = r.question_set_id AND q.active = TRUE
         WHERE r.store_num = $1 AND r.respondent = $2`,
+      [storeNum, req.surveyUser.email]
+    );
+    const history = await pool.query(
+      `SELECT id, answers, status, snapshot_at, source
+         FROM survey_response_history
+        WHERE store_num = $1 AND respondent = $2
+        ORDER BY snapshot_at DESC
+        LIMIT 20`,
       [storeNum, req.surveyUser.email]
     );
     const suggestions = await buildSuggestions(req.surveyUser, {
@@ -86,6 +119,7 @@ router.get('/stores/:storeNum/context', async (req, res, next) => {
       ok: true,
       baseline: baseline.rows,
       myResponse: mine.rows[0] || null,
+      history: history.rows,
       store: {
         storeNum,
         district: districtRows[0]?.district || null,
@@ -95,40 +129,92 @@ router.get('/stores/:storeNum/context', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Upsert draft / submit
+/** Live upsert with history archive when answers change. */
 router.put('/stores/:storeNum/response', async (req, res, next) => {
+  const client = await pool.connect();
   try {
     const storeNum = Number(req.params.storeNum);
     if (!(await userHasStoreAccess(req.surveyUser, req.user.roles, storeNum))) {
-      return res.status(403).json({ ok: false, error: 'No access to this store' });
+      return res.status(403).json({ ok: false, error: 'Unknown store' });
     }
     const { answers = {}, photos = [], submit = false } = req.body || {};
     if (typeof answers !== 'object' || Array.isArray(answers)) {
       return res.status(400).json({ ok: false, error: 'answers must be an object' });
     }
-    const qs = await pool.query('SELECT id FROM survey_question_sets WHERE active = TRUE ORDER BY version DESC LIMIT 1');
+    const qs = await client.query(
+      'SELECT id FROM survey_question_sets WHERE active = TRUE ORDER BY version DESC LIMIT 1'
+    );
     if (!qs.rows.length) return res.status(409).json({ ok: false, error: 'No active question set' });
+    const qid = qs.rows[0].id;
     const status = submit ? 'submitted' : 'draft';
-    const { rows } = await pool.query(
+
+    await client.query('BEGIN');
+    const existing = await client.query(
+      `SELECT id, question_set_id, store_num, respondent, answers, photos, status
+         FROM survey_responses
+        WHERE question_set_id = $1 AND store_num = $2 AND respondent = $3
+        FOR UPDATE`,
+      [qid, storeNum, req.surveyUser.email]
+    );
+    const prev = existing.rows[0];
+    if (prev) {
+      const prevJson = JSON.stringify(prev.answers || {});
+      const nextJson = JSON.stringify(answers);
+      if (prevJson !== nextJson || prev.status !== status) {
+        await archiveResponseSnapshot(client, prev, submit ? 'submit' : 'save');
+      }
+    }
+
+    const { rows } = await client.query(
       `INSERT INTO survey_responses (question_set_id, store_num, respondent, answers, photos, status, submitted_at, updated_at)
        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, CASE WHEN $6 = 'submitted' THEN now() END, now())
        ON CONFLICT (question_set_id, store_num, respondent) DO UPDATE
          SET answers = EXCLUDED.answers,
              photos = EXCLUDED.photos,
              status = EXCLUDED.status,
-             submitted_at = CASE WHEN EXCLUDED.status = 'submitted' THEN now() ELSE survey_responses.submitted_at END,
+             submitted_at = CASE
+               WHEN EXCLUDED.status = 'submitted' THEN now()
+               ELSE survey_responses.submitted_at
+             END,
              updated_at = now()
-       RETURNING id, status, submitted_at`,
-      [qs.rows[0].id, storeNum, req.surveyUser.email, JSON.stringify(answers), JSON.stringify(photos), status]
+       RETURNING id, status, submitted_at, updated_at`,
+      [qid, storeNum, req.surveyUser.email, JSON.stringify(answers), JSON.stringify(photos), status]
     );
+    await client.query('COMMIT');
     res.json({ ok: true, response: rows[0] });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    next(e);
+  } finally {
+    client.release();
+  }
+});
+
+router.get('/stores/:storeNum/history', async (req, res, next) => {
+  try {
+    const storeNum = Number(req.params.storeNum);
+    if (!(await userHasStoreAccess(req.surveyUser, req.user.roles, storeNum))) {
+      return res.status(403).json({ ok: false, error: 'Unknown store' });
+    }
+    const { rows } = await pool.query(
+      `SELECT id, answers, status, snapshot_at, source
+         FROM survey_response_history
+        WHERE store_num = $1 AND respondent = $2
+        ORDER BY snapshot_at DESC
+        LIMIT 50`,
+      [storeNum, req.surveyUser.email]
+    );
+    res.json({ ok: true, history: rows });
   } catch (e) { next(e); }
 });
 
-// Supervisor/admin reporting — scoped list of responses
 router.get('/responses', requireSurveyRole('supervisor'), async (req, res, next) => {
   try {
-    const stores = await listAccessibleStores(req.surveyUser, req.user.roles);
+    // Supervisors: suggested stores; master/admin: all catalog
+    let stores = await listAccessibleStores(req.surveyUser, req.user.roles);
+    if (req.surveyUser.isMasterAdmin || (req.user?.roles || []).includes('admin')) {
+      stores = (await listCatalogStores()).map((s) => s.storeNum);
+    }
     if (!stores.length) return res.json({ ok: true, responses: [] });
     const { rows } = await pool.query(
       `SELECT r.store_num, r.respondent, ro.name AS respondent_name, r.answers, r.photos, r.status, r.submitted_at
@@ -143,14 +229,13 @@ router.get('/responses', requireSurveyRole('supervisor'), async (req, res, next)
   } catch (e) { next(e); }
 });
 
-// ---- Photos (optional attachments; base64 JSON, compressed client-side)
 const photoJson = express.json({ limit: '8mb' });
 
 router.post('/stores/:storeNum/photos', photoJson, async (req, res, next) => {
   try {
     const storeNum = Number(req.params.storeNum);
     if (!(await userHasStoreAccess(req.surveyUser, req.user.roles, storeNum))) {
-      return res.status(403).json({ ok: false, error: 'No access to this store' });
+      return res.status(403).json({ ok: false, error: 'Unknown store' });
     }
     const { questionId, mime, data, caption } = req.body || {};
     if (!questionId || !mime || !data) return res.status(400).json({ ok: false, error: 'questionId, mime, data required' });
@@ -170,7 +255,7 @@ router.get('/stores/:storeNum/photos', async (req, res, next) => {
   try {
     const storeNum = Number(req.params.storeNum);
     if (!(await userHasStoreAccess(req.surveyUser, req.user.roles, storeNum))) {
-      return res.status(403).json({ ok: false, error: 'No access to this store' });
+      return res.status(403).json({ ok: false, error: 'Unknown store' });
     }
     const { rows } = await pool.query(
       `SELECT id, respondent, question_id, caption, created_at FROM survey_photos

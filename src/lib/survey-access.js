@@ -1,8 +1,7 @@
-// Survey feature ACL — mirrors trackers/welcome-letter pattern.
-// Mount after requireAuth. Attaches req.surveyUser = roster row.
+// Survey feature ACL — roster membership required; store selection is open
+// (schedule-based suggestions only, not a hard lock).
 const { pool } = require('./db');
 
-/** Master admins see every store and every district (division-wide). */
 const MASTER_ADMIN_EMAILS = new Set([
   'tyson.gauthier@retailodyssey.com',
 ]);
@@ -31,7 +30,6 @@ async function requireSurveyAccess(req, res, next) {
   try {
     const su = await getSurveyUser(req.user && req.user.email);
     if (!su) return res.status(403).json({ ok: false, error: 'Not on the survey roster' });
-    // Master admin is a hard-coded allowlist only (not every KOMPASS_ADMIN_EMAILS entry).
     su.isMasterAdmin = isMasterAdminEmail(su.email);
     req.surveyUser = su;
     next();
@@ -50,47 +48,117 @@ function requireSurveyRole(...allowed) {
   };
 }
 
-// Data scoping — mirrors hub-store-access listAccessibleStores
-async function listAccessibleStores(surveyUser, kompassRoles = []) {
-  // Only master admin sees every store division-wide.
-  // Ordinary supervisors/leads (even if also in KOMPASS_ADMIN_EMAILS) stay scoped.
+/** Stores suggested from schedule/roster assignment (prefill only). */
+async function listSuggestedStores(surveyUser) {
   if (surveyUser?.isMasterAdmin || isMasterAdminEmail(surveyUser?.email)) {
-    const { rows } = await pool.query('SELECT DISTINCT store_num FROM survey_store_access ORDER BY store_num');
-    return rows.map((r) => r.store_num);
+    // Master: no forced prefills — empty suggestion list is fine
+    return listCatalogStores();
   }
   if (surveyUser.role === 'supervisor') {
     const { rows } = await pool.query(
-      `SELECT DISTINCT s.store_num
-         FROM survey_store_supervisors s
-        WHERE s.supervisor_email = $1
-        UNION
-       SELECT store_num FROM survey_store_access WHERE email = $1
-        ORDER BY 1`,
+      `SELECT DISTINCT s.store_num AS store_num,
+              COALESCE(d.district, 'Unassigned') AS district
+         FROM (
+           SELECT store_num FROM survey_store_supervisors WHERE supervisor_email = $1
+           UNION
+           SELECT store_num FROM survey_store_access WHERE email = $1
+         ) s
+         LEFT JOIN survey_store_districts d ON d.store_num = s.store_num
+        ORDER BY s.store_num`,
       [surveyUser.email]
     );
-    return rows.map((r) => r.store_num);
+    return rows.map((r) => ({
+      storeNum: Number(r.store_num),
+      district: r.district,
+      suggested: true,
+    }));
   }
   const { rows } = await pool.query(
-    'SELECT store_num FROM survey_store_access WHERE email = $1 ORDER BY store_num',
+    `SELECT a.store_num,
+            COALESCE(d.district, 'Unassigned') AS district
+       FROM survey_store_access a
+       LEFT JOIN survey_store_districts d ON d.store_num = a.store_num
+      WHERE a.email = $1
+      ORDER BY a.store_num`,
     [surveyUser.email]
   );
-  return rows.map((r) => r.store_num);
+  return rows.map((r) => ({
+    storeNum: Number(r.store_num),
+    district: r.district,
+    suggested: true,
+  }));
+}
+
+/** Full division catalog for dropdowns (any roster user may pick any store). */
+async function listCatalogStores() {
+  const { rows } = await pool.query(
+    `SELECT d.store_num,
+            d.district
+       FROM survey_store_districts d
+      ORDER BY d.district, d.store_num`
+  );
+  return rows.map((r) => ({
+    storeNum: Number(r.store_num),
+    district: r.district,
+  }));
+}
+
+async function listCatalogDistricts() {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT district FROM survey_store_districts ORDER BY 1`
+  );
+  return rows.map((r) => r.district).filter(Boolean);
+}
+
+async function listCatalogTeams() {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT team FROM survey_roster
+      WHERE active AND team IS NOT NULL AND trim(team) <> ''
+      ORDER BY 1`
+  );
+  return rows.map((r) => r.team);
+}
+
+/**
+ * Any authenticated roster member may survey any catalog store
+ * (assignments change week to week — suggestions only, not locks).
+ */
+async function userHasStoreAccess(_surveyUser, _kompassRoles, storeNum) {
+  const n = Number(storeNum);
+  if (!Number.isFinite(n)) return false;
+  const { rows } = await pool.query(
+    `SELECT 1 FROM survey_store_districts WHERE store_num = $1 LIMIT 1`,
+    [n]
+  );
+  // Also allow stores that only appear in store_access (edge cases)
+  if (rows.length) return true;
+  const { rows: a } = await pool.query(
+    `SELECT 1 FROM survey_store_access WHERE store_num = $1 LIMIT 1`,
+    [n]
+  );
+  return a.length > 0;
+}
+
+/** Legacy name used by supervisor reports — scoped suggestions for their purview. */
+async function listAccessibleStores(surveyUser, kompassRoles = []) {
+  if (surveyUser?.isMasterAdmin || isMasterAdminEmail(surveyUser?.email) || (kompassRoles || []).includes('admin')) {
+    const all = await listCatalogStores();
+    return all.map((s) => s.storeNum);
+  }
+  const sug = await listSuggestedStores(surveyUser);
+  return sug.map((s) => s.storeNum);
 }
 
 async function listAccessibleStoresDetailed(surveyUser, kompassRoles = []) {
   const storeNums = await listAccessibleStores(surveyUser, kompassRoles);
   if (!storeNums.length) return [];
-
   const { rows } = await pool.query(
-    `SELECT a.store_num,
-            COALESCE(d.district, 'Unassigned') AS district
-       FROM (SELECT DISTINCT store_num FROM survey_store_access WHERE store_num = ANY($1::int[])) a
-       LEFT JOIN survey_store_districts d ON d.store_num = a.store_num
-      ORDER BY a.store_num`,
+    `SELECT store_num, COALESCE(district, 'Unassigned') AS district
+       FROM survey_store_districts
+      WHERE store_num = ANY($1::int[])
+      ORDER BY store_num`,
     [storeNums]
   );
-
-  // Status for this respondent
   const { rows: mine } = await pool.query(
     `SELECT r.store_num, r.status, r.updated_at, r.submitted_at
        FROM survey_responses r
@@ -99,7 +167,6 @@ async function listAccessibleStoresDetailed(surveyUser, kompassRoles = []) {
     [surveyUser.email, storeNums]
   );
   const byStore = new Map(mine.map((m) => [Number(m.store_num), m]));
-
   return rows.map((r) => {
     const st = byStore.get(Number(r.store_num));
     return {
@@ -112,45 +179,62 @@ async function listAccessibleStoresDetailed(surveyUser, kompassRoles = []) {
   });
 }
 
-async function userHasStoreAccess(surveyUser, kompassRoles, storeNum) {
-  const stores = await listAccessibleStores(surveyUser, kompassRoles);
-  return stores.includes(Number(storeNum));
-}
-
 /**
- * Typeahead for operational / store-side free-text only.
- * Never suggests RO teammates — store contacts & champions are other companies.
+ * Typeahead: operational hints + THIS user's answers from other stores
+ * (reuse "same answer across stores") — never RO teammate names.
  */
 async function buildSuggestions(surveyUser, { storeNum = null, kompassRoles = [] } = {}) {
   const stores = storeNum != null
     ? [Number(storeNum)]
-    : await listAccessibleStores(surveyUser, kompassRoles);
+    : (await listCatalogStores()).map((s) => s.storeNum);
 
-  // Prior free-text answers at these stores (locations / entry only — not people lists from roster)
   const prior = {
     cartLocations: [],
     vestcomLocations: [],
     tagLocations: [],
     entryMethods: [],
-    // Store-side names captured on prior surveys (Fred Meyer / Kroger staff), not RO team
     storeSideNames: [],
   };
-  if (stores.length) {
+
+  const pushUnique = (arr, v) => {
+    const s = String(v || '').trim();
+    if (!s || s.length > 200) return;
+    if (!arr.some((x) => x.toLowerCase() === s.toLowerCase())) arr.push(s);
+  };
+
+  // This respondent's answers across all their stores (cross-store reuse)
+  const { rows: mineAll } = await pool.query(
+    `SELECT r.answers, r.store_num
+       FROM survey_responses r
+       JOIN survey_question_sets q ON q.id = r.question_set_id AND q.active = TRUE
+      WHERE r.respondent = $1
+      ORDER BY r.updated_at DESC NULLS LAST
+      LIMIT 40`,
+    [surveyUser.email]
+  );
+  for (const row of mineAll) {
+    if (storeNum != null && Number(row.store_num) === Number(storeNum)) continue;
+    const a = row.answers || {};
+    pushUnique(prior.cartLocations, a.Q6);
+    pushUnique(prior.vestcomLocations, a.Q20);
+    pushUnique(prior.tagLocations, a.Q21);
+    pushUnique(prior.entryMethods, a.Q30);
+    pushUnique(prior.entryMethods, a.Q31a);
+    pushUnique(prior.storeSideNames, a.Q7a);
+    for (const k of ['Q34_d', 'Q35_d', 'Q36_d', 'Q37_d']) pushUnique(prior.storeSideNames, a[k]);
+  }
+
+  // Same-store priors from any respondent (locations / entry / store-side names only)
+  if (storeNum != null) {
     const { rows } = await pool.query(
       `SELECT r.answers
          FROM survey_responses r
          JOIN survey_question_sets q ON q.id = r.question_set_id AND q.active = TRUE
-        WHERE r.store_num = ANY($1::int[])
-          AND r.status IN ('draft','submitted')
+        WHERE r.store_num = $1
         ORDER BY r.updated_at DESC NULLS LAST
-        LIMIT 80`,
-      [stores]
+        LIMIT 40`,
+      [Number(storeNum)]
     );
-    const pushUnique = (arr, v) => {
-      const s = String(v || '').trim();
-      if (!s || s.length > 200) return;
-      if (!arr.some((x) => x.toLowerCase() === s.toLowerCase())) arr.push(s);
-    };
     for (const row of rows) {
       const a = row.answers || {};
       pushUnique(prior.cartLocations, a.Q6);
@@ -158,44 +242,11 @@ async function buildSuggestions(surveyUser, { storeNum = null, kompassRoles = []
       pushUnique(prior.tagLocations, a.Q21);
       pushUnique(prior.entryMethods, a.Q30);
       pushUnique(prior.entryMethods, a.Q31a);
-      // Champion / directors / managers entered previously for THIS store (store associates)
       pushUnique(prior.storeSideNames, a.Q7a);
       for (const k of ['Q34_d', 'Q35_d', 'Q36_d', 'Q37_d']) pushUnique(prior.storeSideNames, a[k]);
     }
   }
 
-  if (storeNum != null) {
-    const { rows: base } = await pool.query(
-      `SELECT answers FROM survey_baseline WHERE store_num = $1 ORDER BY submitted DESC LIMIT 5`,
-      [Number(storeNum)]
-    );
-    const pushUnique = (arr, v) => {
-      const s = String(v || '').trim();
-      if (!s || s.length > 200) return;
-      if (!arr.some((x) => x.toLowerCase() === s.toLowerCase())) arr.push(s);
-    };
-    for (const b of base) {
-      const a = b.answers || {};
-      for (const [k, v] of Object.entries(a)) {
-        if (typeof v === 'string' && v.length > 2 && !['Yes', 'No', 'N/A', 'Other'].includes(v)) {
-          if (k === 'Q6') pushUnique(prior.cartLocations, v);
-        }
-      }
-    }
-  }
-
-  const profile = {
-    name: surveyUser.name,
-    email: surveyUser.email,
-    // phone intentionally omitted from client profile payload
-    team: surveyUser.team || null,
-    district: surveyUser.district || null,
-    role: surveyUser.role,
-    title: surveyUser.title || null,
-  };
-
-  // Locations / how you enter — OK to suggest.
-  // Names — only prior store-side answers for this store set (never RO roster).
   const byQuestion = {
     Q6: prior.cartLocations,
     Q7a: prior.storeSideNames,
@@ -220,20 +271,48 @@ async function buildSuggestions(surveyUser, { storeNum = null, kompassRoles = []
     }).slice(0, 40);
   }
 
+  // Flat map of this user's answers on other stores for "use same as store X"
+  const crossStore = {};
+  for (const row of mineAll) {
+    if (storeNum != null && Number(row.store_num) === Number(storeNum)) continue;
+    const sn = Number(row.store_num);
+    crossStore[sn] = row.answers || {};
+  }
+
   return {
-    profile,
-    people: [], // never surface RO teammates as suggestions
+    profile: {
+      name: surveyUser.name,
+      email: surveyUser.email,
+      team: surveyUser.team || null,
+      district: surveyUser.district || null,
+      role: surveyUser.role,
+      title: surveyUser.title || null,
+    },
+    people: [],
     byQuestion,
-    districts: [...new Set(
-      (await pool.query(
-        `SELECT DISTINCT COALESCE(d.district,'Unassigned') AS district
-           FROM survey_store_access a
-           LEFT JOIN survey_store_districts d ON d.store_num = a.store_num
-          WHERE a.store_num = ANY($1::int[])`,
-        [stores.length ? stores : [-1]]
-      )).rows.map((r) => r.district)
-    )].filter(Boolean).sort(),
+    crossStoreAnswers: crossStore,
+    districts: await listCatalogDistricts(),
   };
+}
+
+/** Archive current live row into history before overwriting. */
+async function archiveResponseSnapshot(client, responseRow, source) {
+  if (!responseRow) return;
+  await client.query(
+    `INSERT INTO survey_response_history
+       (response_id, question_set_id, store_num, respondent, answers, photos, status, source)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8)`,
+    [
+      responseRow.id,
+      responseRow.question_set_id,
+      responseRow.store_num,
+      responseRow.respondent,
+      JSON.stringify(responseRow.answers || {}),
+      JSON.stringify(responseRow.photos || []),
+      responseRow.status,
+      source || 'save',
+    ]
+  );
 }
 
 module.exports = {
@@ -241,9 +320,14 @@ module.exports = {
   requireSurveyRole,
   listAccessibleStores,
   listAccessibleStoresDetailed,
+  listSuggestedStores,
+  listCatalogStores,
+  listCatalogDistricts,
+  listCatalogTeams,
   userHasStoreAccess,
   getSurveyUser,
   buildSuggestions,
+  archiveResponseSnapshot,
   isMasterAdminEmail,
   MASTER_ADMIN_EMAILS,
 };
