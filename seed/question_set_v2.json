@@ -180,6 +180,7 @@
      "id": "Q22",
      "text": "Is there a regular issue with finding either the box or the tags at this store?",
      "type": "yesno",
+     "detailOn": "Yes",
      "good": "No"
     },
     {
