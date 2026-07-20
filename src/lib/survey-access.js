@@ -500,14 +500,7 @@ async function buildSuggestions(surveyUser, { storeNum = null, kompassRoles = []
     }).slice(0, 40);
   }
 
-  // Flat map of this user's answers on other stores for "use same as store X"
-  const crossStore = {};
-  for (const row of mineAll) {
-    if (storeNum != null && Number(row.store_num) === Number(storeNum)) continue;
-    const sn = Number(row.store_num);
-    crossStore[sn] = row.answers || {};
-  }
-
+  // Cross-store reuse chips removed from UI — modes are rolled into commonByQuestion.
   const commonByQuestion = await buildCommonAnswers();
 
   return {
@@ -522,7 +515,7 @@ async function buildSuggestions(surveyUser, { storeNum = null, kompassRoles = []
     people: [],
     byQuestion,
     commonByQuestion,
-    crossStoreAnswers: crossStore,
+    crossStoreAnswers: {},
     districts: await listCatalogDistricts(),
   };
 }
