@@ -52,6 +52,54 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+/** Clamp fax copy count to 1…maxCopies (default 1). */
+function clampPrintCopies(raw, maxCopies) {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(maxCopies, Math.max(1, n));
+}
+
+/**
+ * Prefer `files: [{ key, copies }]`; fall back to legacy `keys: string[]`.
+ * Dedupes by key (first wins).
+ */
+function normalizePrintFileJobs({ keys, files, maxCopies }) {
+  const jobs = [];
+  const seen = new Set();
+  const push = (rawKey, rawCopies) => {
+    const key = String(rawKey || '').trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    jobs.push({ key, copies: clampPrintCopies(rawCopies, maxCopies) });
+  };
+
+  if (Array.isArray(files) && files.length > 0) {
+    for (const item of files) {
+      if (item == null) continue;
+      if (typeof item === 'string') {
+        push(item, 1);
+        continue;
+      }
+      push(item.key, item.copies);
+    }
+    return jobs;
+  }
+
+  if (Array.isArray(keys)) {
+    for (const rawKey of keys) push(rawKey, 1);
+  }
+  return jobs;
+}
+
+/** Distinct attachment names so fax gateways don't collapse identical filenames. */
+function attachmentFilenameForCopy(baseName, copyIndex, totalCopies) {
+  if (totalCopies <= 1 || copyIndex === 0) return baseName;
+  const name = String(baseName || 'file');
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0) return `${name} (${copyIndex + 1})`;
+  return `${name.slice(0, dot)} (${copyIndex + 1})${name.slice(dot)}`;
+}
+
 function contentDispositionForFilename(filename) {
   const ext = filename.split('.').pop().toLowerCase();
   const inlineTypes = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'txt', 'html'];
@@ -178,8 +226,10 @@ function createDumpBinRouter({ resend, logger }) {
       return res.status(500).json({ error: 'Email service not available' });
     }
 
-    const { keys, storeNumber, storeCity } = req.body || {};
-    if (!Array.isArray(keys) || keys.length === 0) {
+    const { keys, files, storeNumber, storeCity } = req.body || {};
+    const MAX_COPIES = 5;
+    const fileJobs = normalizePrintFileJobs({ keys, files, maxCopies: MAX_COPIES });
+    if (fileJobs.length === 0) {
       return res.status(400).json({ error: 'no files selected' });
     }
     if (!storeNumber) {
@@ -187,12 +237,12 @@ function createDumpBinRouter({ resend, logger }) {
     }
 
     const attachments = [];
+    const fileListRows = [];
     let totalBytes = 0;
     const MAX_BYTES = 35 * 1024 * 1024;
 
-    for (const rawKey of keys) {
-      const fileKey = String(rawKey || '').trim();
-      if (!fileKey) continue;
+    for (const job of fileJobs) {
+      const fileKey = job.key;
       let buf;
       try {
         buf = await r2.getObjectBuffer(fileKey);
@@ -204,22 +254,39 @@ function createDumpBinRouter({ resend, logger }) {
         log.error('[dump-bin print-at-store] getObjectBuffer', e);
         return res.status(500).json({ error: e.message || 'Failed to read files' });
       }
-      totalBytes += buf.length;
+      const copies = job.copies;
+      const contentBytes = buf.length * copies;
+      totalBytes += contentBytes;
       if (totalBytes > MAX_BYTES) {
         return res.status(413).json({
           error: `Selection too large (${(totalBytes / 1048576).toFixed(1)}MB). Resend caps at ~40MB. Please split into smaller requests.`,
         });
       }
-      const filename = fileKey.split('/').pop();
-      attachments.push({ filename, content: buf.toString('base64') });
+      const baseName = fileKey.split('/').pop() || 'file';
+      const content = buf.toString('base64');
+      for (let i = 0; i < copies; i += 1) {
+        attachments.push({
+          filename: attachmentFilenameForCopy(baseName, i, copies),
+          content,
+        });
+      }
+      fileListRows.push(
+        copies > 1
+          ? `<li>${escapeHtml(baseName)} &times; ${copies}</li>`
+          : `<li>${escapeHtml(baseName)}</li>`
+      );
+    }
+
+    if (attachments.length === 0) {
+      return res.status(400).json({ error: 'no readable files selected' });
     }
 
     // Always send as fax@… so Metrofax / print routing stays consistent.
     // Reply-To is the logged-in user so store replies reach the requester.
     const from = `fax@${sendDomain}`;
     const subject = `#${storeNumber}`;
-    const fileListHtml = keys.map((k) => `<li>${escapeHtml(String(k).split('/').pop())}</li>`).join('');
-    const html = `<div style="font-family:Segoe UI,system-ui,sans-serif;color:#222;"><h2 style="color:#4a7fb5;margin:0 0 8px;">Print at Store — #${storeNumber}${storeCity ? ` (${escapeHtml(storeCity)})` : ''}</h2><p>Requested by: <strong>${escapeHtml(userEmail)}</strong></p><p><strong>${attachments.length}</strong> file(s) attached:</p><ul>${fileListHtml}</ul><p style="color:#888;font-size:.85em;margin-top:20px;">Sent via the Dump Bin print-at-store workflow.</p></div>`;
+    const fileListHtml = fileListRows.join('');
+    const html = `<div style="font-family:Segoe UI,system-ui,sans-serif;color:#222;"><h2 style="color:#4a7fb5;margin:0 0 8px;">Print at Store — #${storeNumber}${storeCity ? ` (${escapeHtml(storeCity)})` : ''}</h2><p>Requested by: <strong>${escapeHtml(userEmail)}</strong></p><p><strong>${attachments.length}</strong> attachment(s) from <strong>${fileListRows.length}</strong> file(s):</p><ul>${fileListHtml}</ul><p style="color:#888;font-size:.85em;margin-top:20px;">Sent via the Dump Bin print-at-store workflow.</p></div>`;
 
     try {
       const printPayload = {
@@ -235,7 +302,12 @@ function createDumpBinRouter({ resend, logger }) {
         sourceType: 'dump-bin-print-at-store',
         sourceRef: storeNumber,
         sentByEmail: userEmail,
-        metadata: { storeNumber, fileCount: attachments.length, subject },
+        metadata: {
+          storeNumber,
+          fileCount: attachments.length,
+          sourceFileCount: fileListRows.length,
+          subject,
+        },
       }, printPayload);
       if (error) {
         log.error('[dump-bin print-at-store] Resend rejected', {
