@@ -290,15 +290,133 @@ async function listAccessibleStoresDetailed(surveyUser, kompassRoles = []) {
   });
 }
 
+function flattenSpecQuestions(spec) {
+  const out = [];
+  for (const sec of spec?.sections || []) {
+    for (const q of sec.questions || []) {
+      out.push(q);
+      for (const b of q.branches || []) out.push(b);
+    }
+  }
+  return out;
+}
+
+function answerKey(val) {
+  if (val == null || val === '') return null;
+  if (Array.isArray(val)) {
+    if (!val.length) return null;
+    return val.map((x) => String(x)).join(', ');
+  }
+  const s = String(val).trim();
+  return s || null;
+}
+
+/**
+ * Mode answer per question from live responses, falling back to question.good
+ * then 2025 baseline mode. Used for "Common: Yes" chips in the taker UI.
+ */
+async function buildCommonAnswers() {
+  const commonByQuestion = {};
+  let qsSpec = null;
+  try {
+    const { rows: qsRows } = await pool.query(
+      `SELECT spec FROM survey_question_sets WHERE active = TRUE ORDER BY version DESC LIMIT 1`
+    );
+    qsSpec = qsRows[0]?.spec || null;
+  } catch (_) { /* ignore */ }
+
+  const questions = flattenSpecQuestions(qsSpec);
+  const counts = new Map(); // qid -> Map(answerKey -> count)
+
+  const bump = (qid, val) => {
+    const key = answerKey(val);
+    if (!key || key.length > 120) return;
+    if (!counts.has(qid)) counts.set(qid, new Map());
+    const m = counts.get(qid);
+    m.set(key, (m.get(key) || 0) + 1);
+  };
+
+  // Live responses (draft + submitted) for active question set
+  try {
+    const { rows } = await pool.query(
+      `SELECT r.answers
+         FROM survey_responses r
+         JOIN survey_question_sets q ON q.id = r.question_set_id AND q.active = TRUE
+        ORDER BY r.updated_at DESC NULLS LAST
+        LIMIT 2500`
+    );
+    for (const row of rows) {
+      const a = row.answers || {};
+      for (const [k, v] of Object.entries(a)) {
+        if (k.endsWith('_c') || k.endsWith('_d')) continue;
+        bump(k, v);
+      }
+    }
+  } catch (_) { /* ignore */ }
+
+  const modeOf = (map) => {
+    if (!map || !map.size) return null;
+    let best = null, bestN = 0;
+    for (const [k, n] of map.entries()) {
+      if (n > bestN) { best = k; bestN = n; }
+    }
+    return best != null ? { value: best, n: bestN } : null;
+  };
+
+  const MIN_N = 2; // need at least 2 people agreeing before we call it "common" from live data
+  for (const [qid, map] of counts.entries()) {
+    const mode = modeOf(map);
+    if (mode && mode.n >= MIN_N) {
+      commonByQuestion[qid] = { value: mode.value, n: mode.n, source: 'responses' };
+    }
+  }
+
+  // Fallback: question.good from spec (best-practice answer)
+  for (const q of questions) {
+    if (commonByQuestion[q.id]) continue;
+    if (q.good != null && q.good !== '') {
+      commonByQuestion[q.id] = {
+        value: Array.isArray(q.good) ? q.good.join(', ') : String(q.good),
+        n: 0,
+        source: 'good',
+      };
+    }
+  }
+
+  // Fallback: 2025 baseline mode for remaining gaps
+  try {
+    const { rows: baseRows } = await pool.query(
+      `SELECT answers FROM survey_baseline ORDER BY submitted DESC NULLS LAST LIMIT 500`
+    );
+    const baseCounts = new Map();
+    for (const row of baseRows) {
+      const a = row.answers || {};
+      for (const [k, v] of Object.entries(a)) {
+        if (k.endsWith('_c') || k.endsWith('_d')) continue;
+        const key = answerKey(v);
+        if (!key || key.length > 120) continue;
+        if (!baseCounts.has(k)) baseCounts.set(k, new Map());
+        const m = baseCounts.get(k);
+        m.set(key, (m.get(key) || 0) + 1);
+      }
+    }
+    for (const [qid, map] of baseCounts.entries()) {
+      if (commonByQuestion[qid]) continue;
+      const mode = modeOf(map);
+      if (mode && mode.n >= 2) {
+        commonByQuestion[qid] = { value: mode.value, n: mode.n, source: 'baseline' };
+      }
+    }
+  } catch (_) { /* ignore */ }
+
+  return commonByQuestion;
+}
+
 /**
  * Typeahead: operational hints + THIS user's answers from other stores
  * (reuse "same answer across stores") — never RO teammate names.
  */
 async function buildSuggestions(surveyUser, { storeNum = null, kompassRoles = [] } = {}) {
-  const stores = storeNum != null
-    ? [Number(storeNum)]
-    : (await listCatalogStores()).map((s) => s.storeNum);
-
   const prior = {
     cartLocations: [],
     vestcomLocations: [],
@@ -390,6 +508,8 @@ async function buildSuggestions(surveyUser, { storeNum = null, kompassRoles = []
     crossStore[sn] = row.answers || {};
   }
 
+  const commonByQuestion = await buildCommonAnswers();
+
   return {
     profile: {
       name: surveyUser.name,
@@ -401,6 +521,7 @@ async function buildSuggestions(surveyUser, { storeNum = null, kompassRoles = []
     },
     people: [],
     byQuestion,
+    commonByQuestion,
     crossStoreAnswers: crossStore,
     districts: await listCatalogDistricts(),
   };
