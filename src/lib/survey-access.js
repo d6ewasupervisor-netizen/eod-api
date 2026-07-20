@@ -1,10 +1,95 @@
 // Survey feature ACL — roster membership required; store selection is open
 // (schedule-based suggestions only, not a hard lock).
+const fs = require('fs');
+const path = require('path');
 const { pool } = require('./db');
 
 const MASTER_ADMIN_EMAILS = new Set([
   'tyson.gauthier@retailodyssey.com',
 ]);
+
+/** Kompass NW schedule seed (date + workdayId → store). Loaded once. */
+let _scheduleCache = null;
+
+function loadScheduleSeed() {
+  if (_scheduleCache) return _scheduleCache;
+  const candidates = [
+    path.join(__dirname, '../../seed/seed_schedule.json'),
+    path.join(process.cwd(), 'seed/seed_schedule.json'),
+  ];
+  for (const p of candidates) {
+    try {
+      if (!fs.existsSync(p)) continue;
+      const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
+      const rows = Array.isArray(raw?.rows) ? raw.rows : [];
+      const byDateWorkday = new Map(); // `${date}|${workdayId}` → rows
+      const byDateName = new Map(); // `${date}|${normalizedName}` → rows
+      for (const r of rows) {
+        const date = String(r.date || '').slice(0, 10);
+        const storeNum = Number(r.storeNum);
+        if (!date || !Number.isFinite(storeNum)) continue;
+        const entry = {
+          date,
+          storeNum,
+          workdayId: r.workdayId ? String(r.workdayId).trim() : null,
+          name: r.name || null,
+          role: r.role || null,
+          team: r.team || null,
+        };
+        if (entry.workdayId) {
+          const k = `${date}|${entry.workdayId}`;
+          if (!byDateWorkday.has(k)) byDateWorkday.set(k, []);
+          byDateWorkday.get(k).push(entry);
+        }
+        if (entry.name) {
+          const nk = `${date}|${normalizePersonName(entry.name)}`;
+          if (!byDateName.has(nk)) byDateName.set(nk, []);
+          byDateName.get(nk).push(entry);
+        }
+      }
+      _scheduleCache = {
+        source: raw.source || p,
+        generatedAt: raw.generatedAt || null,
+        rowCount: rows.length,
+        byDateWorkday,
+        byDateName,
+      };
+      return _scheduleCache;
+    } catch (err) {
+      console.warn('[survey-access] schedule seed load failed:', err.message);
+    }
+  }
+  _scheduleCache = {
+    source: null,
+    generatedAt: null,
+    rowCount: 0,
+    byDateWorkday: new Map(),
+    byDateName: new Map(),
+  };
+  return _scheduleCache;
+}
+
+/** Calendar date in America/Los_Angeles (YYYY-MM-DD). */
+function todayPacificDate(now = new Date()) {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Los_Angeles',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now);
+  } catch {
+    return now.toISOString().slice(0, 10);
+  }
+}
+
+function normalizePersonName(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function isMasterAdminEmail(email) {
   return MASTER_ADMIN_EMAILS.has(String(email || '').trim().toLowerCase());
@@ -13,7 +98,7 @@ function isMasterAdminEmail(email) {
 async function getSurveyUser(email) {
   const em = String(email || '').trim().toLowerCase();
   const { rows } = await pool.query(
-    `SELECT email, name, role, team, supervisor_email, district, phone, title, active
+    `SELECT email, name, role, team, supervisor_email, district, phone, title, workday_id, active
        FROM survey_roster
       WHERE email = $1 AND active = TRUE`,
     [em]
@@ -22,6 +107,7 @@ async function getSurveyUser(email) {
   if (!row) return null;
   return {
     ...row,
+    workdayId: row.workday_id || null,
     isMasterAdmin: isMasterAdminEmail(row.email),
   };
 }
@@ -48,44 +134,69 @@ function requireSurveyRole(...allowed) {
   };
 }
 
-/** Stores suggested from schedule/roster assignment (prefill only). */
+/**
+ * Today's assignments for this person from the seeded Kompass schedule.
+ * Match order: workday_id → normalized roster name.
+ * Prefers Lead rows when multiple, then first by store number.
+ */
+function listScheduleToday(surveyUser, dateStr = null) {
+  const date = dateStr || todayPacificDate();
+  const sched = loadScheduleSeed();
+  let hits = [];
+  const wd = surveyUser?.workdayId || surveyUser?.workday_id;
+  if (wd) {
+    hits = sched.byDateWorkday.get(`${date}|${String(wd).trim()}`) || [];
+  }
+  if (!hits.length && surveyUser?.name) {
+    hits = sched.byDateName.get(`${date}|${normalizePersonName(surveyUser.name)}`) || [];
+  }
+  // Prefer Lead role when multi-store edge cases
+  const leads = hits.filter((h) => String(h.role || '').toLowerCase() === 'lead');
+  const ordered = (leads.length ? leads : hits).slice().sort((a, b) => a.storeNum - b.storeNum);
+  // Dedupe by store
+  const seen = new Set();
+  const unique = [];
+  for (const h of ordered) {
+    if (seen.has(h.storeNum)) continue;
+    seen.add(h.storeNum);
+    unique.push(h);
+  }
+  return {
+    date,
+    timezone: 'America/Los_Angeles',
+    source: sched.source,
+    assignments: unique,
+  };
+}
+
+/**
+ * Prefill store from today's schedule (single primary store).
+ * Master admins: none. Manual override always available in the UI.
+ */
 async function listSuggestedStores(surveyUser) {
   if (surveyUser?.isMasterAdmin || isMasterAdminEmail(surveyUser?.email)) {
-    // Master: no forced prefills — empty suggestion list is fine
     return [];
   }
-  if (surveyUser.role === 'supervisor') {
-    const { rows } = await pool.query(
-      `SELECT DISTINCT s.store_num AS store_num,
-              COALESCE(d.district, 'Unassigned') AS district
-         FROM (
-           SELECT store_num FROM survey_store_supervisors WHERE supervisor_email = $1
-           UNION
-           SELECT store_num FROM survey_store_access WHERE email = $1
-         ) s
-         LEFT JOIN survey_store_districts d ON d.store_num = s.store_num
-        ORDER BY s.store_num`,
-      [surveyUser.email]
-    );
-    return rows.map((r) => ({
-      storeNum: Number(r.store_num),
-      district: r.district,
-      suggested: true,
-    }));
-  }
+  const today = listScheduleToday(surveyUser);
+  if (!today.assignments.length) return [];
+
+  const storeNums = today.assignments.map((a) => a.storeNum);
   const { rows } = await pool.query(
-    `SELECT a.store_num,
-            COALESCE(d.district, 'Unassigned') AS district
-       FROM survey_store_access a
-       LEFT JOIN survey_store_districts d ON d.store_num = a.store_num
-      WHERE a.email = $1
-      ORDER BY a.store_num`,
-    [surveyUser.email]
+    `SELECT store_num, COALESCE(district, 'Unassigned') AS district
+       FROM survey_store_districts
+      WHERE store_num = ANY($1::int[])`,
+    [storeNums]
   );
-  return rows.map((r) => ({
-    storeNum: Number(r.store_num),
-    district: r.district,
+  const dist = new Map(rows.map((r) => [Number(r.store_num), r.district]));
+  // Primary = first assignment (lead-preferred, then lowest store #)
+  return today.assignments.map((a) => ({
+    storeNum: a.storeNum,
+    district: dist.get(a.storeNum) || 'Unassigned',
     suggested: true,
+    fromSchedule: true,
+    scheduleDate: today.date,
+    team: a.team || null,
+    role: a.role || null,
   }));
 }
 
@@ -321,6 +432,8 @@ module.exports = {
   listAccessibleStores,
   listAccessibleStoresDetailed,
   listSuggestedStores,
+  listScheduleToday,
+  todayPacificDate,
   listCatalogStores,
   listCatalogDistricts,
   listCatalogTeams,

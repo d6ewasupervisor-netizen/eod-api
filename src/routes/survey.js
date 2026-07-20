@@ -7,6 +7,8 @@ const {
   requireSurveyRole,
   listAccessibleStores,
   listSuggestedStores,
+  listScheduleToday,
+  todayPacificDate,
   listCatalogStores,
   listCatalogDistricts,
   listCatalogTeams,
@@ -18,10 +20,11 @@ const {
 const router = express.Router();
 router.use(requireAuth, requireSurveyAccess);
 
-/** Bootstrap: identity, schedule suggestions, full catalog for overrides. */
+/** Bootstrap: identity, today's schedule prefill, full catalog for overrides. */
 router.get('/me', async (req, res, next) => {
   try {
     const roles = req.user?.roles || [];
+    const scheduleToday = listScheduleToday(req.surveyUser);
     const [suggested, catalog, districts, teams, suggestions, myStatuses] = await Promise.all([
       listSuggestedStores(req.surveyUser),
       listCatalogStores(),
@@ -40,6 +43,8 @@ router.get('/me', async (req, res, next) => {
       myStatuses.rows.map((r) => [Number(r.store_num), r])
     );
     const suggestedNums = new Set(suggested.map((s) => s.storeNum));
+    // Primary preselect: first schedule store for today (single-store flow)
+    const primaryStore = suggested.length ? suggested[0].storeNum : null;
     const storeDetails = catalog.map((s) => {
       const st = statusByStore.get(s.storeNum);
       return {
@@ -60,9 +65,19 @@ router.get('/me', async (req, res, next) => {
         team: req.surveyUser.team,
         district: req.surveyUser.district,
         title: req.surveyUser.title || null,
+        workdayId: req.surveyUser.workdayId || req.surveyUser.workday_id || null,
         isMasterAdmin: !!req.surveyUser.isMasterAdmin,
       },
-      suggestedStores: suggested.map((s) => s.storeNum),
+      scheduleDate: scheduleToday.date || todayPacificDate(),
+      scheduleTimezone: scheduleToday.timezone || 'America/Los_Angeles',
+      scheduleToday: scheduleToday.assignments.map((a) => ({
+        storeNum: a.storeNum,
+        team: a.team,
+        role: a.role,
+        date: a.date,
+      })),
+      primaryStore,
+      suggestedStores: primaryStore != null ? [primaryStore] : [],
       storeDetails,
       catalog: { districts, teams, stores: catalog },
       // back-compat

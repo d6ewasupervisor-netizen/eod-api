@@ -41,7 +41,12 @@
      "id": "Q6",
      "text": "Where in the store is the cart or designated area located (if there is one)?",
      "type": "text",
-     "photo": true
+     "photo": true,
+     "placeholder": "Describe the location in enough detail that someone new could find it",
+     "examples": [
+      "In the back room, between Grocery Receiving and Home Side Receiving there is a door where you can turn left or right, turn right, and at the end of the HABA/HBC rows of u-boats, on the right hand side, you'll see the green Kompass cart with a white label on it."
+     ],
+     "examplesLabel": "Example of the detail we need"
     },
     {
      "id": "Q7",
@@ -110,6 +115,16 @@
      "text": "Does the store have a designated staging area for new shelf-stable grocery items?",
      "type": "yesno",
      "photo": true,
+     "detailOn": "Yes",
+     "detailPlaceholder": "Please explain / name",
+     "detailExamples": [
+      "On a pallet",
+      "On the Kompass cart",
+      "On a u-boat (non-Kompass)",
+      "In a specific area in the department",
+      "In the cooler/freezer"
+     ],
+     "detailExamplesLabel": "Suggestions for where it is",
      "good": "Yes"
     },
     {
@@ -117,6 +132,16 @@
      "text": "Does the store have a designated staging area for refrigerated/frozen product?",
      "type": "yesno",
      "photo": true,
+     "detailOn": "Yes",
+     "detailPlaceholder": "Please explain / name",
+     "detailExamples": [
+      "On a pallet",
+      "On the Kompass cart",
+      "On a u-boat (non-Kompass)",
+      "In a specific area in the department",
+      "In the cooler/freezer"
+     ],
+     "detailExamplesLabel": "Suggestions for where it is",
      "good": "Yes"
     },
     {
@@ -124,6 +149,16 @@
      "text": "Does the store have a designated staging area for natural foods items?",
      "type": "yesno",
      "photo": true,
+     "detailOn": "Yes",
+     "detailPlaceholder": "Please explain / name",
+     "detailExamples": [
+      "On a pallet",
+      "On the Kompass cart",
+      "On a u-boat (non-Kompass)",
+      "In a specific area in the department",
+      "In the cooler/freezer"
+     ],
+     "detailExamplesLabel": "Suggestions for where it is",
      "good": "Yes"
     },
     {
@@ -131,6 +166,16 @@
      "text": "Does the store have a designated staging area for HABA?",
      "type": "yesno",
      "photo": true,
+     "detailOn": "Yes",
+     "detailPlaceholder": "Please explain / name",
+     "detailExamples": [
+      "On a pallet",
+      "On the Kompass cart",
+      "On a u-boat (non-Kompass)",
+      "In a specific area in the department",
+      "In the cooler/freezer"
+     ],
+     "detailExamplesLabel": "Suggestions for where it is",
      "good": "Yes"
     },
     {
@@ -138,6 +183,16 @@
      "text": "Does the store have a designated staging area for produce?",
      "type": "yesno",
      "photo": true,
+     "detailOn": "Yes",
+     "detailPlaceholder": "Please explain / name",
+     "detailExamples": [
+      "On a pallet",
+      "On the Kompass cart",
+      "On a u-boat (non-Kompass)",
+      "In a specific area in the department",
+      "In the cooler/freezer"
+     ],
+     "detailExamplesLabel": "Suggestions for where it is",
      "good": "Yes"
     }
    ]
@@ -168,19 +223,43 @@
      "id": "Q20",
      "text": "Where is the Vestcom box typically found at this store?",
      "type": "text",
-     "photo": true
+     "photo": true,
+     "placeholder": "Where do you usually find the Vestcom box?",
+     "examples": [
+      "Price change room",
+      "File Maintenance",
+      "Kompass cart",
+      "Receivers desk",
+      "Manager office"
+     ],
+     "examplesLabel": "Examples"
     },
     {
      "id": "Q21",
      "text": "Where are the price tags typically found at this store?",
      "type": "text",
-     "photo": true
+     "photo": true,
+     "placeholder": "Where do you usually find the price tags?",
+     "examples": [
+      "Price change room",
+      "File Maintenance",
+      "Kompass cart",
+      "Receivers desk",
+      "Manager office",
+      "In a drawer",
+      "On a shelf",
+      "In a file divider",
+      "In a file cabinet",
+      "Under, on, or above a shelf"
+     ],
+     "examplesLabel": "Examples"
     },
     {
      "id": "Q22",
      "text": "Is there a regular issue with finding either the box or the tags at this store?",
      "type": "yesno",
      "detailOn": "Yes",
+     "detailPlaceholder": "Please explain / name",
      "good": "No"
     },
     {
