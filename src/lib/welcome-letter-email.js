@@ -201,6 +201,17 @@ function buildWelcomeLetterHtml(firstName, { forPreview = false } = {}) {
       </table>
     </td></tr>`,
 
+    // District Lead (before supervisor)
+    sectionHeading('Your District Lead'),
+    bodyPara(`Your District Lead is <strong>Wolf</strong>. Wolf will handle most day-to-day matters, answer most of your questions, and provide guidance on scheduling. If something you need is outside Wolf's purview, they will let you know to contact me instead.`),
+    bodyPara(`You're always welcome to contact me directly — my door is open, and you can reach out anytime within reason. I simply ask that you go through Wolf first whenever possible, unless the matter is private or you aren't comfortable doing so. Please note that I may not always be able to respond immediately.`),
+    bodyPara(`<strong>Please copy both Wolf and me on all communications</strong> so we both stay informed about what's going on.`),
+    bodyPara(`<strong>Wolf (Aiyana Natarisalazar)</strong><br>
+District Lead — Retail Odyssey<br>
+Preferred contact: <strong>email</strong><br>
+Email: <a href="mailto:aiyana.natarisalazar@retailodyssey.com" style="color:#2F6FB0;text-decoration:underline;">aiyana.natarisalazar@retailodyssey.com</a><br>
+Phone: (509) 901-4680`),
+
     // Supervisor
     sectionHeading('Your Supervisor'),
     bodyPara(`Please don't hesitate to reach out with any questions or concerns. My preferred method of contact is <strong>text</strong>, but calls are always welcome. My office hours are <strong>6:00 AM to 3:00 PM, Monday through Friday</strong>, and I'm occasionally reachable by email outside those hours.`),
@@ -304,6 +315,19 @@ PIN Setup Guide: https://drive.google.com/file/d/1z__YVE0tKlPYfMkWCDNHs3d_Tvm2kq
 Associate Support Center — IT, HR, benefits, payroll, and field support. Call 1-888-900-4276.
 https://helpdesk.asmnet.com/
 
+YOUR DISTRICT LEAD
+Your District Lead is Wolf. Wolf will handle most day-to-day matters, answer most of your questions, and provide guidance on scheduling. If something you need is outside Wolf's purview, they will let you know to contact me instead.
+
+You're always welcome to contact me directly — my door is open, and you can reach out anytime within reason. I simply ask that you go through Wolf first whenever possible, unless the matter is private or you aren't comfortable doing so. Please note that I may not always be able to respond immediately.
+
+Please copy both Wolf and me on all communications so we both stay informed about what's going on.
+
+Wolf (Aiyana Natarisalazar)
+District Lead — Retail Odyssey
+Preferred contact: email
+Email: aiyana.natarisalazar@retailodyssey.com
+Phone: (509) 901-4680
+
 YOUR SUPERVISOR
 Please don't hesitate to reach out with any questions or concerns. My preferred method of contact is text, but calls are always welcome. My office hours are 6:00 AM to 3:00 PM, Monday through Friday, and I'm occasionally reachable by email outside those hours.
 
@@ -345,6 +369,108 @@ function buildWelcomeLetter({ firstName, email, forPreview = false } = {}) {
   };
 }
 
+const DISREGARD_SUBJECT = 'Please disregard the previous welcome letter';
+
+/**
+ * Soft-recall follow-up: polite note that the prior welcome letter should be
+ * disregarded while tools/contacts are updated. Does not remove the original
+ * from the recipient's mailbox.
+ */
+function buildDisregardLetter({ firstName, email } = {}) {
+  const addr = normalizeEmail(email);
+  if (!addr || !EMAIL_RE.test(addr) || addr.length > 254) {
+    const err = new Error('A valid recipient email is required for the disregard notice');
+    err.statusCode = 400;
+    throw err;
+  }
+  const safeName = normalizeFirstName(firstName) || 'there';
+  if (safeName.length > 80) {
+    const err = new Error('First name is too long');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const name = escapeHtml(safeName);
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(DISREGARD_SUBJECT)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#F2F5F8;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;background-color:#F2F5F8;">
+    <tr>
+      <td align="center" style="padding:16px 8px;">
+        <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;max-width:640px;background-color:#FFFFFF;">
+          <tr><td style="padding:28px 28px 6px 28px;font-family:Calibri,Arial,sans-serif;font-size:22px;font-weight:bold;color:#0E2A47;line-height:1.25;">Please disregard previous message</td></tr>
+          <tr><td style="padding:0 28px 18px 28px;font-family:Calibri,Arial,sans-serif;font-size:15px;color:#1C2733;line-height:1.55;">
+            Hello, <strong>${name}</strong> —
+          </td></tr>
+          <tr><td style="padding:0 28px 12px 28px;font-family:Calibri,Arial,sans-serif;font-size:15px;color:#1C2733;line-height:1.55;">
+            Please disregard the previous welcome letter you received from us. We are updating our tools and contacts, and that message may contain information that is no longer current.
+          </td></tr>
+          <tr><td style="padding:0 28px 12px 28px;font-family:Calibri,Arial,sans-serif;font-size:15px;color:#1C2733;line-height:1.55;">
+            You do not need to take any action on the earlier email. We will send an updated welcome letter with the correct information shortly if one is still needed.
+          </td></tr>
+          <tr><td style="padding:0 28px 12px 28px;font-family:Calibri,Arial,sans-serif;font-size:15px;color:#1C2733;line-height:1.55;">
+            We apologize for any confusion, and thank you for your patience.
+          </td></tr>
+          <tr><td style="padding:8px 28px 12px 28px;font-family:Calibri,Arial,sans-serif;font-size:15px;color:#1C2733;line-height:1.55;">
+            <strong>Tyson Gauthier</strong><br>
+            Central Seattle Supervisor — Retail Odyssey<br>
+            Email: <a href="mailto:tyson.gauthier@retailodyssey.com" style="color:#2F6FB0;text-decoration:underline;">tyson.gauthier@retailodyssey.com</a>
+          </td></tr>
+          <tr><td style="padding:12px 28px 28px 28px;font-family:Calibri,Arial,sans-serif;font-size:12px;color:#8A9AAB;line-height:1.4;">Retail Odyssey · Central Seattle</td></tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  const text = `Please disregard previous message
+
+Hello, ${safeName} —
+
+Please disregard the previous welcome letter you received from us. We are updating our tools and contacts, and that message may contain information that is no longer current.
+
+You do not need to take any action on the earlier email. We will send an updated welcome letter with the correct information shortly if one is still needed.
+
+We apologize for any confusion, and thank you for your patience.
+
+Tyson Gauthier
+Central Seattle Supervisor — Retail Odyssey
+Email: tyson.gauthier@retailodyssey.com
+
+Retail Odyssey · Central Seattle
+`;
+
+  return {
+    firstName: safeName,
+    email: addr,
+    from: FROM_ADDRESS,
+    to: addr,
+    cc: [...CC_ADDRESSES],
+    replyTo: REPLY_TO,
+    subject: DISREGARD_SUBJECT,
+    html,
+    text,
+  };
+}
+
+function buildDisregardResendPayload(letter) {
+  return {
+    from: letter.from,
+    to: [letter.to],
+    cc: letter.cc,
+    subject: letter.subject,
+    html: letter.html,
+    text: letter.text,
+    reply_to: letter.replyTo,
+  };
+}
+
 function buildResendPayload(letter) {
   const payload = {
     from: letter.from,
@@ -368,10 +494,13 @@ module.exports = {
   REPLY_TO,
   CC_ADDRESSES,
   SUBJECT,
+  DISREGARD_SUBJECT,
   validateWelcomeLetterInput,
   buildWelcomeLetter,
   buildWelcomeLetterHtml,
   buildWelcomeLetterText,
   buildResendPayload,
+  buildDisregardLetter,
+  buildDisregardResendPayload,
   getLogoAttachment,
 };

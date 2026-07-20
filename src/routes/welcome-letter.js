@@ -7,10 +7,15 @@ const {
   listEmails,
   getEmailById,
   resendStoredEmail,
+  syncOpenTrackingForSourceType,
+  markEmailCancelled,
+  sendViaOutbox,
 } = require('../lib/resend-outbox');
 const {
   buildWelcomeLetter,
   buildResendPayload,
+  buildDisregardLetter,
+  buildDisregardResendPayload,
   validateWelcomeLetterInput,
 } = require('../lib/welcome-letter-email');
 
@@ -184,6 +189,24 @@ function createWelcomeLetterRouter({ resend, logger, pool }) {
     }
   });
 
+  // Refresh board rows from Resend (delivery + open/click last_event).
+  // Registered before /board/:id so "refresh" is never parsed as an id.
+  router.post('/board/refresh', async (req, res) => {
+    if (!resend) {
+      return res.status(500).json({ ok: false, error: 'Email service not available' });
+    }
+    try {
+      const result = await syncOpenTrackingForSourceType(resend, pool, SOURCE_TYPE, {
+        limit: Number(req.body?.limit) || 150,
+      });
+      log.info('[welcome-letter] board refresh', result);
+      return res.json({ ok: true, ...result });
+    } catch (err) {
+      log.error('[welcome-letter] board refresh failed:', err.message);
+      return res.status(err.statusCode || 500).json({ ok: false, error: err.message });
+    }
+  });
+
   router.get('/board/:id', async (req, res) => {
     try {
       const item = await getEmailById(pool, Number(req.params.id));
@@ -203,6 +226,14 @@ function createWelcomeLetterRouter({ resend, logger, pool }) {
       if (!existing || existing.sourceType !== SOURCE_TYPE) {
         return res.status(404).json({ ok: false, error: 'Not found' });
       }
+      if (existing.status === 'cancelled' || !existing.canResend) {
+        return res.status(403).json({
+          ok: false,
+          error: existing.status === 'cancelled'
+            ? 'This welcome letter was cancelled — resend of this variant is not allowed. Send a new letter instead.'
+            : 'This welcome letter cannot be resent.',
+        });
+      }
       const result = await resendStoredEmail(resend, pool, Number(req.params.id), {
         sentByEmail: req.user?.email,
       });
@@ -219,6 +250,114 @@ function createWelcomeLetterRouter({ resend, logger, pool }) {
         recordId: result.recordId,
       });
     } catch (err) {
+      const status = err.statusCode || 500;
+      return res.status(status).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Soft-cancel: mark original cancelled (no exact resend), send polite disregard notice.
+  router.post('/board/:id/cancel', async (req, res) => {
+    if (!resend) {
+      return res.status(500).json({ ok: false, error: 'Email service not available' });
+    }
+    const id = Number(req.params.id);
+    try {
+      const existing = await getEmailById(pool, id);
+      if (!existing || existing.sourceType !== SOURCE_TYPE) {
+        return res.status(404).json({ ok: false, error: 'Not found' });
+      }
+      if (existing.metadata?.kind === 'disregard') {
+        return res.status(400).json({
+          ok: false,
+          error: 'Disregard notices cannot be cancelled this way.',
+        });
+      }
+      if (existing.status === 'cancelled') {
+        return res.status(409).json({
+          ok: false,
+          error: 'This welcome letter is already cancelled.',
+          item: existing,
+        });
+      }
+
+      const toAddr = (existing.to && existing.to[0]) || existing.metadata?.hireEmail || null;
+      if (!toAddr) {
+        return res.status(400).json({
+          ok: false,
+          error: 'Cannot send disregard notice — original recipient is missing.',
+        });
+      }
+
+      const firstName = existing.metadata?.firstName || 'there';
+      const disregard = buildDisregardLetter({ firstName, email: toAddr });
+      const payload = buildDisregardResendPayload(disregard);
+
+      const cancelResult = await markEmailCancelled(pool, id, {
+        cancelledByEmail: req.user?.email,
+        reason: 'Soft recall — tools and contacts being updated; disregard notice sent',
+        extraMetadata: {
+          softRecalled: true,
+          openedBeforeCancel: Number(existing.openCount || 0) > 0,
+          openCountAtCancel: Number(existing.openCount || 0) || 0,
+        },
+      });
+
+      const sendResult = await sendViaOutbox(resend, pool, {
+        sourceType: SOURCE_TYPE,
+        sourceRef: disregard.email,
+        sentByEmail: req.user?.email,
+        resendAllowed: false,
+        metadata: {
+          kind: 'disregard',
+          firstName: disregard.firstName,
+          hireEmail: disregard.email,
+          cancelledParentId: id,
+        },
+      }, payload);
+
+      if (sendResult.recordId && id) {
+        // Link disregard notice as a child of the cancelled original.
+        await pool.query('UPDATE sent_emails SET parent_id = $1 WHERE id = $2', [
+          id,
+          sendResult.recordId,
+        ]);
+      }
+
+      if (sendResult.error) {
+        log.error('[welcome-letter] disregard send failed after cancel', {
+          error: sendResult.error,
+          parentId: id,
+          recordId: sendResult.recordId,
+        });
+        return res.status(502).json({
+          ok: true,
+          cancelled: true,
+          disregardSent: false,
+          error: `Letter cancelled, but disregard notice failed: ${sendResult.error.message || sendResult.error}`,
+          item: cancelResult.item,
+          disregardRecordId: sendResult.recordId || null,
+        });
+      }
+
+      log.info('[welcome-letter] cancelled with disregard', {
+        parentId: id,
+        disregardRecordId: sendResult.recordId,
+        to: disregard.email,
+        sentByEmail: req.user?.email,
+        openedBeforeCancel: Number(existing.openCount || 0) > 0,
+      });
+
+      return res.json({
+        ok: true,
+        cancelled: true,
+        disregardSent: true,
+        item: cancelResult.item,
+        disregardRecordId: sendResult.recordId || null,
+        disregardResendId: sendResult.data?.id || null,
+        openedBeforeCancel: Number(existing.openCount || 0) > 0,
+      });
+    } catch (err) {
+      log.error('[welcome-letter] cancel failed', err);
       const status = err.statusCode || 500;
       return res.status(status).json({ ok: false, error: err.message });
     }

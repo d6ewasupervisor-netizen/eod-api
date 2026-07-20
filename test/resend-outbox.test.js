@@ -9,8 +9,10 @@ const {
   attachmentsFromStored,
   attachmentsMetaList,
   mapResendEventToDelivery,
+  normalizeResendEventName,
   resolveListSort,
   rowToDetail,
+  rowToListItem,
   contentDispositionHeader,
   sanitizeDownloadFilename,
   decodeStoredAttachmentContent,
@@ -39,6 +41,71 @@ describe('resend-outbox payload roundtrip', () => {
     assert.equal(mapResendEventToDelivery('delivered'), 'delivered');
     assert.equal(mapResendEventToDelivery('bounced'), 'failed');
     assert.equal(mapResendEventToDelivery('sent'), 'sent');
+    // Engagement events must not become delivery_status values
+    assert.equal(mapResendEventToDelivery('opened'), null);
+    assert.equal(mapResendEventToDelivery('clicked'), null);
+  });
+
+  it('normalizes Resend webhook type names', () => {
+    assert.equal(normalizeResendEventName('email.opened'), 'opened');
+    assert.equal(normalizeResendEventName('opened'), 'opened');
+    assert.equal(normalizeResendEventName('EMAIL.CLICKED'), 'clicked');
+  });
+
+  it('blocks resend and cancel flags for cancelled welcome letters', () => {
+    const cancelled = rowToListItem({
+      id: 1,
+      source_system: 'eod-api',
+      source_type: 'welcome-letter',
+      status: 'cancelled',
+      resend_allowed: false,
+      stored_payload: { subject: 'Welcome!', html: '<p>x</p>' },
+      metadata: { firstName: 'Alex', softRecalled: true },
+      open_count: 0,
+      click_count: 0,
+      attachments: [],
+      to_addresses: ['alex@example.com'],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    assert.equal(cancelled.canResend, false);
+    assert.equal(cancelled.canCancel, false);
+
+    const active = rowToListItem({
+      id: 2,
+      source_system: 'eod-api',
+      source_type: 'welcome-letter',
+      status: 'sent',
+      resend_allowed: true,
+      stored_payload: { subject: 'Welcome!', html: '<p>x</p>' },
+      metadata: { firstName: 'Alex' },
+      open_count: 0,
+      click_count: 0,
+      attachments: [],
+      to_addresses: ['alex@example.com'],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    assert.equal(active.canResend, true);
+    assert.equal(active.canCancel, true);
+
+    const disregard = rowToListItem({
+      id: 3,
+      source_system: 'eod-api',
+      source_type: 'welcome-letter',
+      status: 'sent',
+      resend_allowed: false,
+      stored_payload: { subject: 'Please disregard' },
+      metadata: { kind: 'disregard' },
+      open_count: 0,
+      click_count: 0,
+      attachments: [],
+      to_addresses: ['alex@example.com'],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    assert.equal(disregard.canResend, false);
+    assert.equal(disregard.canCancel, false);
   });
 
   it('attachment helpers filter invalid rows', () => {

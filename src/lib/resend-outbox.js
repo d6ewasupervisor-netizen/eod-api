@@ -110,11 +110,88 @@ function payloadForResend(storedPayload) {
 function mapResendEventToDelivery(lastEvent) {
   const ev = String(lastEvent || '').trim().toLowerCase();
   if (!ev) return null;
+  // Opens/clicks are engagement signals, not delivery outcomes — never map them
+  // into delivery_status (that used to overwrite "delivered" with "opened" and
+  // left open_count at 0 because only webhooks incremented opens).
+  if (ev === 'opened' || ev === 'clicked') return null;
   if (ev === 'delivered') return 'delivered';
-  if (ev === 'bounced' || ev === 'failed') return 'failed';
+  if (ev === 'bounced' || ev === 'failed' || ev === 'suppressed') return 'failed';
   if (ev === 'complained') return 'complained';
-  if (ev === 'sent' || ev === 'queued' || ev === 'delivery_delayed') return 'sent';
+  if (ev === 'sent' || ev === 'queued' || ev === 'delivery_delayed' || ev === 'scheduled') return 'sent';
+  if (ev === 'cancelled' || ev === 'canceled') return 'cancelled';
   return ev;
+}
+
+/**
+ * Normalize a Resend last_event / webhook type into a bare event name
+ * (e.g. "email.opened" → "opened", "opened" → "opened").
+ */
+function normalizeResendEventName(raw) {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^email\./, '');
+}
+
+/**
+ * Apply a Resend last_event onto an existing sent_emails row.
+ * - Engagement events (opened/clicked) update open/click counters without
+ *   clobbering delivery_status.
+ * - Delivery events update delivery_status when mappable.
+ * - Sync path uses floor counts (at least 1); webhook path can pass { increment: true }.
+ *
+ * @param {object} row - DB row (needs id, open_count, opened_at, click_count, clicked_at, delivery_status)
+ * @param {string} lastEventRaw
+ * @param {object} [opts]
+ * @param {string|null} [opts.eventAt]
+ * @param {boolean} [opts.increment] - when true, increment open/click counts (webhook); otherwise set floor ≥ 1 (sync)
+ */
+async function applyResendLastEvent(pool, row, lastEventRaw, { eventAt = null, increment = false } = {}) {
+  if (!row?.id) return { ok: false, reason: 'missing row' };
+  const lastEvent = normalizeResendEventName(lastEventRaw);
+  if (!lastEvent) return { ok: false, reason: 'missing event' };
+
+  const nowIso = eventAt || new Date().toISOString();
+  const patch = {
+    lastEvent,
+    lastEventAt: nowIso,
+  };
+
+  if (lastEvent === 'opened') {
+    const prev = Number(row.open_count || 0);
+    patch.openCount = increment ? prev + 1 : Math.max(prev, 1);
+    if (!row.opened_at) patch.openedAt = nowIso;
+    // Opened implies the message reached the inbox.
+    const ds = String(row.delivery_status || '').toLowerCase();
+    if (!ds || ds === 'sent' || ds === 'opened' || ds === 'queued') {
+      patch.deliveryStatus = 'delivered';
+    }
+  } else if (lastEvent === 'clicked') {
+    const prevClicks = Number(row.click_count || 0);
+    patch.clickCount = increment ? prevClicks + 1 : Math.max(prevClicks, 1);
+    if (!row.clicked_at) patch.clickedAt = nowIso;
+    // A click also counts as engagement/open for board display.
+    const prevOpens = Number(row.open_count || 0);
+    if (increment || prevOpens < 1) {
+      patch.openCount = increment && prevOpens > 0 ? prevOpens : Math.max(prevOpens, 1);
+    }
+    if (!row.opened_at) patch.openedAt = nowIso;
+    const ds = String(row.delivery_status || '').toLowerCase();
+    if (!ds || ds === 'sent' || ds === 'opened' || ds === 'queued') {
+      patch.deliveryStatus = 'delivered';
+    }
+  } else {
+    const deliveryStatus = mapResendEventToDelivery(lastEvent);
+    if (deliveryStatus) {
+      patch.deliveryStatus = deliveryStatus;
+      if (deliveryStatus === 'failed') {
+        patch.status = 'failed';
+      }
+    }
+  }
+
+  await updateEmailRecord(pool, row.id, patch);
+  return { ok: true, id: row.id, lastEvent };
 }
 
 function base64ByteLength(contentBase64) {
@@ -231,9 +308,15 @@ function rowToListItem(row) {
     updatedAt: row.updated_at,
     canResend: Boolean(
       row.resend_allowed
+      && row.status !== 'cancelled'
       && !compacted
       && row.stored_payload
       && Object.keys(row.stored_payload).length,
+    ),
+    canCancel: Boolean(
+      row.status !== 'cancelled'
+      && row.status !== 'failed'
+      && row.metadata?.kind !== 'disregard'
     ),
     canDownload: Boolean(
       !compacted
@@ -485,6 +568,7 @@ async function updateEmailRecord(pool, id, patch) {
     clicked_at: patch.clickedAt,
     click_count: patch.clickCount,
     error_message: patch.errorMessage,
+    resend_allowed: patch.resendAllowed,
     updated_at: patch.updatedAt || new Date().toISOString(),
   };
 
@@ -493,6 +577,11 @@ async function updateEmailRecord(pool, id, patch) {
       fields.push(`${col} = $${idx++}`);
       values.push(val);
     }
+  }
+
+  if (patch.metadata !== undefined) {
+    fields.push(`metadata = $${idx++}::jsonb`);
+    values.push(JSON.stringify(patch.metadata || {}));
   }
 
   if (!fields.length) return;
@@ -689,6 +778,11 @@ async function resendStoredEmail(resend, pool, id, { sentByEmail } = {}) {
     throw err;
   }
   const row = rows[0];
+  if (row.status === 'cancelled') {
+    const err = new Error('This email was cancelled — resend of this variant is not allowed. Send a new welcome letter instead.');
+    err.statusCode = 403;
+    throw err;
+  }
   if (!row.resend_allowed) {
     const err = new Error('Resend is not allowed for this email type');
     err.statusCode = 403;
@@ -814,10 +908,11 @@ async function applyResendWebhookEvent(pool, event) {
   const resendId = data.email_id || data.id;
   if (!resendId) return { ok: false, reason: 'missing email id' };
 
-  const lastEvent = type.replace(/^email\./, '') || data.last_event;
+  const lastEvent = normalizeResendEventName(type) || normalizeResendEventName(data.last_event);
   const client = pool || { query };
   const { rows } = await client.query(
-    'SELECT id, open_count, click_count, opened_at, clicked_at FROM sent_emails WHERE resend_id = $1',
+    `SELECT id, open_count, click_count, opened_at, clicked_at, delivery_status, status
+     FROM sent_emails WHERE resend_id = $1`,
     [resendId],
   );
   if (!rows.length) return { ok: true, matched: false };
@@ -826,34 +921,20 @@ async function applyResendWebhookEvent(pool, event) {
 
   // Opens/clicks are tracked in their own columns so they never clobber
   // delivery_status — a message can be both "delivered" and "opened".
-  if (lastEvent === 'opened') {
-    await updateEmailRecord(pool, row.id, {
-      lastEvent,
-      lastEventAt: nowIso,
-      openCount: Number(row.open_count || 0) + 1,
-      openedAt: row.opened_at ? undefined : nowIso,
-    });
-    return { ok: true, matched: true, id: row.id };
-  }
-  if (lastEvent === 'clicked') {
-    await updateEmailRecord(pool, row.id, {
-      lastEvent,
-      lastEventAt: nowIso,
-      clickCount: Number(row.click_count || 0) + 1,
-      clickedAt: row.clicked_at ? undefined : nowIso,
-    });
-    return { ok: true, matched: true, id: row.id };
+  if (lastEvent === 'opened' || lastEvent === 'clicked') {
+    await applyResendLastEvent(pool, row, lastEvent, { eventAt: nowIso, increment: true });
+    return { ok: true, matched: true, id: row.id, lastEvent };
   }
 
   const deliveryStatus = mapResendEventToDelivery(lastEvent);
   await updateEmailRecord(pool, row.id, {
     lastEvent,
     lastEventAt: nowIso,
-    deliveryStatus,
+    deliveryStatus: deliveryStatus || undefined,
     status: deliveryStatus === 'failed' ? 'failed' : undefined,
     errorMessage: data.error?.message || data.bounce?.message || undefined,
   });
-  return { ok: true, matched: true, id: row.id };
+  return { ok: true, matched: true, id: row.id, lastEvent };
 }
 
 async function syncFromResendApi(resend, pool, { limit = 100, maxPages = 20, accountLabel = null } = {}) {
@@ -874,25 +955,40 @@ async function syncFromResendApi(resend, pool, { limit = 100, maxPages = 20, acc
 
     for (const item of page) {
       const resendId = item.id;
-      const lastEvent = item.last_event || 'sent';
+      const lastEvent = normalizeResendEventName(item.last_event) || 'sent';
       const deliveryStatus = mapResendEventToDelivery(lastEvent);
-      const existing = await client.query('SELECT id, stored_payload FROM sent_emails WHERE resend_id = $1', [resendId]);
+      // Opened/clicked imply delivery for brand-new import rows.
+      const effectiveDelivery = deliveryStatus
+        || (lastEvent === 'opened' || lastEvent === 'clicked' ? 'delivered' : 'sent');
+      const existing = await client.query(
+        `SELECT id, stored_payload, open_count, opened_at, click_count, clicked_at, delivery_status, status
+         FROM sent_emails WHERE resend_id = $1`,
+        [resendId],
+      );
       if (existing.rows.length) {
-        await updateEmailRecord(pool, existing.rows[0].id, {
-          lastEvent,
-          lastEventAt: item.created_at || new Date().toISOString(),
-          deliveryStatus,
+        await applyResendLastEvent(pool, existing.rows[0], lastEvent, {
+          eventAt: item.created_at || new Date().toISOString(),
+          increment: false,
         });
         updated += 1;
         continue;
       }
 
-      await insertEmailRecord(pool, {
+      const openPatch = lastEvent === 'opened' || lastEvent === 'clicked'
+        ? {
+          open_count: 1,
+          opened_at: item.created_at || new Date().toISOString(),
+          click_count: lastEvent === 'clicked' ? 1 : 0,
+          clicked_at: lastEvent === 'clicked' ? (item.created_at || new Date().toISOString()) : null,
+        }
+        : null;
+
+      const id = await insertEmailRecord(pool, {
         sourceSystem,
         sourceType: 'unknown',
         resendId,
-        status: deliveryStatus === 'failed' ? 'failed' : 'sent',
-        deliveryStatus,
+        status: effectiveDelivery === 'failed' ? 'failed' : 'sent',
+        deliveryStatus: effectiveDelivery,
         lastEvent,
         lastEventAt: item.created_at || null,
         fromAddress: item.from || null,
@@ -903,6 +999,14 @@ async function syncFromResendApi(resend, pool, { limit = 100, maxPages = 20, acc
         resendAllowed: false,
         metadata: { syncedFromResend: true, resendAccount: accountLabel || null },
       });
+      if (openPatch) {
+        await updateEmailRecord(pool, id, {
+          openCount: openPatch.open_count,
+          openedAt: openPatch.opened_at,
+          clickCount: openPatch.click_count || undefined,
+          clickedAt: openPatch.clicked_at || undefined,
+        });
+      }
       imported += 1;
     }
 
@@ -912,6 +1016,101 @@ async function syncFromResendApi(resend, pool, { limit = 100, maxPages = 20, acc
   }
 
   return { imported, updated, pages };
+}
+
+/**
+ * Pull latest delivery/open state from Resend for stored emails of a source type.
+ * Used by the Welcome Letter board Refresh button so open tracking updates even
+ * when webhooks were delayed or not subscribed to email.opened.
+ */
+async function syncOpenTrackingForSourceType(resend, pool, sourceType, { limit = 150 } = {}) {
+  if (!resend?.emails?.get) {
+    const err = new Error('Resend client is not available');
+    err.statusCode = 500;
+    throw err;
+  }
+  const client = pool || { query };
+  const cap = Math.min(Math.max(Number(limit) || 150, 1), 300);
+  const { rows } = await client.query(
+    `SELECT id, resend_id, open_count, opened_at, click_count, clicked_at, delivery_status, status
+     FROM sent_emails
+     WHERE source_type = $1
+       AND resend_id IS NOT NULL
+       AND status <> 'cancelled'
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [sourceType, cap],
+  );
+
+  let checked = 0;
+  let updated = 0;
+  let opensFound = 0;
+  const errors = [];
+
+  for (const row of rows) {
+    checked += 1;
+    try {
+      const { data, error } = await resend.emails.get(row.resend_id);
+      if (error) {
+        errors.push({ id: row.id, resendId: row.resend_id, error: error.message || String(error) });
+        continue;
+      }
+      if (!data) continue;
+      const lastEvent = normalizeResendEventName(data.last_event) || 'sent';
+      const beforeOpens = Number(row.open_count || 0);
+      await applyResendLastEvent(pool, row, lastEvent, {
+        eventAt: data.created_at || new Date().toISOString(),
+        increment: false,
+      });
+      updated += 1;
+      if (lastEvent === 'opened' || lastEvent === 'clicked' || beforeOpens === 0) {
+        // Re-read not needed for count; last_event open/click means at least one open.
+        if (lastEvent === 'opened' || lastEvent === 'clicked') opensFound += 1;
+      }
+    } catch (err) {
+      errors.push({ id: row.id, resendId: row.resend_id, error: err.message || String(err) });
+    }
+  }
+
+  return { checked, updated, opensFound, errors: errors.slice(0, 10) };
+}
+
+/**
+ * Soft-cancel a tracked email: mark status cancelled, block exact resend of this
+ * variant. Does not remove the message from the recipient's mailbox (Resend cannot).
+ */
+async function markEmailCancelled(pool, id, {
+  cancelledByEmail = null,
+  reason = null,
+  extraMetadata = {},
+} = {}) {
+  const client = pool || { query };
+  const { rows } = await client.query('SELECT * FROM sent_emails WHERE id = $1', [id]);
+  if (!rows.length) {
+    const err = new Error('Email record not found');
+    err.statusCode = 404;
+    throw err;
+  }
+  const row = rows[0];
+  if (row.status === 'cancelled') {
+    return { alreadyCancelled: true, item: await getEmailById(pool, id) };
+  }
+
+  const metadata = {
+    ...(row.metadata || {}),
+    ...extraMetadata,
+    cancelledAt: new Date().toISOString(),
+    cancelledBy: cancelledByEmail || null,
+    cancelReason: reason || null,
+  };
+
+  await updateEmailRecord(pool, id, {
+    status: 'cancelled',
+    resendAllowed: false,
+    metadata,
+  });
+
+  return { alreadyCancelled: false, item: await getEmailById(pool, id) };
 }
 
 /**
@@ -1108,8 +1307,12 @@ module.exports = {
   resendStoredEmail,
   ingestEmailRecord,
   applyResendWebhookEvent,
+  applyResendLastEvent,
+  normalizeResendEventName,
   syncFromResendApi,
   syncFromResendAccounts,
+  syncOpenTrackingForSourceType,
+  markEmailCancelled,
   editEmailRecord,
   compactEmailRecord,
   deleteEmailRecord,
@@ -1117,4 +1320,5 @@ module.exports = {
   retentionDays,
   rowToListItem,
   rowToDetail,
+  updateEmailRecord,
 };
