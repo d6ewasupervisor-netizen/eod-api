@@ -52,7 +52,7 @@ function requireSurveyRole(...allowed) {
 async function listSuggestedStores(surveyUser) {
   if (surveyUser?.isMasterAdmin || isMasterAdminEmail(surveyUser?.email)) {
     // Master: no forced prefills — empty suggestion list is fine
-    return listCatalogStores();
+    return [];
   }
   if (surveyUser.role === 'supervisor') {
     const { rows } = await pool.query(
