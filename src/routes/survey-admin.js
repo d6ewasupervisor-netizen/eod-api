@@ -17,9 +17,24 @@ const {
   upsertAlertPrefs,
   photoFileName,
 } = require('../lib/survey-ops');
+const { sortDistricts } = require('../lib/survey-access');
 
 const router = express.Router();
 router.use(requireAuth, requireSurveyAdmin);
+
+/** Distinct districts, numeric order (1…9, 10 — not 1, 10, 2). */
+async function queryDistrictsOrdered(extraWhere = '', params = []) {
+  const sql = `
+    SELECT district FROM (
+      SELECT DISTINCT district FROM survey_store_districts
+      ${extraWhere}
+    ) t
+    ORDER BY
+      CASE WHEN district ~ '^[0-9]+$' THEN district::int ELSE 2147483647 END,
+      district`;
+  const { rows } = await pool.query(sql, params);
+  return sortDistricts(rows.map((r) => r.district));
+}
 
 function scopedFilters(req) {
   return applyScopeToFilters(req.surveyAdminScope, {
@@ -165,39 +180,44 @@ router.get('/responses', async (req, res, next) => {
 router.get('/filters', async (req, res, next) => {
   try {
     const scope = req.surveyAdminScope;
-    let districtSql = `SELECT DISTINCT district FROM survey_store_districts ORDER BY 1`;
-    let districtParams = [];
+    let districtPromise = queryDistrictsOrdered();
     let storeSql = `SELECT d.store_num, COALESCE(d.district,'Unassigned') AS district, d.store_name
-                      FROM survey_store_districts d ORDER BY d.store_num`;
+                      FROM survey_store_districts d
+                     ORDER BY
+                       CASE WHEN d.district ~ '^[0-9]+$' THEN d.district::int ELSE 2147483647 END,
+                       d.district,
+                       d.store_num`;
     let storeParams = [];
     if (scope?.level === 'district' && scope.storeNums?.length) {
       storeSql = `SELECT d.store_num, COALESCE(d.district,'Unassigned') AS district, d.store_name
                     FROM survey_store_districts d
                    WHERE d.store_num = ANY($1::int[])
-                   ORDER BY d.store_num`;
+                   ORDER BY
+                     CASE WHEN d.district ~ '^[0-9]+$' THEN d.district::int ELSE 2147483647 END,
+                     d.district,
+                     d.store_num`;
       storeParams = [scope.storeNums];
-      districtSql = `SELECT DISTINCT district FROM survey_store_districts
-                      WHERE store_num = ANY($1::int[]) ORDER BY 1`;
-      districtParams = [scope.storeNums];
+      districtPromise = queryDistrictsOrdered('WHERE store_num = ANY($1::int[])', [scope.storeNums]);
     } else if (scope?.level === 'district' && scope.districts?.length) {
-      districtSql = `SELECT DISTINCT district FROM survey_store_districts
-                      WHERE district = ANY($1::text[]) ORDER BY 1`;
-      districtParams = [scope.districts];
+      districtPromise = queryDistrictsOrdered('WHERE district = ANY($1::text[])', [scope.districts]);
       storeSql = `SELECT d.store_num, COALESCE(d.district,'Unassigned') AS district, d.store_name
                     FROM survey_store_districts d
                    WHERE d.district = ANY($1::text[])
-                   ORDER BY d.store_num`;
+                   ORDER BY
+                     CASE WHEN d.district ~ '^[0-9]+$' THEN d.district::int ELSE 2147483647 END,
+                     d.district,
+                     d.store_num`;
       storeParams = [scope.districts];
     }
     const [districts, stores, teams] = await Promise.all([
-      pool.query(districtSql, districtParams),
+      districtPromise,
       pool.query(storeSql, storeParams),
       listTeams(),
     ]);
     res.json({
       ok: true,
       scope,
-      districts: districts.rows.map((r) => r.district),
+      districts,
       stores: stores.rows,
       teams,
       user: {

@@ -91,6 +91,37 @@ function normalizePersonName(name) {
     .trim();
 }
 
+/** Numeric district order: 1, 2, … 9, 10 (not 1, 10, 2). Non-numeric last. */
+function compareDistricts(a, b) {
+  const sa = String(a ?? '');
+  const sb = String(b ?? '');
+  const na = /^\d+$/.test(sa) ? Number(sa) : null;
+  const nb = /^\d+$/.test(sb) ? Number(sb) : null;
+  if (na != null && nb != null) return na - nb;
+  if (na != null) return -1;
+  if (nb != null) return 1;
+  return sa.localeCompare(sb, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function sortDistricts(list) {
+  return [...(list || [])].filter((d) => d != null && String(d).trim() !== '').sort((a, b) => {
+    const sa = String(a);
+    const sb = String(b);
+    if (sa === 'Unassigned' && sb !== 'Unassigned') return 1;
+    if (sb === 'Unassigned' && sa !== 'Unassigned') return -1;
+    return compareDistricts(a, b);
+  });
+}
+
+/** SQL ORDER BY fragment for district columns (numeric first, then label). */
+const DISTRICT_ORDER_SQL = `
+  CASE
+    WHEN district ~ '^[0-9]+$' THEN district::int
+    ELSE 2147483647
+  END,
+  district
+`.replace(/\s+/g, ' ').trim();
+
 function isMasterAdminEmail(email) {
   return MASTER_ADMIN_EMAILS.has(String(email || '').trim().toLowerCase());
 }
@@ -213,7 +244,10 @@ async function listCatalogStores() {
             d.district,
             d.store_name
        FROM survey_store_districts d
-      ORDER BY d.district, d.store_num`
+      ORDER BY
+        CASE WHEN d.district ~ '^[0-9]+$' THEN d.district::int ELSE 2147483647 END,
+        d.district,
+        d.store_num`
   );
   return rows.map((r) => ({
     storeNum: Number(r.store_num),
@@ -224,9 +258,14 @@ async function listCatalogStores() {
 
 async function listCatalogDistricts() {
   const { rows } = await pool.query(
-    `SELECT DISTINCT district FROM survey_store_districts ORDER BY 1`
+    `SELECT district FROM (
+        SELECT DISTINCT district FROM survey_store_districts
+      ) t
+      ORDER BY
+        CASE WHEN district ~ '^[0-9]+$' THEN district::int ELSE 2147483647 END,
+        district`
   );
-  return rows.map((r) => r.district).filter(Boolean);
+  return sortDistricts(rows.map((r) => r.district).filter(Boolean));
 }
 
 async function listCatalogTeams() {
@@ -573,4 +612,7 @@ module.exports = {
   archiveResponseSnapshot,
   isMasterAdminEmail,
   MASTER_ADMIN_EMAILS,
+  compareDistricts,
+  sortDistricts,
+  DISTRICT_ORDER_SQL,
 };

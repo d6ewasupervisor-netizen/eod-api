@@ -10,6 +10,8 @@ const {
   getSurveyUser,
   isMasterAdminEmail,
   listCatalogStores,
+  sortDistricts,
+  compareDistricts,
 } = require('./survey-access');
 
 function escapeHtml(s) {
@@ -48,10 +50,10 @@ async function resolveSurveyAdminScope(surveyUser, kompassRoles = []) {
   );
 
   let storeNums = rows.map((r) => Number(r.store_num)).filter(Number.isFinite);
-  let districts = [...new Set(rows.map((r) => r.district).filter(Boolean))];
+  let districts = sortDistricts([...new Set(rows.map((r) => r.district).filter(Boolean))]);
 
   if (surveyUser.district) {
-    districts = [...new Set([String(surveyUser.district), ...districts])];
+    districts = sortDistricts([...new Set([String(surveyUser.district), ...districts])]);
   }
 
   if (!storeNums.length && surveyUser.district) {
@@ -187,7 +189,7 @@ async function buildCoverage(scope) {
   rows.sort((a, b) => {
     const order = { needs_assign: 0, assigned: 1, done: 2 };
     return (order[a.state] - order[b.state])
-      || Number(a.district) - Number(b.district)
+      || compareDistricts(a.district, b.district)
       || a.storeNum - b.storeNum;
   });
 
