@@ -53,7 +53,7 @@ async function fetchResponses(filters) {
     params.push(filters.respondents.map(e => String(e).toLowerCase())); where.push(`r.respondent = ANY($${params.length}::text[])`);
   }
   const { rows } = await pool.query(
-    `SELECT r.store_num, d.store_name, COALESCE(d.district,'Unassigned') AS district, r.respondent,
+    `SELECT r.id, r.store_num, d.store_name, COALESCE(d.district,'Unassigned') AS district, r.respondent,
             ro.name AS respondent_name, ro.team, r.answers, r.status, r.submitted_at, r.updated_at
        FROM survey_responses r
        JOIN survey_question_sets q ON q.id = r.question_set_id

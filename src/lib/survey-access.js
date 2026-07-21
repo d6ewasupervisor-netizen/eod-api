@@ -281,10 +281,14 @@ async function listAccessibleStoresDetailed(surveyUser, kompassRoles = []) {
     [storeNums]
   );
   const { rows: mine } = await pool.query(
-    `SELECT r.store_num, r.status, r.updated_at, r.submitted_at
+    `SELECT DISTINCT ON (r.store_num)
+            r.store_num, r.status, r.updated_at, r.submitted_at
        FROM survey_responses r
        JOIN survey_question_sets q ON q.id = r.question_set_id AND q.active = TRUE
-      WHERE r.respondent = $1 AND r.store_num = ANY($2::int[])`,
+      WHERE r.respondent = $1 AND r.store_num = ANY($2::int[])
+      ORDER BY r.store_num,
+               CASE WHEN r.status = 'draft' THEN 0 ELSE 1 END,
+               r.updated_at DESC NULLS LAST`,
     [surveyUser.email, storeNums]
   );
   const byStore = new Map(mine.map((m) => [Number(m.store_num), m]));
@@ -347,13 +351,14 @@ async function buildCommonAnswers() {
     m.set(key, (m.get(key) || 0) + 1);
   };
 
-  // Live responses (draft + submitted) for active question set
+  // Each submitted response counts separately (retakes append, never overwrite).
   try {
     const { rows } = await pool.query(
       `SELECT r.answers
          FROM survey_responses r
          JOIN survey_question_sets q ON q.id = r.question_set_id AND q.active = TRUE
-        ORDER BY r.updated_at DESC NULLS LAST
+        WHERE r.status = 'submitted'
+        ORDER BY r.submitted_at DESC NULLS LAST
         LIMIT 2500`
     );
     for (const row of rows) {

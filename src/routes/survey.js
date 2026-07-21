@@ -32,10 +32,16 @@ router.get('/me', async (req, res, next) => {
       listCatalogTeams(),
       buildSuggestions(req.surveyUser, { kompassRoles: roles }),
       pool.query(
-        `SELECT r.store_num, r.status, r.updated_at, r.submitted_at
+        // Prefer open draft; otherwise latest submitted. Count all submissions for the badge.
+        `SELECT DISTINCT ON (r.store_num)
+                r.store_num, r.status, r.updated_at, r.submitted_at,
+                COUNT(*) FILTER (WHERE r.status = 'submitted') OVER (PARTITION BY r.store_num) AS submission_count
            FROM survey_responses r
            JOIN survey_question_sets q ON q.id = r.question_set_id AND q.active = TRUE
-          WHERE r.respondent = $1`,
+          WHERE r.respondent = $1
+          ORDER BY r.store_num,
+                   CASE WHEN r.status = 'draft' THEN 0 ELSE 1 END,
+                   r.updated_at DESC NULLS LAST`,
         [req.surveyUser.email]
       ),
     ]);
@@ -55,6 +61,7 @@ router.get('/me', async (req, res, next) => {
         status: st?.status || null,
         updatedAt: st?.updated_at || null,
         submittedAt: st?.submitted_at || null,
+        submissionCount: st ? Number(st.submission_count) || 0 : 0,
       };
     });
     res.json({
@@ -112,8 +119,20 @@ router.get('/stores/:storeNum/context', async (req, res, next) => {
       `SELECT r.id, r.answers, r.photos, r.status, r.submitted_at, r.updated_at, r.question_set_id
          FROM survey_responses r
          JOIN survey_question_sets q ON q.id = r.question_set_id AND q.active = TRUE
-        WHERE r.store_num = $1 AND r.respondent = $2`,
+        WHERE r.store_num = $1 AND r.respondent = $2
+        ORDER BY CASE WHEN r.status = 'draft' THEN 0 ELSE 1 END,
+                 r.updated_at DESC NULLS LAST`,
       [storeNum, req.surveyUser.email]
+    );
+    const draft = mine.rows.find((r) => r.status === 'draft') || null;
+    const submissions = mine.rows.filter((r) => r.status === 'submitted');
+    const myResponse = draft || submissions[0] || null;
+    const storeSubs = await pool.query(
+      `SELECT COUNT(*)::int AS n
+         FROM survey_responses r
+         JOIN survey_question_sets q ON q.id = r.question_set_id AND q.active = TRUE
+        WHERE r.store_num = $1 AND r.status = 'submitted'`,
+      [storeNum]
     );
     const history = await pool.query(
       `SELECT id, answers, status, snapshot_at, source
@@ -134,7 +153,15 @@ router.get('/stores/:storeNum/context', async (req, res, next) => {
     res.json({
       ok: true,
       baseline: baseline.rows,
-      myResponse: mine.rows[0] || null,
+      myResponse,
+      mySubmissions: submissions.map((r) => ({
+        id: r.id,
+        status: r.status,
+        submittedAt: r.submitted_at,
+        updatedAt: r.updated_at,
+      })),
+      storeSubmissionCount: storeSubs.rows[0]?.n || 0,
+      locked: !!(myResponse && myResponse.status === 'submitted'),
       history: history.rows,
       store: {
         storeNum,
@@ -146,7 +173,7 @@ router.get('/stores/:storeNum/context', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-/** Live upsert with history archive when answers change. */
+/** Save draft / submit. Submitted rows are immutable; retake opens a new draft row. */
 router.put('/stores/:storeNum/response', async (req, res, next) => {
   const client = await pool.connect();
   try {
@@ -166,39 +193,114 @@ router.put('/stores/:storeNum/response', async (req, res, next) => {
     const status = submit ? 'submitted' : 'draft';
 
     await client.query('BEGIN');
-    const existing = await client.query(
+    const draftRes = await client.query(
       `SELECT id, question_set_id, store_num, respondent, answers, photos, status
          FROM survey_responses
-        WHERE question_set_id = $1 AND store_num = $2 AND respondent = $3
+        WHERE question_set_id = $1 AND store_num = $2 AND respondent = $3 AND status = 'draft'
         FOR UPDATE`,
       [qid, storeNum, req.surveyUser.email]
     );
-    const prev = existing.rows[0];
+    let prev = draftRes.rows[0] || null;
+
+    if (!prev) {
+      const locked = await client.query(
+        `SELECT 1 FROM survey_responses
+          WHERE question_set_id = $1 AND store_num = $2 AND respondent = $3 AND status = 'submitted'
+          LIMIT 1`,
+        [qid, storeNum, req.surveyUser.email]
+      );
+      if (locked.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          ok: false,
+          locked: true,
+          error: 'Prior submission is locked. Retake the survey to add a new response.',
+        });
+      }
+    }
+
     if (prev) {
       const prevJson = JSON.stringify(prev.answers || {});
       const nextJson = JSON.stringify(answers);
       if (prevJson !== nextJson || prev.status !== status) {
         await archiveResponseSnapshot(client, prev, submit ? 'submit' : 'save');
       }
+      const { rows } = await client.query(
+        `UPDATE survey_responses
+            SET answers = $2::jsonb,
+                photos = $3::jsonb,
+                status = $4,
+                submitted_at = CASE WHEN $4 = 'submitted' THEN now() ELSE submitted_at END,
+                updated_at = now()
+          WHERE id = $1
+        RETURNING id, status, submitted_at, updated_at`,
+        [prev.id, JSON.stringify(answers), JSON.stringify(photos), status]
+      );
+      await client.query('COMMIT');
+      return res.json({ ok: true, response: rows[0], locked: status === 'submitted' });
     }
 
     const { rows } = await client.query(
       `INSERT INTO survey_responses (question_set_id, store_num, respondent, answers, photos, status, submitted_at, updated_at)
        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, CASE WHEN $6 = 'submitted' THEN now() END, now())
-       ON CONFLICT (question_set_id, store_num, respondent) DO UPDATE
-         SET answers = EXCLUDED.answers,
-             photos = EXCLUDED.photos,
-             status = EXCLUDED.status,
-             submitted_at = CASE
-               WHEN EXCLUDED.status = 'submitted' THEN now()
-               ELSE survey_responses.submitted_at
-             END,
-             updated_at = now()
        RETURNING id, status, submitted_at, updated_at`,
       [qid, storeNum, req.surveyUser.email, JSON.stringify(answers), JSON.stringify(photos), status]
     );
     await client.query('COMMIT');
-    res.json({ ok: true, response: rows[0] });
+    res.json({ ok: true, response: rows[0], locked: status === 'submitted' });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    next(e);
+  } finally {
+    client.release();
+  }
+});
+
+/** Open a new empty draft. Prior submitted rows stay intact and keep counting in aggregates. */
+router.post('/stores/:storeNum/retake', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const storeNum = Number(req.params.storeNum);
+    if (!(await userHasStoreAccess(req.surveyUser, req.user.roles, storeNum))) {
+      return res.status(403).json({ ok: false, error: 'Unknown store' });
+    }
+    const qs = await client.query(
+      'SELECT id FROM survey_question_sets WHERE active = TRUE ORDER BY version DESC LIMIT 1'
+    );
+    if (!qs.rows.length) return res.status(409).json({ ok: false, error: 'No active question set' });
+    const qid = qs.rows[0].id;
+
+    await client.query('BEGIN');
+    const draftRes = await client.query(
+      `SELECT id, status, submitted_at, updated_at FROM survey_responses
+        WHERE question_set_id = $1 AND store_num = $2 AND respondent = $3 AND status = 'draft'
+        FOR UPDATE`,
+      [qid, storeNum, req.surveyUser.email]
+    );
+    if (draftRes.rows[0]) {
+      await client.query('COMMIT');
+      return res.json({ ok: true, response: draftRes.rows[0], locked: false, alreadyOpen: true });
+    }
+
+    const submitted = await client.query(
+      `SELECT id FROM survey_responses
+        WHERE question_set_id = $1 AND store_num = $2 AND respondent = $3 AND status = 'submitted'
+        LIMIT 1`,
+      [qid, storeNum, req.surveyUser.email]
+    );
+    if (!submitted.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ ok: false, error: 'Submit at least once before retaking' });
+    }
+
+    const { rows } = await client.query(
+      `INSERT INTO survey_responses (question_set_id, store_num, respondent, answers, photos, status, updated_at)
+       VALUES ($1, $2, $3, '{}'::jsonb, '[]'::jsonb, 'draft', now())
+       RETURNING id, status, submitted_at, updated_at`,
+      [qid, storeNum, req.surveyUser.email]
+    );
+    await client.query('COMMIT');
+    res.json({ ok: true, response: rows[0], locked: false });
   } catch (e) {
     try { await client.query('ROLLBACK'); } catch (_) {}
     next(e);
@@ -234,11 +336,11 @@ router.get('/responses', requireSurveyRole('supervisor'), async (req, res, next)
     }
     if (!stores.length) return res.json({ ok: true, responses: [] });
     const { rows } = await pool.query(
-      `SELECT r.store_num, r.respondent, ro.name AS respondent_name, r.answers, r.photos, r.status, r.submitted_at
+      `SELECT r.id, r.store_num, r.respondent, ro.name AS respondent_name, r.answers, r.photos, r.status, r.submitted_at
          FROM survey_responses r
          JOIN survey_question_sets q ON q.id = r.question_set_id AND q.active = TRUE
          JOIN survey_roster ro ON ro.email = r.respondent
-        WHERE r.store_num = ANY($1::int[])
+        WHERE r.store_num = ANY($1::int[]) AND r.status = 'submitted'
         ORDER BY r.store_num, r.submitted_at DESC NULLS LAST`,
       [stores]
     );
@@ -248,11 +350,40 @@ router.get('/responses', requireSurveyRole('supervisor'), async (req, res, next)
 
 const photoJson = express.json({ limit: '8mb' });
 
+async function respondentHasOpenDraft(storeNum, email) {
+  const { rows } = await pool.query(
+    `SELECT 1
+       FROM survey_responses r
+       JOIN survey_question_sets q ON q.id = r.question_set_id AND q.active = TRUE
+      WHERE r.store_num = $1 AND r.respondent = $2 AND r.status = 'draft'
+      LIMIT 1`,
+    [storeNum, email]
+  );
+  if (rows.length) return true;
+  // First-time takers (no rows yet) may still attach photos while drafting.
+  const any = await pool.query(
+    `SELECT 1
+       FROM survey_responses r
+       JOIN survey_question_sets q ON q.id = r.question_set_id AND q.active = TRUE
+      WHERE r.store_num = $1 AND r.respondent = $2
+      LIMIT 1`,
+    [storeNum, email]
+  );
+  return !any.rows.length;
+}
+
 router.post('/stores/:storeNum/photos', photoJson, async (req, res, next) => {
   try {
     const storeNum = Number(req.params.storeNum);
     if (!(await userHasStoreAccess(req.surveyUser, req.user.roles, storeNum))) {
       return res.status(403).json({ ok: false, error: 'Unknown store' });
+    }
+    if (!(await respondentHasOpenDraft(storeNum, req.surveyUser.email))) {
+      return res.status(409).json({
+        ok: false,
+        locked: true,
+        error: 'Submission locked. Retake to add photos on a new response.',
+      });
     }
     const { questionId, mime, data, caption } = req.body || {};
     if (!questionId || !mime || !data) return res.status(400).json({ ok: false, error: 'questionId, mime, data required' });
@@ -298,11 +429,22 @@ router.get('/photos/:id', async (req, res, next) => {
 
 router.delete('/photos/:id', async (req, res, next) => {
   try {
-    const { rowCount } = await pool.query(
-      'DELETE FROM survey_photos WHERE id = $1 AND respondent = $2',
+    const { rows } = await pool.query(
+      'SELECT id, store_num FROM survey_photos WHERE id = $1 AND respondent = $2',
       [Number(req.params.id), req.surveyUser.email]
     );
-    if (!rowCount) return res.status(404).json({ ok: false, error: 'Photo not found or not yours' });
+    if (!rows.length) return res.status(404).json({ ok: false, error: 'Photo not found or not yours' });
+    if (!(await respondentHasOpenDraft(rows[0].store_num, req.surveyUser.email))) {
+      return res.status(409).json({
+        ok: false,
+        locked: true,
+        error: 'Submission locked. Retake to change photos on a new response.',
+      });
+    }
+    await pool.query('DELETE FROM survey_photos WHERE id = $1 AND respondent = $2', [
+      Number(req.params.id),
+      req.surveyUser.email,
+    ]);
     res.json({ ok: true });
   } catch (e) { next(e); }
 });

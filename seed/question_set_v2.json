@@ -453,7 +453,7 @@
    "questions": [
     {
      "id": "Q42",
-     "text": "Are there any safety issues or consistent issues with anything or anyone at {{storeName}}?",
+     "text": "Are there any safety concerns or consistent issues with anything or anyone at {{storeName}}?",
      "type": "yesno",
      "detailOn": "Yes",
      "good": "No"
