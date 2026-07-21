@@ -467,6 +467,8 @@ async function start() {
   ];
   const PUBLIC_REGEXES = [
     /^\/api\/signoff-photos\/[^\/]+\/image\/?$/,
+    // Survey photo share links: short-lived? no — durable JWT (typ survey_photo) in ?t=
+    /^\/api\/survey\/photos\/\d+\/public\/?$/,
     // /status for store-confirm still requires auth (not under shift prefix alone)
   ];
   app.use((req, res, next) => {
@@ -494,6 +496,8 @@ async function start() {
   app.use('/api/trackers', createTrackersRouter({ pool }));
   app.use('/api/email-outbox', createEmailOutboxRouter({ pool, resend, resendSyncAccounts, logger }));
   app.use('/api/welcome-letter', createWelcomeLetterRouter({ resend, logger, pool }));
+  // Public survey photo links (JWT ?t=) — before gated /api/survey routers.
+  app.use('/api/survey/photos', require('./routes/survey-photo-public'));
   // Survey admin MUST mount before the general survey router so /api/survey/admin/*
   // is not captured by /api/survey (and so it uses requireRole('admin'), not roster ACL).
   app.use('/api/survey/admin', require('./routes/survey-admin'));

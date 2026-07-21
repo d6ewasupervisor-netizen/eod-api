@@ -18,6 +18,7 @@ const {
   photoFileName,
 } = require('../lib/survey-ops');
 const { sortDistricts } = require('../lib/survey-access');
+const { publicPhotoUrl, photoUrlTtlDays } = require('../lib/survey-photo-jwt');
 
 const router = express.Router();
 router.use(requireAuth, requireSurveyAdmin);
@@ -89,7 +90,7 @@ async function fetchResponses(filters) {
   }
   const { rows } = await pool.query(
     `SELECT r.id, r.store_num, d.store_name, COALESCE(d.district,'Unassigned') AS district, r.respondent,
-            ro.name AS respondent_name, ro.team, r.answers, r.status, r.submitted_at, r.updated_at
+            ro.name AS respondent_name, ro.team, r.answers, r.photos, r.status, r.submitted_at, r.updated_at
        FROM survey_responses r
        JOIN survey_question_sets q ON q.id = r.question_set_id
        JOIN survey_roster ro ON ro.email = r.respondent
@@ -99,6 +100,76 @@ async function fetchResponses(filters) {
     params
   );
   return rows;
+}
+
+/** Attach public no-login photo URLs (JWT) for admin viewer / exports. */
+async function withPhotoLinks(responses) {
+  if (!responses.length) return responses;
+  const ids = new Set();
+  for (const r of responses) {
+    const list = Array.isArray(r.photos) ? r.photos : [];
+    for (const p of list) {
+      const id = Number(p.id ?? p.photoId);
+      if (Number.isFinite(id)) ids.add(id);
+    }
+  }
+  // Fallback: photos for store+respondent not yet listed on the response row
+  const storeNums = [...new Set(responses.map((r) => Number(r.store_num)).filter(Number.isFinite))];
+  const emails = [...new Set(responses.map((r) => String(r.respondent || '').toLowerCase()).filter(Boolean))];
+  const { rows: dbPhotos } = await pool.query(
+    `SELECT id, store_num, respondent, question_id, mime, created_at
+       FROM survey_photos
+      WHERE store_num = ANY($1::int[])
+        AND lower(respondent) = ANY($2::text[])
+      ORDER BY id`,
+    [storeNums.length ? storeNums : [-1], emails.length ? emails : ['__none__']]
+  );
+  const byStoreResp = new Map();
+  const byId = new Map();
+  for (const p of dbPhotos) {
+    byId.set(Number(p.id), p);
+    ids.add(Number(p.id));
+    const k = `${Number(p.store_num)}|${String(p.respondent).toLowerCase()}`;
+    if (!byStoreResp.has(k)) byStoreResp.set(k, []);
+    byStoreResp.get(k).push(p);
+  }
+
+  return responses.map((r) => {
+    const listed = Array.isArray(r.photos) ? r.photos : [];
+    const listedIds = listed.map((p) => Number(p.id ?? p.photoId)).filter(Number.isFinite);
+    const k = `${Number(r.store_num)}|${String(r.respondent).toLowerCase()}`;
+    const fallback = byStoreResp.get(k) || [];
+    const useIds = listedIds.length
+      ? listedIds
+      : fallback.map((p) => Number(p.id));
+    const photos = useIds.map((id) => {
+      const meta = byId.get(id) || listed.find((p) => Number(p.id ?? p.photoId) === id) || {};
+      const questionId = meta.question_id || meta.questionId || null;
+      let url = null;
+      try {
+        url = publicPhotoUrl(id);
+      } catch (_) {
+        url = null;
+      }
+      return {
+        id,
+        questionId,
+        mime: meta.mime || null,
+        url,
+      };
+    }).filter((p) => p.url);
+    return { ...r, photos };
+  });
+}
+
+function photosByQuestion(photos) {
+  const map = new Map();
+  for (const p of photos || []) {
+    const qid = p.questionId || '_';
+    if (!map.has(qid)) map.set(qid, []);
+    if (p.url) map.get(qid).push(p.url);
+  }
+  return map;
 }
 
 function parseListParam(v) {
@@ -171,8 +242,34 @@ router.get('/summary', async (req, res, next) => {
 router.get('/responses', async (req, res, next) => {
   try {
     const filters = scopedFilters(req);
-    const responses = await fetchResponses(filters);
-    res.json({ ok: true, responses });
+    let responses = await fetchResponses(filters);
+    const wantPhotos = String(req.query.photos || '1') !== '0';
+    if (wantPhotos) responses = await withPhotoLinks(responses);
+    res.json({
+      ok: true,
+      responses,
+      photoLinkTtlDays: photoUrlTtlDays(),
+    });
+  } catch (e) { next(e); }
+});
+
+// ---- Single response for on-screen viewer
+router.get('/responses/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });
+    const filters = scopedFilters(req);
+    const all = await fetchResponses({ ...filters, status: filters.status || 'all' });
+    const row = all.find((r) => Number(r.id) === id);
+    if (!row) return res.status(404).json({ ok: false, error: 'Response not found in your scope' });
+    const [enriched] = await withPhotoLinks([row]);
+    const qs = await activeQuestionSet();
+    res.json({
+      ok: true,
+      response: enriched,
+      questionSet: qs ? { id: qs.id, version: qs.version, spec: qs.spec } : null,
+      photoLinkTtlDays: photoUrlTtlDays(),
+    });
   } catch (e) { next(e); }
 });
 
@@ -240,18 +337,27 @@ router.get('/export.csv', async (req, res, next) => {
     const qids = parseListParam(req.query.questions);
     const cols = qids ? questions.filter(q => qids.includes(q.id)) : questions.filter(q => q.type !== undefined);
     const filters = scopedFilters(req);
-    const responses = await fetchResponses(filters);
+    const includePhotoLinks = String(req.query.photoLinks || '1') !== '0';
+    let responses = await fetchResponses(filters);
+    if (includePhotoLinks) responses = await withPhotoLinks(responses);
     const esc = v => {
       const s = v == null ? '' : (Array.isArray(v) ? v.join('; ') : String(v));
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
-    // Comment / detail columns when any row has them (matches taker Yes → name fields)
+    // Comment / detail / photo columns when any row has them
     const hasComment = new Set();
     const hasDetail = new Set();
+    const hasPhotos = new Set();
     for (const r of responses) {
       for (const c of cols) {
         if (r.answers[c.id + '_c']) hasComment.add(c.id);
         if (r.answers[c.id + '_d']) hasDetail.add(c.id);
+      }
+      if (includePhotoLinks) {
+        const byQ = photosByQuestion(r.photos);
+        for (const qid of byQ.keys()) {
+          if (qid !== '_') hasPhotos.add(qid);
+        }
       }
     }
     const header = [
@@ -263,9 +369,13 @@ router.get('/export.csv', async (req, res, next) => {
       header.push(`${c.id} ${String(c.text || '').split('{{storeName}}').join('store')}`);
       if (hasDetail.has(c.id)) header.push(`${c.id} detail`);
       if (hasComment.has(c.id)) header.push(`${c.id} comment`);
+      if (hasPhotos.has(c.id)) header.push(`${c.id} photo_urls`);
     }
+    if (includePhotoLinks) header.push('all_photo_urls');
     const lines = [header.map(esc).join(',')];
     for (const r of responses) {
+      const byQ = photosByQuestion(r.photos);
+      const allUrls = (r.photos || []).map((p) => p.url).filter(Boolean);
       const row = [
         r.id,
         r.store_num,
@@ -281,11 +391,16 @@ router.get('/export.csv', async (req, res, next) => {
         row.push(r.answers[c.id]);
         if (hasDetail.has(c.id)) row.push(r.answers[c.id + '_d']);
         if (hasComment.has(c.id)) row.push(r.answers[c.id + '_c']);
+        if (hasPhotos.has(c.id)) row.push((byQ.get(c.id) || []).join(' | '));
       }
+      if (includePhotoLinks) row.push(allUrls.join(' | '));
       lines.push(row.map(esc).join(','));
     }
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="survey-export-${new Date().toISOString().slice(0, 10)}.csv"`);
+    if (includePhotoLinks) {
+      res.setHeader('X-Survey-Photo-Link-TTL-Days', String(photoUrlTtlDays()));
+    }
     res.send(lines.join('\r\n'));
   } catch (e) { next(e); }
 });
