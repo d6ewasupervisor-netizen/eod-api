@@ -1,0 +1,42 @@
+---
+description: >-
+  Whenever any Cursor skill is created, updated, modified, enhanced, or changed,
+  write a versioned backup + DIFF under OneDrive/Skills Backup. Always apply.
+alwaysApply: true
+---
+
+# Skills backup versioning (mandatory)
+
+## Hard rule
+
+**Every time** a skill is created, updated, modified, enhanced, moved, renamed,
+or otherwise changed — in `~/.cursor/skills`, any repo `.cursor/skills`, or while
+following `create-skill` — you MUST also write a versioned backup under:
+
+`C:\Users\tgaut\OneDrive\Skills Backup`
+
+## How
+
+```bat
+node "C:\Users\tgaut\OneDrive\Skills Backup\_tools\backup-skills.js" --only-changed
+```
+
+Or for one skill:
+
+```bat
+node "C:\Users\tgaut\OneDrive\Skills Backup\_tools\backup-skills.js" --skill <skill-name>
+```
+
+## Layout reminder
+
+- `<skill>/base/` = original snapshot (do not overwrite lightly)
+- `<skill>/mods/<UTC-timestamp>/` = later full snapshot + `DIFF.patch` vs previous
+- `<skill>/LATEST.txt` = path to newest snapshot (may be several layers deep under `mods/`)
+
+Read `C:\Users\tgaut\OneDrive\Skills Backup\README.md` for revert instructions.
+
+## Do not skip
+
+- Applies to **past** skills (initial backup) and **all future** skill changes.
+- Applies to personal skills and project-mirrored skills.
+- Do not commit secrets into backups; skills should not contain tokens.
