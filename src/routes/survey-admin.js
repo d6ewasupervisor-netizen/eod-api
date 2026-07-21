@@ -156,11 +156,11 @@ router.get('/filters', async (req, res, next) => {
   try {
     const districts = await pool.query(`SELECT DISTINCT district FROM survey_store_districts ORDER BY 1`);
     const stores = await pool.query(
-      `SELECT a.store_num,
+      `SELECT d.store_num,
               COALESCE(d.district,'Unassigned') AS district,
               d.store_name
-         FROM (SELECT DISTINCT store_num FROM survey_store_access) a
-         LEFT JOIN survey_store_districts d ON d.store_num = a.store_num ORDER BY a.store_num`);
+         FROM survey_store_districts d
+        ORDER BY d.store_num`);
     const respondents = await pool.query(
       `SELECT email, name, role, team, district FROM survey_roster WHERE active = TRUE ORDER BY name`);
     res.json({ ok: true, districts: districts.rows.map(r => r.district), stores: stores.rows, respondents: respondents.rows });
@@ -186,22 +186,41 @@ router.get('/export.csv', async (req, res, next) => {
       const s = v == null ? '' : (Array.isArray(v) ? v.join('; ') : String(v));
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
-    // include a comment column for any question that has at least one comment in the data
+    // Comment / detail columns when any row has them (matches taker Yes → name fields)
     const hasComment = new Set();
-    for (const r of responses) for (const c of cols) if (r.answers[c.id + '_c']) hasComment.add(c.id);
-    const header = ['store', 'district', 'respondent', 'respondent_name', 'team', 'status', 'submitted_at'];
+    const hasDetail = new Set();
+    for (const r of responses) {
+      for (const c of cols) {
+        if (r.answers[c.id + '_c']) hasComment.add(c.id);
+        if (r.answers[c.id + '_d']) hasDetail.add(c.id);
+      }
+    }
+    const header = [
+      'id', 'store', 'store_name', 'district',
+      'respondent', 'respondent_name', 'team',
+      'status', 'submitted_at',
+    ];
     for (const c of cols) {
-      header.push(`${c.id} ${c.text}`);
+      header.push(`${c.id} ${String(c.text || '').split('{{storeName}}').join('store')}`);
+      if (hasDetail.has(c.id)) header.push(`${c.id} detail`);
       if (hasComment.has(c.id)) header.push(`${c.id} comment`);
     }
     const lines = [header.map(esc).join(',')];
     for (const r of responses) {
       const row = [
-        r.store_num, r.district, r.respondent, r.respondent_name, r.team || '', r.status,
+        r.id,
+        r.store_num,
+        r.store_name || '',
+        r.district,
+        r.respondent,
+        r.respondent_name,
+        r.team || '',
+        r.status,
         r.submitted_at ? new Date(r.submitted_at).toISOString() : '',
       ];
       for (const c of cols) {
         row.push(r.answers[c.id]);
+        if (hasDetail.has(c.id)) row.push(r.answers[c.id + '_d']);
         if (hasComment.has(c.id)) row.push(r.answers[c.id + '_c']);
       }
       lines.push(row.map(esc).join(','));
