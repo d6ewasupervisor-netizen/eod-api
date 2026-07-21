@@ -20,7 +20,7 @@
       {
        "when": "Yes",
        "id": "Q5a",
-       "text": "Does {{storeName}} put new items on it?",
+       "text": "Does {{storeName}} put new items on the Kompass cart?",
        "type": "yesno",
        "good": "Yes"
       },

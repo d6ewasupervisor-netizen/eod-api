@@ -39,7 +39,7 @@ qs = json.loads(qs_path.read_text(encoding="utf-8"))
 
 replacements = {
     "Q5": "Does {{storeName}} have a KOMPASS cart?",
-    "Q5a": "Does {{storeName}} put new items on it?",
+    "Q5a": "Does {{storeName}} put new items on the Kompass cart?",
     "Q5b": "Does {{storeName}} have an area for storing KOMPASS supplies, data skins, pushers, and reset materials?",
     "Q6": "Where at {{storeName}} is the cart or designated area located (if there is one)?",
     "Q7": "Does {{storeName}} have a KOMPASS Champion or reset captain?",
