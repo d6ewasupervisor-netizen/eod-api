@@ -1,14 +1,34 @@
 // Survey admin routes — mount BEFORE the general survey router:
 //   app.use('/api/survey/admin', require('./routes/survey-admin'));
 //   app.use('/api/survey', require('./routes/survey'));
-// Gated by existing Kompass role stack: requireAuth + requireRole('admin').
-// Read-only over survey data except survey_admin_views (per-admin saved layouts).
+// Gated by survey ops ACL: supervisors (district), managers/directors/master (division).
 const express = require('express');
-const { requireAuth, requireRole } = require('../auth-middleware');
+const archiver = require('archiver');
+const { requireAuth } = require('../auth-middleware');
 const { pool } = require('../lib/db');
+const {
+  requireSurveyAdmin,
+  applyScopeToFilters,
+  buildCoverage,
+  searchRoster,
+  listTeams,
+  createAssignments,
+  getAlertPrefs,
+  upsertAlertPrefs,
+  photoFileName,
+} = require('../lib/survey-ops');
 
 const router = express.Router();
-router.use(requireAuth, requireRole('admin'));
+router.use(requireAuth, requireSurveyAdmin);
+
+function scopedFilters(req) {
+  return applyScopeToFilters(req.surveyAdminScope, {
+    districts: parseListParam(req.query.districts),
+    stores: parseListParam(req.query.stores),
+    respondents: parseListParam(req.query.respondents),
+    status: req.query.status,
+  });
+}
 
 async function activeQuestionSet() {
   const { rows } = await pool.query(
@@ -77,12 +97,7 @@ router.get('/summary', async (req, res, next) => {
     const qs = await activeQuestionSet();
     if (!qs) return res.status(404).json({ ok: false, error: 'No active question set' });
     const questions = flattenQuestions(qs.spec);
-    const filters = {
-      districts: parseListParam(req.query.districts),
-      stores: parseListParam(req.query.stores),
-      respondents: parseListParam(req.query.respondents),
-      status: req.query.status,
-    };
+    const filters = scopedFilters(req);
     const responses = await fetchResponses(filters);
 
     const agg = {};
@@ -140,12 +155,7 @@ router.get('/summary', async (req, res, next) => {
 // ---- Filterable flat data for the client-side pivot/rearrange UI
 router.get('/responses', async (req, res, next) => {
   try {
-    const filters = {
-      districts: parseListParam(req.query.districts),
-      stores: parseListParam(req.query.stores),
-      respondents: parseListParam(req.query.respondents),
-      status: req.query.status,
-    };
+    const filters = scopedFilters(req);
     const responses = await fetchResponses(filters);
     res.json({ ok: true, responses });
   } catch (e) { next(e); }
@@ -154,16 +164,50 @@ router.get('/responses', async (req, res, next) => {
 // ---- Filter option lists
 router.get('/filters', async (req, res, next) => {
   try {
-    const districts = await pool.query(`SELECT DISTINCT district FROM survey_store_districts ORDER BY 1`);
-    const stores = await pool.query(
-      `SELECT d.store_num,
-              COALESCE(d.district,'Unassigned') AS district,
-              d.store_name
-         FROM survey_store_districts d
-        ORDER BY d.store_num`);
-    const respondents = await pool.query(
-      `SELECT email, name, role, team, district FROM survey_roster WHERE active = TRUE ORDER BY name`);
-    res.json({ ok: true, districts: districts.rows.map(r => r.district), stores: stores.rows, respondents: respondents.rows });
+    const scope = req.surveyAdminScope;
+    let districtSql = `SELECT DISTINCT district FROM survey_store_districts ORDER BY 1`;
+    let districtParams = [];
+    let storeSql = `SELECT d.store_num, COALESCE(d.district,'Unassigned') AS district, d.store_name
+                      FROM survey_store_districts d ORDER BY d.store_num`;
+    let storeParams = [];
+    if (scope?.level === 'district' && scope.storeNums?.length) {
+      storeSql = `SELECT d.store_num, COALESCE(d.district,'Unassigned') AS district, d.store_name
+                    FROM survey_store_districts d
+                   WHERE d.store_num = ANY($1::int[])
+                   ORDER BY d.store_num`;
+      storeParams = [scope.storeNums];
+      districtSql = `SELECT DISTINCT district FROM survey_store_districts
+                      WHERE store_num = ANY($1::int[]) ORDER BY 1`;
+      districtParams = [scope.storeNums];
+    } else if (scope?.level === 'district' && scope.districts?.length) {
+      districtSql = `SELECT DISTINCT district FROM survey_store_districts
+                      WHERE district = ANY($1::text[]) ORDER BY 1`;
+      districtParams = [scope.districts];
+      storeSql = `SELECT d.store_num, COALESCE(d.district,'Unassigned') AS district, d.store_name
+                    FROM survey_store_districts d
+                   WHERE d.district = ANY($1::text[])
+                   ORDER BY d.store_num`;
+      storeParams = [scope.districts];
+    }
+    const [districts, stores, teams] = await Promise.all([
+      pool.query(districtSql, districtParams),
+      pool.query(storeSql, storeParams),
+      listTeams(),
+    ]);
+    res.json({
+      ok: true,
+      scope,
+      districts: districts.rows.map((r) => r.district),
+      stores: stores.rows,
+      teams,
+      user: {
+        email: req.surveyUser.email,
+        name: req.surveyUser.name,
+        role: req.surveyUser.role,
+        title: req.surveyUser.title,
+        district: req.surveyUser.district,
+      },
+    });
   } catch (e) { next(e); }
 });
 
@@ -175,12 +219,7 @@ router.get('/export.csv', async (req, res, next) => {
     const questions = flattenQuestions(qs.spec);
     const qids = parseListParam(req.query.questions);
     const cols = qids ? questions.filter(q => qids.includes(q.id)) : questions.filter(q => q.type !== undefined);
-    const filters = {
-      districts: parseListParam(req.query.districts),
-      stores: parseListParam(req.query.stores),
-      respondents: parseListParam(req.query.respondents),
-      status: req.query.status,
-    };
+    const filters = scopedFilters(req);
     const responses = await fetchResponses(filters);
     const esc = v => {
       const s = v == null ? '' : (Array.isArray(v) ? v.join('; ') : String(v));
@@ -263,6 +302,230 @@ router.delete('/views/:name', async (req, res, next) => {
     await pool.query('DELETE FROM survey_admin_views WHERE email = $1 AND name = $2',
       [req.user.email.toLowerCase(), String(req.params.name)]);
     res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// ---- Access / coverage / assignments / alerts / photo zip
+
+router.get('/access', async (req, res) => {
+  res.json({
+    ok: true,
+    scope: req.surveyAdminScope,
+    user: {
+      email: req.surveyUser.email,
+      name: req.surveyUser.name,
+      role: req.surveyUser.role,
+      title: req.surveyUser.title,
+      district: req.surveyUser.district,
+    },
+  });
+});
+
+router.get('/coverage', async (req, res, next) => {
+  try {
+    const coverage = await buildCoverage(req.surveyAdminScope);
+    res.json({ ok: true, scope: req.surveyAdminScope, ...coverage });
+  } catch (e) { next(e); }
+});
+
+router.get('/roster-search', async (req, res, next) => {
+  try {
+    const people = await searchRoster({
+      q: req.query.q || '',
+      team: req.query.team || null,
+      role: req.query.role || null,
+      limit: req.query.limit || 25,
+    });
+    res.json({ ok: true, people });
+  } catch (e) { next(e); }
+});
+
+router.post('/assignments', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    let storeNums = Array.isArray(body.storeNums) ? body.storeNums.map(Number) : [];
+    const assigneeEmails = Array.isArray(body.assigneeEmails) ? body.assigneeEmails : [];
+    const team = body.team || null;
+    const role = body.role || null;
+
+    // Resolve team/role bulk → emails
+    let emails = [...assigneeEmails];
+    if (team || (role && !emails.length)) {
+      const people = await searchRoster({ team, role, limit: 200, q: '' });
+      emails = [...new Set([...emails, ...people.map((p) => p.email)])];
+    }
+
+    // Scope guard stores
+    const scope = req.surveyAdminScope;
+    if (scope?.level === 'district' && scope.storeNums?.length) {
+      const allowed = new Set(scope.storeNums.map(Number));
+      storeNums = storeNums.filter((n) => allowed.has(Number(n)));
+    }
+
+    const result = await createAssignments({
+      assigneeEmails: emails,
+      storeNums,
+      assignedBy: req.surveyUser.email,
+      dueAt: body.dueAt || null,
+      notes: body.notes || null,
+      scopeLabel: body.scopeLabel || (team ? `Team ${team}` : null),
+      remindDaysBefore: body.remindDaysBefore == null ? 1 : Number(body.remindDaysBefore),
+      sendInvites: body.sendInvites !== false,
+    });
+    res.json({
+      ok: true,
+      created: result.created.length,
+      inviteResults: result.inviteResults,
+      assignments: result.created,
+    });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ ok: false, error: e.message });
+    next(e);
+  }
+});
+
+router.post('/assignments/bulk-from-access', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const storeNumsIn = Array.isArray(body.storeNums) ? body.storeNums.map(Number) : [];
+    let storeNums = storeNumsIn;
+    const scope = req.surveyAdminScope;
+    if (scope?.level === 'district' && scope.storeNums?.length) {
+      const allowed = new Set(scope.storeNums.map(Number));
+      storeNums = storeNums.length
+        ? storeNums.filter((n) => allowed.has(n))
+        : [...allowed];
+    } else if (!storeNums.length) {
+      const cov = await buildCoverage(scope);
+      storeNums = cov.stores.filter((s) => s.state === 'needs_assign').map((s) => s.storeNum);
+    }
+
+    const { rows } = await pool.query(
+      `SELECT sa.email, sa.store_num, ro.name, ro.role, ro.team
+         FROM survey_store_access sa
+         JOIN survey_roster ro ON ro.email = sa.email AND ro.active = TRUE
+        WHERE sa.store_num = ANY($1::int[])
+          AND ro.role IN ('lead', 'member', 'supervisor')
+        ORDER BY sa.store_num, CASE ro.role WHEN 'lead' THEN 0 WHEN 'member' THEN 1 ELSE 2 END`,
+      [storeNums]
+    );
+
+    // Prefer one lead per store when available; else first member
+    const pick = new Map();
+    for (const r of rows) {
+      const sn = Number(r.store_num);
+      if (!pick.has(sn)) pick.set(sn, r);
+      else if (pick.get(sn).role !== 'lead' && r.role === 'lead') pick.set(sn, r);
+    }
+
+    const createdAll = [];
+    const inviteAll = [];
+    for (const [storeNum, person] of pick) {
+      const result = await createAssignments({
+        assigneeEmails: [person.email],
+        storeNums: [storeNum],
+        assignedBy: req.surveyUser.email,
+        dueAt: body.dueAt || null,
+        notes: body.notes || 'Bulk from store access',
+        scopeLabel: 'Bulk store access',
+        remindDaysBefore: body.remindDaysBefore == null ? 1 : Number(body.remindDaysBefore),
+        sendInvites: body.sendInvites !== false,
+      });
+      createdAll.push(...result.created);
+      inviteAll.push(...result.inviteResults);
+    }
+    res.json({
+      ok: true,
+      created: createdAll.length,
+      storesCovered: pick.size,
+      inviteResults: inviteAll,
+    });
+  } catch (e) { next(e); }
+});
+
+router.patch('/assignments/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const status = req.body?.status;
+    if (!['open', 'done', 'cancelled'].includes(status)) {
+      return res.status(400).json({ ok: false, error: 'status must be open|done|cancelled' });
+    }
+    const { rows } = await pool.query(
+      `UPDATE survey_assignments SET status = $2, updated_at = now()
+        WHERE id = $1 RETURNING *`,
+      [id, status]
+    );
+    if (!rows.length) return res.status(404).json({ ok: false, error: 'Not found' });
+    res.json({ ok: true, assignment: rows[0] });
+  } catch (e) { next(e); }
+});
+
+router.get('/alerts', async (req, res, next) => {
+  try {
+    const prefs = await getAlertPrefs(req.surveyUser.email);
+    res.json({ ok: true, prefs });
+  } catch (e) { next(e); }
+});
+
+router.put('/alerts', async (req, res, next) => {
+  try {
+    const prefs = await upsertAlertPrefs(req.surveyUser.email, req.body || {});
+    res.json({ ok: true, prefs });
+  } catch (e) { next(e); }
+});
+
+router.get('/photos.zip', async (req, res, next) => {
+  try {
+    const filters = scopedFilters(req);
+    const responses = await fetchResponses(filters);
+    const storeNums = [...new Set(responses.map((r) => Number(r.store_num)))];
+    if (!storeNums.length) {
+      return res.status(404).json({ ok: false, error: 'No matching responses / stores for photo export' });
+    }
+
+    const respondentFilter = filters.respondents && filters.respondents.length
+      ? filters.respondents.map((e) => String(e).toLowerCase())
+      : null;
+
+    const params = [storeNums];
+    let sql = `SELECT p.id, p.store_num, p.respondent, p.question_id, p.mime, p.bytes, d.store_name
+                 FROM survey_photos p
+                 LEFT JOIN survey_store_districts d ON d.store_num = p.store_num
+                WHERE p.store_num = ANY($1::int[])`;
+    if (respondentFilter) {
+      params.push(respondentFilter);
+      sql += ` AND lower(p.respondent) = ANY($${params.length}::text[])`;
+    }
+    sql += ' ORDER BY p.store_num, p.question_id, p.id';
+
+    const { rows: photos } = await pool.query(sql, params);
+    if (!photos.length) {
+      return res.status(404).json({ ok: false, error: 'No photos found for the current filters' });
+    }
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="survey-photos-${stamp}.zip"`);
+
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.on('error', (err) => next(err));
+    archive.pipe(res);
+
+    const used = new Set();
+    for (const p of photos) {
+      let name = photoFileName({
+        storeNum: p.store_num,
+        storeName: p.store_name,
+        questionId: p.question_id,
+        respondent: p.respondent,
+        photoId: p.id,
+        mime: p.mime,
+      });
+      if (used.has(name)) name = name.replace(/(\.\w+)$/, `_${p.id}$1`);
+      used.add(name);
+      archive.append(p.bytes, { name: `FM${p.store_num}/${name}` });
+    }
+    await archive.finalize();
   } catch (e) { next(e); }
 });
 

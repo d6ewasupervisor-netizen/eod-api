@@ -247,6 +247,16 @@ router.put('/stores/:storeNum/response', async (req, res, next) => {
       [qid, storeNum, req.surveyUser.email, JSON.stringify(answers), JSON.stringify(photos), status]
     );
     await client.query('COMMIT');
+    if (status === 'submitted') {
+      try {
+        await pool.query(
+          `UPDATE survey_assignments
+              SET status = 'done', updated_at = now()
+            WHERE store_num = $1 AND lower(assignee_email) = lower($2) AND status = 'open'`,
+          [storeNum, req.surveyUser.email]
+        );
+      } catch (_) { /* assignments table may not exist yet during rollout */ }
+    }
     res.json({ ok: true, response: rows[0], locked: status === 'submitted' });
   } catch (e) {
     try { await client.query('ROLLBACK'); } catch (_) {}

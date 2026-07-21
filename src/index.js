@@ -715,6 +715,20 @@ async function start() {
   });
   logger.info(`Hourly Resend API sync scheduled for email outbox across ${resendSyncAccounts.length} account(s) (America/Los_Angeles)`);
 
+  cron.schedule('20 * * * *', async () => {
+    try {
+      const { processDueReminders } = require('./lib/survey-ops');
+      const results = await processDueReminders();
+      const ok = results.filter((r) => r.ok).length;
+      if (results.length) logger.info(`Survey assignment reminders: ${ok}/${results.length} sent`);
+    } catch (err) {
+      logger.error('Survey assignment reminders failed:', err.message);
+    }
+  }, {
+    timezone: 'America/Los_Angeles',
+  });
+  logger.info('Survey assignment reminder cron scheduled hourly at :20 (America/Los_Angeles)');
+
   // ─── SAS AUTO-REFRESH CRON ─────────────────────────────────────────────────
   //
   // Re-mint the SAS session every 4 hours regardless of user activity.
