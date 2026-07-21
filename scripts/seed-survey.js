@@ -18,6 +18,12 @@ async function main() {
   const roster = load('seed_roster.json');
   const baseline = load('seed_baseline.json');
   const questionSet = load('question_set_v2.json');
+  let storeNames = {};
+  try {
+    storeNames = load('store_names.json').names || {};
+  } catch (_) {
+    storeNames = {};
+  }
 
   const client = await pool.connect();
   try {
@@ -43,14 +49,28 @@ async function main() {
     // 1b. Store districts (derived from team names; Traveling Team Seattle 2 = Kompass 8C / district 8)
     n = 0;
     for (const [store, district] of Object.entries(roster.store_districts || {})) {
+      const storeName = storeNames[String(store)] || storeNames[Number(store)] || null;
       await client.query(
-        `INSERT INTO survey_store_districts (store_num, district) VALUES ($1,$2)
-         ON CONFLICT (store_num) DO UPDATE SET district = EXCLUDED.district`,
-        [Number(store), district]
+        `INSERT INTO survey_store_districts (store_num, district, store_name) VALUES ($1,$2,$3)
+         ON CONFLICT (store_num) DO UPDATE SET
+           district = EXCLUDED.district,
+           store_name = COALESCE(EXCLUDED.store_name, survey_store_districts.store_name)`,
+        [Number(store), district, storeName]
       );
       n++;
     }
     console.log(`store districts: ${n}`);
+
+    // 1c. Store names from FM name/number list (overlay; do not invent missing districts)
+    n = 0;
+    for (const [store, name] of Object.entries(storeNames)) {
+      const { rowCount } = await client.query(
+        `UPDATE survey_store_districts SET store_name = $2 WHERE store_num = $1`,
+        [Number(store), name]
+      );
+      if (rowCount) n++;
+    }
+    console.log(`store names applied: ${n}`);
 
     // 2. Store access
     n = 0;

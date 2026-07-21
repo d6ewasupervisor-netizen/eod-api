@@ -50,6 +50,7 @@ router.get('/me', async (req, res, next) => {
       return {
         storeNum: s.storeNum,
         district: s.district,
+        storeName: s.storeName || null,
         suggested: suggestedNums.has(s.storeNum),
         status: st?.status || null,
         updatedAt: st?.updated_at || null,
@@ -127,7 +128,7 @@ router.get('/stores/:storeNum/context', async (req, res, next) => {
       kompassRoles: req.user?.roles || [],
     });
     const { rows: districtRows } = await pool.query(
-      `SELECT district FROM survey_store_districts WHERE store_num = $1`,
+      `SELECT district, store_name FROM survey_store_districts WHERE store_num = $1`,
       [storeNum]
     );
     res.json({
@@ -138,6 +139,7 @@ router.get('/stores/:storeNum/context', async (req, res, next) => {
       store: {
         storeNum,
         district: districtRows[0]?.district || null,
+        storeName: districtRows[0]?.store_name || null,
       },
       suggestions,
     });

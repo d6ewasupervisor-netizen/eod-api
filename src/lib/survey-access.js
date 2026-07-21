@@ -182,35 +182,43 @@ async function listSuggestedStores(surveyUser) {
 
   const storeNums = today.assignments.map((a) => a.storeNum);
   const { rows } = await pool.query(
-    `SELECT store_num, COALESCE(district, 'Unassigned') AS district
+    `SELECT store_num,
+            COALESCE(district, 'Unassigned') AS district,
+            store_name
        FROM survey_store_districts
       WHERE store_num = ANY($1::int[])`,
     [storeNums]
   );
-  const dist = new Map(rows.map((r) => [Number(r.store_num), r.district]));
+  const byNum = new Map(rows.map((r) => [Number(r.store_num), r]));
   // Primary = first assignment (lead-preferred, then lowest store #)
-  return today.assignments.map((a) => ({
-    storeNum: a.storeNum,
-    district: dist.get(a.storeNum) || 'Unassigned',
-    suggested: true,
-    fromSchedule: true,
-    scheduleDate: today.date,
-    team: a.team || null,
-    role: a.role || null,
-  }));
+  return today.assignments.map((a) => {
+    const row = byNum.get(a.storeNum);
+    return {
+      storeNum: a.storeNum,
+      district: row?.district || 'Unassigned',
+      storeName: row?.store_name || null,
+      suggested: true,
+      fromSchedule: true,
+      scheduleDate: today.date,
+      team: a.team || null,
+      role: a.role || null,
+    };
+  });
 }
 
 /** Full division catalog for dropdowns (any roster user may pick any store). */
 async function listCatalogStores() {
   const { rows } = await pool.query(
     `SELECT d.store_num,
-            d.district
+            d.district,
+            d.store_name
        FROM survey_store_districts d
       ORDER BY d.district, d.store_num`
   );
   return rows.map((r) => ({
     storeNum: Number(r.store_num),
     district: r.district,
+    storeName: r.store_name || null,
   }));
 }
 
@@ -264,7 +272,9 @@ async function listAccessibleStoresDetailed(surveyUser, kompassRoles = []) {
   const storeNums = await listAccessibleStores(surveyUser, kompassRoles);
   if (!storeNums.length) return [];
   const { rows } = await pool.query(
-    `SELECT store_num, COALESCE(district, 'Unassigned') AS district
+    `SELECT store_num,
+            COALESCE(district, 'Unassigned') AS district,
+            store_name
        FROM survey_store_districts
       WHERE store_num = ANY($1::int[])
       ORDER BY store_num`,
@@ -283,6 +293,7 @@ async function listAccessibleStoresDetailed(surveyUser, kompassRoles = []) {
     return {
       storeNum: Number(r.store_num),
       district: r.district,
+      storeName: r.store_name || null,
       status: st?.status || null,
       updatedAt: st?.updated_at || null,
       submittedAt: st?.submitted_at || null,

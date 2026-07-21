@@ -53,7 +53,7 @@ async function fetchResponses(filters) {
     params.push(filters.respondents.map(e => String(e).toLowerCase())); where.push(`r.respondent = ANY($${params.length}::text[])`);
   }
   const { rows } = await pool.query(
-    `SELECT r.store_num, COALESCE(d.district,'Unassigned') AS district, r.respondent,
+    `SELECT r.store_num, d.store_name, COALESCE(d.district,'Unassigned') AS district, r.respondent,
             ro.name AS respondent_name, ro.team, r.answers, r.status, r.submitted_at, r.updated_at
        FROM survey_responses r
        JOIN survey_question_sets q ON q.id = r.question_set_id
@@ -156,7 +156,9 @@ router.get('/filters', async (req, res, next) => {
   try {
     const districts = await pool.query(`SELECT DISTINCT district FROM survey_store_districts ORDER BY 1`);
     const stores = await pool.query(
-      `SELECT a.store_num, COALESCE(d.district,'Unassigned') AS district
+      `SELECT a.store_num,
+              COALESCE(d.district,'Unassigned') AS district,
+              d.store_name
          FROM (SELECT DISTINCT store_num FROM survey_store_access) a
          LEFT JOIN survey_store_districts d ON d.store_num = a.store_num ORDER BY a.store_num`);
     const respondents = await pool.query(

@@ -1,6 +1,6 @@
 {
  "version": 2,
- "title": "Division 701 \u2014 In-Store Best Practices Survey (v2)",
+ "title": "Division 701 — In-Store Best Practices Survey (v2)",
  "sections": [
   {
    "id": "A",
@@ -8,7 +8,7 @@
    "questions": [
     {
      "id": "Q5",
-     "text": "Does the store have a KOMPASS cart?",
+     "text": "Does {{storeName}} have a KOMPASS cart?",
      "type": "choice",
      "options": [
       "Yes",
@@ -20,7 +20,7 @@
       {
        "when": "Yes",
        "id": "Q5a",
-       "text": "Does the store put new items on it?",
+       "text": "Does {{storeName}} put new items on it?",
        "type": "yesno",
        "good": "Yes"
       },
@@ -30,7 +30,7 @@
         "Other"
        ],
        "id": "Q5b",
-       "text": "Does the store have an area for storing KOMPASS supplies, data skins, pushers, and reset materials?",
+       "text": "Does {{storeName}} have an area for storing KOMPASS supplies, data skins, pushers, and reset materials?",
        "type": "yesno",
        "good": "Yes"
       }
@@ -39,7 +39,7 @@
     },
     {
      "id": "Q6",
-     "text": "Where in the store is the cart or designated area located (if there is one)?",
+     "text": "Where at {{storeName}} is the cart or designated area located (if there is one)?",
      "type": "text",
      "photo": true,
      "placeholder": "Describe the location in enough detail that someone new could find it",
@@ -50,7 +50,7 @@
     },
     {
      "id": "Q7",
-     "text": "Does the store have a KOMPASS Champion or reset captain?",
+     "text": "Does {{storeName}} have a KOMPASS Champion or reset captain?",
      "type": "yesno",
      "branches": [
       {
@@ -82,25 +82,25 @@
    "questions": [
     {
      "id": "Q8",
-     "text": "Does the store have cleaning supplies available to use?",
+     "text": "Does {{storeName}} have cleaning supplies available to use?",
      "type": "yesno",
      "good": "Yes"
     },
     {
      "id": "Q9",
-     "text": "Does the store provide garbage/recycling bags?",
+     "text": "Does {{storeName}} provide garbage/recycling bags?",
      "type": "yesno",
      "good": "Yes"
     },
     {
      "id": "Q10",
-     "text": "Does the store supply easy access to step ladders and banana boxes?",
+     "text": "Does {{storeName}} supply easy access to step ladders and banana boxes?",
      "type": "yesno",
      "good": "Yes"
     },
     {
      "id": "Q11",
-     "text": "Is our team provided with adequate data skins/channel strips to replace broken or dirty ones?",
+     "text": "Is our team provided with adequate data skins/channel strips at {{storeName}} to replace broken or dirty ones?",
      "type": "yesno",
      "good": "Yes"
     }
@@ -112,7 +112,7 @@
    "questions": [
     {
      "id": "Q12",
-     "text": "Does the store have a designated staging area for new shelf-stable grocery items?",
+     "text": "Does {{storeName}} have a designated staging area for new shelf-stable grocery items?",
      "type": "yesno",
      "photo": true,
      "detailOn": "Yes",
@@ -129,7 +129,7 @@
     },
     {
      "id": "Q13",
-     "text": "Does the store have a designated staging area for refrigerated/frozen product?",
+     "text": "Does {{storeName}} have a designated staging area for refrigerated/frozen product?",
      "type": "yesno",
      "photo": true,
      "detailOn": "Yes",
@@ -146,7 +146,7 @@
     },
     {
      "id": "Q14",
-     "text": "Does the store have a designated staging area for natural foods items?",
+     "text": "Does {{storeName}} have a designated staging area for natural foods items?",
      "type": "yesno",
      "photo": true,
      "detailOn": "Yes",
@@ -163,7 +163,7 @@
     },
     {
      "id": "Q15",
-     "text": "Does the store have a designated staging area for HABA?",
+     "text": "Does {{storeName}} have a designated staging area for HABA?",
      "type": "yesno",
      "photo": true,
      "detailOn": "Yes",
@@ -180,7 +180,7 @@
     },
     {
      "id": "Q16",
-     "text": "Does the store have a designated staging area for produce?",
+     "text": "Does {{storeName}} have a designated staging area for produce?",
      "type": "yesno",
      "photo": true,
      "detailOn": "Yes",
@@ -203,25 +203,25 @@
    "questions": [
     {
      "id": "Q17",
-     "text": "Is our team notified if the Vestcom box has been delayed or otherwise unavailable?",
+     "text": "Is our team notified if the Vestcom box at {{storeName}} has been delayed or otherwise unavailable?",
      "type": "yesno",
      "good": "Yes"
     },
     {
      "id": "Q18",
-     "text": "Is our team informed if there are materials missing from the Vestcom box?",
+     "text": "Is our team informed if there are materials missing from the Vestcom box at {{storeName}}?",
      "type": "yesno",
      "good": "Yes"
     },
     {
      "id": "Q19",
-     "text": "Are our associates notified if the store has not received all shelf strips and POGs for an upcoming reset?",
+     "text": "Are our associates notified if {{storeName}} has not received all shelf strips and POGs for an upcoming reset?",
      "type": "yesno",
      "good": "Yes"
     },
     {
      "id": "Q20",
-     "text": "Where is the Vestcom box typically found at this store?",
+     "text": "Where is the Vestcom box typically found at {{storeName}}?",
      "type": "text",
      "photo": true,
      "placeholder": "Where do you usually find the Vestcom box?",
@@ -236,7 +236,7 @@
     },
     {
      "id": "Q21",
-     "text": "Where are the price tags typically found at this store?",
+     "text": "Where are the price tags typically found at {{storeName}}?",
      "type": "text",
      "photo": true,
      "placeholder": "Where do you usually find the price tags?",
@@ -256,7 +256,7 @@
     },
     {
      "id": "Q22",
-     "text": "Is there a regular issue with finding either the box or the tags at this store?",
+     "text": "Is there a regular issue with finding either the box or the tags at {{storeName}}?",
      "type": "yesno",
      "detailOn": "Yes",
      "detailPlaceholder": "Please explain / name",
@@ -264,7 +264,7 @@
     },
     {
      "id": "Q23",
-     "text": "Does the store separate strips and/or tags prior to us performing the resets?",
+     "text": "Does {{storeName}} separate strips and/or tags prior to us performing the resets?",
      "type": "yesno",
      "good": "Yes"
     }
@@ -276,37 +276,37 @@
    "questions": [
     {
      "id": "Q24",
-     "text": "Does the store have a specific way they want overstock or not-in-set items handled?",
+     "text": "Does {{storeName}} have a specific way they want overstock or not-in-set items handled?",
      "type": "yesno",
      "detailOn": "Yes"
     },
     {
      "id": "Q25",
-     "text": "Does the store ask our team to place backstock on the top stock rack?",
+     "text": "Does {{storeName}} ask our team to place backstock on the top stock rack?",
      "type": "yesno",
      "good": "No"
     },
     {
      "id": "Q26",
-     "text": "Does the store ask us to rotate product and check for out-of-date items?",
+     "text": "Does {{storeName}} ask us to rotate product and check for out-of-date items?",
      "type": "yesno",
      "good": "No"
     },
     {
      "id": "Q27",
-     "text": "Does the store ask us to perform the marking down of items pulled from sets?",
+     "text": "Does {{storeName}} ask us to perform the marking down of items pulled from sets?",
      "type": "yesno",
      "good": "No"
     },
     {
      "id": "Q28",
-     "text": "Does the store ask us to make missing tags?",
+     "text": "Does {{storeName}} ask us to make missing tags?",
      "type": "yesno",
      "good": "No"
     },
     {
      "id": "Q29",
-     "text": "Does the store ask us to clean fixtures in excess of what would be considered our normal scope of involvement?",
+     "text": "Does {{storeName}} ask us to clean fixtures in excess of what would be considered our normal scope of involvement?",
      "type": "yesno",
      "good": "No"
     }
@@ -318,7 +318,7 @@
    "questions": [
     {
      "id": "Q30",
-     "text": "How do you enter the store each morning?",
+     "text": "How do you enter {{storeName}} each morning?",
      "type": "text"
     },
     {
@@ -329,14 +329,14 @@
       {
        "when": "Yes",
        "id": "Q31a",
-       "text": "How does the rest of the team enter the store?",
+       "text": "How does the rest of the team enter {{storeName}}?",
        "type": "text"
       }
      ]
     },
     {
      "id": "Q32",
-     "text": "Does anyone at the store make it difficult to gain entry?",
+     "text": "Does anyone at {{storeName}} make it difficult to gain entry?",
      "type": "yesno",
      "detailOn": "Yes",
      "good": "No"
@@ -355,28 +355,28 @@
    "questions": [
     {
      "id": "Q34",
-     "text": "Do you know the name of the store director?",
+     "text": "Do you know the name of the store director at {{storeName}}?",
      "type": "yesno",
      "detailOn": "Yes",
      "good": "Yes"
     },
     {
      "id": "Q35",
-     "text": "Do you know the name of the price changer?",
+     "text": "Do you know the name of the price changer at {{storeName}}?",
      "type": "yesno",
      "detailOn": "Yes",
      "good": "Yes"
     },
     {
      "id": "Q36",
-     "text": "Do you know the name of the grocery manager?",
+     "text": "Do you know the name of the grocery manager at {{storeName}}?",
      "type": "yesno",
      "detailOn": "Yes",
      "good": "Yes"
     },
     {
      "id": "Q37",
-     "text": "Do you know the name of the grocery receiver?",
+     "text": "Do you know the name of the grocery receiver at {{storeName}}?",
      "type": "yesno",
      "detailOn": "Yes",
      "good": "Yes"
@@ -389,7 +389,7 @@
    "questions": [
     {
      "id": "Q38",
-     "text": "Do any of the following departments regularly push back on us performing resets?",
+     "text": "Do any of the following departments at {{storeName}} regularly push back on us performing resets?",
      "type": "multiselect",
      "options": [
       "Produce",
@@ -414,13 +414,13 @@
    "questions": [
     {
      "id": "Q39",
-     "text": "Does this store use DSL (Digital Shelf Labels)?",
+     "text": "Does {{storeName}} use DSL (Digital Shelf Labels)?",
      "type": "yesno",
      "branches": [
       {
        "when": "Yes",
        "id": "Q39a",
-       "text": "Does our team get pushback from the store regarding use of a handheld (Zebra)?",
+       "text": "Does our team get pushback from {{storeName}} regarding use of a handheld (Zebra)?",
        "type": "yesno",
        "good": "No"
       }
@@ -428,7 +428,7 @@
     },
     {
      "id": "Q40",
-     "text": "Is the store's wifi acceptable for performing your job?",
+     "text": "Is the wifi at {{storeName}} acceptable for performing your job?",
      "type": "yesno",
      "detailOn": "No",
      "good": "Yes"
@@ -441,7 +441,7 @@
    "questions": [
     {
      "id": "Q41",
-     "text": "When getting signed out at the end of the day, does someone from the store walk the sets to confirm completion standards prior to signing us out?",
+     "text": "When getting signed out at the end of the day, does someone from {{storeName}} walk the sets to confirm completion standards prior to signing us out?",
      "type": "yesno",
      "good": "Yes"
     }
@@ -453,14 +453,14 @@
    "questions": [
     {
      "id": "Q42",
-     "text": "Are there any safety issues or consistent issues with anything or anyone at this store?",
+     "text": "Are there any safety issues or consistent issues with anything or anyone at {{storeName}}?",
      "type": "yesno",
      "detailOn": "Yes",
      "good": "No"
     },
     {
      "id": "Q43",
-     "text": "Are there any comments or concerns you would like us to be aware of at this store?",
+     "text": "Are there any comments or concerns you would like us to be aware of at {{storeName}}?",
      "type": "text",
      "optional": true
     }
