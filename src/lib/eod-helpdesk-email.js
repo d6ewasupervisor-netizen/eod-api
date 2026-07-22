@@ -12,6 +12,7 @@ const RETAIL_ODYSSEY_TEAM_CC = [
   'tyson.gauthier@retailodyssey.com',
   'aiyana.natarisalazar@retailodyssey.com',
   'amanda.mathews@retailodyssey.com',
+  'april.gauthier@retailodyssey.com',
 ];
 
 function eodHelpdeskFromAddress() {
