@@ -49,8 +49,13 @@ router.get('/me', async (req, res, next) => {
       myStatuses.rows.map((r) => [Number(r.store_num), r])
     );
     const suggestedNums = new Set(suggested.map((s) => s.storeNum));
-    // Primary preselect: first schedule store for today (single-store flow)
-    const primaryStore = suggested.length ? suggested[0].storeNum : null;
+    // Primary preselect: first schedule store not yet submitted
+    const primaryStore = (
+      suggested.find((s) => {
+        const st = statusByStore.get(s.storeNum);
+        return !st || st.status !== 'submitted';
+      }) || suggested[0] || null
+    )?.storeNum ?? null;
     const storeDetails = catalog.map((s) => {
       const st = statusByStore.get(s.storeNum);
       return {
@@ -85,7 +90,8 @@ router.get('/me', async (req, res, next) => {
         date: a.date,
       })),
       primaryStore,
-      suggestedStores: primaryStore != null ? [primaryStore] : [],
+      // Full schedule for today (UI drops draft/submitted into In progress & completed)
+      suggestedStores: suggested.map((s) => s.storeNum),
       storeDetails,
       catalog: { districts, teams, stores: catalog },
       // back-compat
