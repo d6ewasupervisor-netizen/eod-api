@@ -71,6 +71,13 @@ const {
   startDcScanProdSync,
 } = require('./routes/dc-scan-board');
 const { createEmailSender, setEmailSender, purgeEmailsOlderThan, retentionDays, syncFromResendAccounts, dispatchTrackedEmail } = require('./lib/resend-outbox');
+const {
+  storeEodPackage,
+  purgeArtifactsOlderThan,
+  retentionDays: eodArtifactRetentionDays,
+  ensureRoot: ensureEodArtifactsRoot,
+} = require('./lib/eod-artifacts');
+const { artifactUrlTtlDays } = require('./lib/eod-artifact-jwt');
 const hubRoutes = require('./routes/hub-routes');
 const hubStoreRoutes = require('./routes/hub-store-routes');
 const { initHubBackup, startBackupIntervalJob } = require('./hub-backup');
@@ -272,15 +279,32 @@ function parseSignoffPhoto(photo, index) {
   };
 }
 
-function buildHtml({ body, signoffPhotos, userName, userEmail }) {
-  const hasPhotos = Array.isArray(signoffPhotos) && signoffPhotos.length > 0;
+/**
+ * Build EOD HTML with hosted file links (no CID / no attachments).
+ * @param {{ body: string, userName?: string, userEmail?: string, pdfUrl?: string|null, pdfFilename?: string|null, signoffUrls?: Array<{ url: string, filename?: string }>, linkTtlDays?: number }} opts
+ */
+function buildHtml({ body, userName, userEmail, pdfUrl, pdfFilename, signoffUrls, linkTtlDays }) {
+  const ttl = linkTtlDays != null ? Number(linkTtlDays) : artifactUrlTtlDays();
+  const ttlNote = Number.isFinite(ttl) && ttl > 0 ? ttl : 30;
 
-  const photoSection = hasPhotos
+  const linkBanner = `<p style="font-family:sans-serif;font-size:13px;color:#444;margin:0 0 12px;">
+  Photos and the EOD PDF are hosted links (no sign-in). Links stay valid for <strong>${ttlNote} days</strong>.
+</p>`;
+
+  const pdfSection = pdfUrl
+    ? `<p style="font-family:sans-serif;margin:0 0 16px;">
+  <a href="${pdfUrl}" style="color:#1d4ed8;font-weight:600;">Download EOD PDF${pdfFilename ? ` (${pdfFilename})` : ''}</a>
+</p>`
+    : '';
+
+  const signoffs = Array.isArray(signoffUrls) ? signoffUrls : [];
+  const photoSection = signoffs.length
     ? `<h3 style="font-family:sans-serif;">Sign-Off Sheets</h3>
-${signoffPhotos
+${signoffs
   .map(
-    (_, i) =>
-      `<img src="cid:signoff_${i}" style="max-width:100%; margin-bottom:12px; display:block;">`
+    (item, i) =>
+      `<p style="font-family:sans-serif;font-size:12px;color:#666;margin:0 0 4px;">${item.filename || `signoff_${i}`}</p>
+<img src="${item.url}" alt="Sign-off sheet ${i + 1}" style="max-width:100%; margin-bottom:12px; display:block;">`
   )
   .join('\n')}`
     : '';
@@ -298,6 +322,8 @@ ${signoffPhotos
   return `<!DOCTYPE html>
 <html>
 <body>
+${linkBanner}
+${pdfSection}
 ${photoSection}
 <pre style="font-family:sans-serif; white-space:pre-wrap; word-break:break-word;">${body}</pre>
 ${signature}
@@ -469,6 +495,8 @@ async function start() {
     /^\/api\/signoff-photos\/[^\/]+\/image\/?$/,
     // Survey photo share links: short-lived? no — durable JWT (typ survey_photo) in ?t=
     /^\/api\/survey\/photos\/\d+\/public\/?$/,
+    // EOD PDF / sign-off hosted links: JWT typ eod_file in ?t= (30d default)
+    /^\/api\/eod-files\/\d+\/?$/,
     // /status for store-confirm still requires auth (not under shift prefix alone)
   ];
   app.use((req, res, next) => {
@@ -498,6 +526,8 @@ async function start() {
   app.use('/api/welcome-letter', createWelcomeLetterRouter({ resend, logger, pool }));
   // Public survey photo links (JWT ?t=) — before gated /api/survey routers.
   app.use('/api/survey/photos', require('./routes/survey-photo-public'));
+  // Public EOD PDF / sign-off links (JWT ?t=, typ eod_file).
+  app.use('/api/eod-files', require('./routes/eod-files-public'));
   // Survey admin MUST mount before the general survey router so /api/survey/admin/*
   // is not captured by /api/survey (and so it uses requireRole('admin'), not roster ACL).
   app.use('/api/survey/admin', require('./routes/survey-admin'));
@@ -704,6 +734,29 @@ async function start() {
     timezone: 'America/Los_Angeles',
   });
   logger.info(`Email outbox auto-purge scheduled daily 3:30am PT (retention ${retentionDays()} days)`);
+
+  cron.schedule('45 3 * * *', async () => {
+    try {
+      const result = await purgeArtifactsOlderThan();
+      if (result.deleted > 0) {
+        logger.info(
+          `EOD artifacts purge: deleted ${result.deleted} row(s), removed ${result.filesRemoved} file(s) older than ${result.olderThanDays} days`
+        );
+      }
+    } catch (err) {
+      logger.error('EOD artifacts purge failed:', err.message);
+    }
+  }, {
+    timezone: 'America/Los_Angeles',
+  });
+  logger.info(`EOD artifacts auto-purge scheduled daily 3:45am PT (retention ${eodArtifactRetentionDays()} days)`);
+
+  try {
+    ensureEodArtifactsRoot();
+    logger.info(`EOD artifacts root ready at ${process.env.EOD_ARTIFACTS_DIR || '/app/data/eod-artifacts'}`);
+  } catch (err) {
+    logger.error('Could not create EOD artifacts root:', err.message);
+  }
 
   cron.schedule('15 * * * *', async () => {
     try {
@@ -916,29 +969,57 @@ async function start() {
       : subject;
 
     const from = buildFromAddress(storeNumber);
-    const attachments = [];
 
-    if (pdfBase64) {
-      attachments.push({
-        filename: pdfFilename || `EOD_Store${storeNumber}.pdf`,
-        content: pdfBase64,
+    let hosted;
+    try {
+      const pdf = pdfBase64
+        ? {
+            buffer: Buffer.from(String(pdfBase64).replace(/\s+/g, ''), 'base64'),
+            filename: pdfFilename || `EOD_Store${storeNumber}.pdf`,
+            mime: 'application/pdf',
+          }
+        : null;
+      if (pdf && !pdf.buffer.length) {
+        return res.status(400).json({ success: false, error: 'pdfBase64 decoded to empty PDF' });
+      }
+
+      const signoffs = [];
+      if (Array.isArray(signoffPhotos)) {
+        for (let i = 0; i < signoffPhotos.length; i++) {
+          const parsed = parseSignoffPhoto(signoffPhotos[i], i);
+          signoffs.push({
+            buffer: Buffer.from(parsed.content, 'base64'),
+            filename: parsed.filename,
+            mime: parsed.content_type,
+          });
+        }
+      }
+
+      hosted = await storeEodPackage({ storeNumber, pdf, signoffs });
+    } catch (err) {
+      logger.error({ err, storeNumber }, 'Failed to store EOD artifacts for hosted links');
+      return res.status(500).json({
+        success: false,
+        error: `Could not store EOD files for download links: ${err.message}`,
       });
     }
 
-    if (Array.isArray(signoffPhotos)) {
-      signoffPhotos.forEach((photo, i) => {
-        attachments.push(parseSignoffPhoto(photo, i));
-      });
-    }
-
-    const html = buildHtml({ body, signoffPhotos, userName, userEmail });
+    const html = buildHtml({
+      body,
+      userName,
+      userEmail,
+      pdfUrl: hosted.pdf?.url || null,
+      pdfFilename: hosted.pdf?.filename || pdfFilename || null,
+      signoffUrls: hosted.signoffs.map((s) => ({ url: s.url, filename: s.filename })),
+      linkTtlDays: hosted.linkTtlDays,
+    });
 
     const emailPayload = {
       from,
       to: Array.isArray(resolvedRecipients) ? resolvedRecipients : [resolvedRecipients],
       subject: resolvedSubject,
       html,
-      attachments,
+      // Link-only: no PDF/photo attachments (improves inbox delivery).
     };
 
     addReplyTo(emailPayload, { userEmail });
@@ -948,7 +1029,21 @@ async function start() {
         sourceType: isTestMode ? 'eod-test' : 'eod',
         sourceRef: storeNumber,
         sentByEmail: userEmail,
-        metadata: { storeNumber, checkInManager, checkOutManager, testMode: isTestMode },
+        metadata: {
+          storeNumber,
+          checkInManager,
+          checkOutManager,
+          testMode: isTestMode,
+          eodPackageId: hosted.packageId,
+          eodArtifactIds: hosted.items.map((i) => i.id),
+          eodLinkTtlDays: hosted.linkTtlDays,
+          eodLinks: hosted.items.map((i) => ({
+            id: i.id,
+            kind: i.kind,
+            filename: i.filename,
+            url: i.url,
+          })),
+        },
       }, emailPayload);
 
       if (error) {
@@ -956,7 +1051,14 @@ async function start() {
         return res.status(502).json({ success: false, error: error.message ?? String(error) });
       }
 
-      logger.info({ id: data?.id, storeNumber, from, testMode: isTestMode }, 'EOD email sent');
+      logger.info({
+        id: data?.id,
+        storeNumber,
+        from,
+        testMode: isTestMode,
+        packageId: hosted.packageId,
+        artifactCount: hosted.items.length,
+      }, 'EOD email sent (link-only)');
 
       if (!isTestMode) {
         logger.info('Attempting store data upsert for store:', storeNumber);
@@ -976,7 +1078,19 @@ async function start() {
         }
       }
 
-      return res.json({ success: true, id: data?.id, testMode: isTestMode });
+      return res.json({
+        success: true,
+        id: data?.id,
+        testMode: isTestMode,
+        packageId: hosted.packageId,
+        linkTtlDays: hosted.linkTtlDays,
+        links: hosted.items.map((i) => ({
+          id: i.id,
+          kind: i.kind,
+          filename: i.filename,
+          url: i.url,
+        })),
+      });
     } catch (err) {
       logger.error({ err, storeNumber }, 'Unexpected error sending EOD email');
       return res.status(500).json({ success: false, error: err.message });
