@@ -284,52 +284,32 @@ function parseSignoffPhoto(photo, index) {
  * Build EOD HTML with hosted file links (no CID / no attachments).
  * @param {{ body: string, userName?: string, userEmail?: string, pdfUrl?: string|null, pdfFilename?: string|null, signoffUrls?: Array<{ url: string, filename?: string }>, linkTtlDays?: number }} opts
  */
-function buildHtml({ body, userName, userEmail, pdfUrl, pdfFilename, signoffUrls, linkTtlDays }) {
-  const ttl = linkTtlDays != null ? Number(linkTtlDays) : artifactUrlTtlDays();
-  const ttlNote = Number.isFinite(ttl) && ttl > 0 ? ttl : 30;
+const { buildEodEmailHtml } = require('./lib/eod-email-html');
 
-  const linkBanner = `<p style="font-family:sans-serif;font-size:13px;color:#444;margin:0 0 12px;">
-  Photos and the EOD PDF are hosted links (no sign-in). Links stay valid for <strong>${ttlNote} days</strong>.
-</p>`;
-
-  const pdfSection = pdfUrl
-    ? `<p style="font-family:sans-serif;margin:0 0 16px;">
-  <a href="${pdfUrl}" style="color:#1d4ed8;font-weight:600;">Download EOD PDF${pdfFilename ? ` (${pdfFilename})` : ''}</a>
-</p>`
-    : '';
-
-  const signoffs = Array.isArray(signoffUrls) ? signoffUrls : [];
-  const photoSection = signoffs.length
-    ? `<h3 style="font-family:sans-serif;">Sign-Off Sheets</h3>
-${signoffs
-  .map(
-    (item, i) =>
-      `<p style="font-family:sans-serif;font-size:12px;color:#666;margin:0 0 4px;">${item.filename || `signoff_${i}`}</p>
-<img src="${item.url}" alt="Sign-off sheet ${i + 1}" style="max-width:100%; margin-bottom:12px; display:block;">`
-  )
-  .join('\n')}`
-    : '';
-
-  const signature =
-    userName || userEmail
-      ? `<hr>
-<p style="font-size:13px; color:#555; font-family:sans-serif;">
-  ${userName ?? ''}<br>
-  Retail Odyssey<br>
-  ${userEmail ?? ''}
-</p>`
-      : '';
-
-  return `<!DOCTYPE html>
-<html>
-<body>
-${linkBanner}
-${pdfSection}
-${photoSection}
-<pre style="font-family:sans-serif; white-space:pre-wrap; word-break:break-word;">${body}</pre>
-${signature}
-</body>
-</html>`;
+function buildHtml({
+  body,
+  report,
+  userName,
+  userEmail,
+  pdfUrl,
+  pdfFilename,
+  signoffUrls,
+  linkTtlDays,
+  testMode,
+  storeNumber,
+}) {
+  return buildEodEmailHtml({
+    body,
+    report,
+    userName,
+    userEmail,
+    pdfUrl,
+    pdfFilename,
+    signoffUrls,
+    linkTtlDays,
+    testMode,
+    storeNumber,
+  });
 }
 
 async function start() {
@@ -965,6 +945,7 @@ async function start() {
       checkInManager,
       checkOutManager,
       testMode,
+      report,
     } = req.body;
 
     if (!storeNumber || !subject || !body || !recipients?.length) {
@@ -1019,12 +1000,15 @@ async function start() {
 
     const html = buildHtml({
       body,
+      report,
       userName,
       userEmail,
       pdfUrl: hosted.pdf?.url || null,
       pdfFilename: hosted.pdf?.filename || pdfFilename || null,
       signoffUrls: hosted.signoffs.map((s) => ({ url: s.url, filename: s.filename })),
       linkTtlDays: hosted.linkTtlDays,
+      testMode: isTestMode,
+      storeNumber,
     });
 
     const emailPayload = {

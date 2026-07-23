@@ -536,19 +536,19 @@ function registerRoutes(app, resend, pool) {
         .json({ ok: false, reason: 'missing_store_or_date' });
     }
 
-    // Role auto-pass for supervisor / admin — they manage the gate, never
-    // hit it themselves.
-    if (roles.includes('supervisor') || roles.includes('admin')) {
+    // Store 999 is the ops/test email-to-fax destination — always allow
+    // day-confirm so leads can exercise fax + EOD flows end-to-end.
+    if (store === '999' || roles.includes('supervisor') || roles.includes('admin')) {
       try {
         const token = signDayConfirm({ email, store, date });
         return res.json({
           ok: true,
           token,
-          source: 'role',
+          source: store === '999' ? 'test-store' : 'role',
           expiresInMs: TOKEN_TTL_MS,
         });
       } catch (err) {
-        logger.error('Failed to mint role-pass token:', err.message);
+        logger.error('Failed to mint role/test-pass token:', err.message);
         return res
           .status(500)
           .json({ ok: false, reason: 'sign_failed', detail: err.message });
