@@ -63,6 +63,7 @@ const createDecideRouter = require('./routes/decide');
 const createDumpBinRouter = require('./routes/dump-bin');
 const { createFm391P05W3PhotosRouter } = require('./routes/fm391-p05w3-photos');
 const { createTrackersRouter } = require('./routes/trackers');
+const { createTrackerCacheRouter } = require('./routes/tracker-cache');
 const { createEmailOutboxRouter } = require('./routes/email-outbox');
 const { createWelcomeLetterRouter } = require('./routes/welcome-letter');
 const {
@@ -448,6 +449,9 @@ async function start() {
     // (TRACKER_META_TOKEN) and fails closed (503) when unconfigured.
     '/api/trackers/snapshot/ingest',
     '/api/trackers/snapshot/meta',
+    // Travel/laptop tracker cache sync (confirmed sets + writes). Self-gates
+    // on Bearer SAS_AUTH_SECRET / X-Auth-Secret.
+    '/internal/tracker-cache',
     '/trackers',
     '/trackers/',
     '/trackers/admin',
@@ -474,6 +478,7 @@ async function start() {
   const PUBLIC_PREFIXES = [
     '/api/shift-request/',
     '/extension/download/',
+    '/internal/tracker-cache/',
     // Whole /api/admin/* surface is public to the global gate (each subroute
     // applies requireAdmin from lib/admin-auth.js where needed).
     '/api/admin/',
@@ -522,6 +527,7 @@ async function start() {
   app.use('/api/whoami', whoamiRouter);
   app.use('/api/weeks', weeksRouter);
   app.use('/api/trackers', createTrackersRouter({ pool }));
+  app.use('/internal/tracker-cache', createTrackerCacheRouter());
   app.use('/api/email-outbox', createEmailOutboxRouter({ pool, resend, resendSyncAccounts, logger }));
   app.use('/api/welcome-letter', createWelcomeLetterRouter({ resend, logger, pool }));
   // Public survey photo links (JWT ?t=) — before gated /api/survey routers.
@@ -754,6 +760,9 @@ async function start() {
   try {
     ensureEodArtifactsRoot();
     logger.info(`EOD artifacts root ready at ${process.env.EOD_ARTIFACTS_DIR || '/app/data/eod-artifacts'}`);
+    const { ensureRoot: ensureTrackerCacheRoot, trackerCacheRoot } = require('./lib/trackers/tracker-cache-store');
+    ensureTrackerCacheRoot();
+    logger.info(`Tracker cache root ready at ${trackerCacheRoot()}`);
   } catch (err) {
     logger.error('Could not create EOD artifacts root:', err.message);
   }

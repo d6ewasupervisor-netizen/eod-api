@@ -17,10 +17,11 @@ Batch workflow: cross-reference tracker rows with **live SAS PROD + Store Intell
 ## Hard rules
 
 1. **Never modify live OneDrive trackers** — only copies under `Downloads/`.
-2. **Exact store matching** — normalize to integer strings; never trust SAS `store_number=` substring filters alone (use `lib/sas-store-match.js` elsewhere).
-3. **Eligible rows:** store ∈ district, K blank/`No` with L blank (skip adjudicated rows), period within window.
-4. **Close Excel** before writes (`~$` lock file will fail `write_tracker.py`).
-5. **Count Yes on scoped keys** — full sheet has thousands of historical Yes rows; always count against reconcile scope (cache keys or period filter).
+2. **Auston's OneDrive is read-only unless the user explicitly authorizes a live write.** Do not create backups, promote Yes rows, or save anything under `Auston Nix's files - Trackers` (or other Auston paths) without that instruction. Backups go to **Tyson's** `Downloads/` or Tyson's OneDrive. See `.cursor/rules/onedrive-write-safety.mdc`.
+3. **Exact store matching** — normalize to integer strings; never trust SAS `store_number=` substring filters alone (use `lib/sas-store-match.js` elsewhere).
+4. **Eligible rows:** store ∈ district, K blank/`No` with L blank (skip adjudicated rows), period within window.
+5. **Close Excel** before writes (`~$` lock file will fail `write_tracker.py`).
+6. **Count Yes on scoped keys** — full sheet has thousands of historical Yes rows; always count against reconcile scope (cache keys or period filter).
 
 ## District presets
 
@@ -85,10 +86,61 @@ Shift-miss on SI→PROD backfill → L = `needs loaded to PROD`.
 ### Artifacts (under `--out-dir`)
 
 - `{Label}_writes_cache.json` — proposed K/L per row (e.g. `D1_writes_cache.json`)
+- `{Label}_confirmed_sets.json` — durable both-complete cache (skip PROD/SI re-fetch next week)
 - `{Label}_reconcile_summary_<stamp>.json`
 - `{Label}_reconcile_discrepancies_<stamp>.json` / `.csv`
 - `prod-to-si-closeout/summary.json`
 - `sitoprod/si-to-prod-backfill_<stamp>.json`
+
+## Confirmed-sets cache (mandatory performance)
+
+Once a set is verified **complete in both PROD and SI**, remember it forever under:
+
+`{out-dir}/{label}_confirmed_sets.json`
+
+Join key: `P##W#|store|categoryId|dbkey`.
+
+| Behavior | Detail |
+|----------|--------|
+| Full reconcile | Skips confirmed keys even when live OneDrive still shows blank/No K |
+| Delta scan | Default skips already-Yes + confirmed keys from live PROD/SI fetch |
+| Finish-writes / apply-delta | Upserts Yes keys into the cache |
+| First empty cache | Auto-seeds from `{label}_writes_cache.json` Yes rows |
+| Force recheck | `--recheck-confirmed` |
+
+### Railway sync (travel / multi-device)
+
+Caches also live on the **eod-api Railway volume**:
+
+`/app/data/eod-artifacts/tracker-cache/{LABEL}/confirmed_sets.json`
+
+API (Bearer `SAS_AUTH_SECRET`):
+
+- `GET/PUT https://eod-api.the-dump-bin.com/internal/tracker-cache/{LABEL}/confirmed_sets`
+- `GET/PUT …/writes_cache`
+- `GET …/internal/tracker-cache/` (list)
+
+```powershell
+cd C:\Users\tgaut\eod-api
+# SAS_AUTH_SECRET in .env must match Railway
+node scripts/tracker-cache-sync.js --pull --push --label D6D8 --out-dir "C:/Users/tgaut/Downloads/tracking_new"
+node scripts/tracker-cache-sync.js --pull --push --label D1 --out-dir "C:/Users/tgaut/Downloads/p06w2_district1"
+node scripts/tracker-cache-sync.js --list
+```
+
+Reconcile / finish-writes / apply-delta **auto pull+push** when `SAS_AUTH_SECRET` is set (`TRACKER_CACHE_REMOTE=0` to disable).
+
+**Travel laptop still needs:** Advantage OneDrive sync (or working copies), `sas-auth` session, sibling repos (`kompass-netcap`, `rebotics-carry-forward`), Python for Excel writes. Railway holds the *memory* of confirmed sets — not a full headless Excel reconcile worker yet.
+
+```powershell
+# Optional shared path across out-dirs:
+node scripts/d6-d8-tracking-reconcile.js `
+  --districts "6,8" --label D6D8 `
+  --out-dir "C:/Users/tgaut/Downloads/tracking_new" `
+  --confirmed-cache "C:/Users/tgaut/Downloads/tracker_confirmed_sets.json"
+```
+
+Do **not** delete the confirmed cache between weeks — that is the point.
 
 ## Workflow B — Resume interrupted reconcile write
 
@@ -207,5 +259,7 @@ See [gotchas.md](gotchas.md) — hung runs, cache vs Excel drift, UTF-16 script 
 | Finish after hang | `district-tracker-finish-writes.js` |
 | Scan for changes | `district-tracker-delta-scan.js` |
 | Apply delta | `district-tracker-apply-delta-writes.js` |
+| Sync caches ↔ Railway | `tracker-cache-sync.js --pull --push --label D6D8` |
 | PROD→SI | `reconcile-d1-d8-prod-to-si.js --discrepancies` |
 | SI→PROD | `p06w1-si-to-prod-backfill.js --discrepancies` |
+| Force recheck confirmed | add `--recheck-confirmed` to reconcile or delta-scan |

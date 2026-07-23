@@ -28,6 +28,7 @@ Hard-won lessons from D1 P06W2 reconcile (June 2026). Read before a long run.
 - **SI task-layer fetch dominates runtime** (~13 min per fiscal week × ~20 D1 stores). Full P03W4..P06W2 ≈ 13 weeks ≈ 2+ hours.
 - **Do not fetch ISE and Blitz separately** — union tracker rows, one PROD+SI fetch, classify twice.
 - **Delta default `P06W1,P06W2`** covers most open rows (643/696 on D1 run); older periods unlikely to change overnight.
+- **Confirmed-sets cache** (`{Label}_confirmed_sets.json`) skips both-complete keys on later full reconcile + delta fetch. Without it, live OneDrive blank/No K rows get re-scanned every week even after copies were marked Yes.
 - **Killing a run:** exit code `4294967295` on Windows = process stopped, not a logic error.
 
 ## Remediation
