@@ -214,9 +214,6 @@ function createDumpBinRouter({ resend, logger }) {
     if (!userEmail) {
       return res.status(401).json({ error: 'not authenticated' });
     }
-    if (!r2.isConfigured()) {
-      return res.status(503).json({ ok: false, error: 'Dump bin R2 is not configured' });
-    }
     const printRecipient = (process.env.PRINT_RECIPIENT || '').trim();
     const sendDomain = (process.env.SEND_DOMAIN || '').trim();
     if (!printRecipient || !sendDomain) {
@@ -226,11 +223,15 @@ function createDumpBinRouter({ resend, logger }) {
       return res.status(500).json({ error: 'Email service not available' });
     }
 
-    const { keys, files, storeNumber, storeCity } = req.body || {};
+    const { keys, files, storeNumber, storeCity, attachments: clientAttachments } = req.body || {};
     const MAX_COPIES = 5;
     const fileJobs = normalizePrintFileJobs({ keys, files, maxCopies: MAX_COPIES });
-    if (fileJobs.length === 0) {
+    const inlineAttachments = Array.isArray(clientAttachments) ? clientAttachments : [];
+    if (fileJobs.length === 0 && inlineAttachments.length === 0) {
       return res.status(400).json({ error: 'no files selected' });
+    }
+    if (fileJobs.length > 0 && !r2.isConfigured()) {
+      return res.status(503).json({ ok: false, error: 'Dump bin R2 is not configured' });
     }
     if (!storeNumber) {
       return res.status(400).json({ error: 'no store selected' });
@@ -275,6 +276,21 @@ function createDumpBinRouter({ resend, logger }) {
           ? `<li>${escapeHtml(baseName)} &times; ${copies}</li>`
           : `<li>${escapeHtml(baseName)}</li>`
       );
+    }
+
+    for (const item of inlineAttachments) {
+      const filename = String(item?.filename || 'attachment.pdf').trim() || 'attachment.pdf';
+      const content = String(item?.content || '').replace(/\s+/g, '');
+      if (!content) continue;
+      const approxBytes = Math.floor((content.length * 3) / 4);
+      totalBytes += approxBytes;
+      if (totalBytes > MAX_BYTES) {
+        return res.status(413).json({
+          error: `Selection too large (${(totalBytes / 1048576).toFixed(1)}MB). Resend caps at ~40MB. Please split into smaller requests.`,
+        });
+      }
+      attachments.push({ filename, content });
+      fileListRows.push(`<li>${escapeHtml(filename)}</li>`);
     }
 
     if (attachments.length === 0) {

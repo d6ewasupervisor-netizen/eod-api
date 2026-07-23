@@ -545,6 +545,8 @@ async function start() {
   app.use('/api', dumpBinRouter);
   const createEodPrintTimesheetRouter = require('./routes/eod-print-timesheet');
   app.use('/api/eod', createEodPrintTimesheetRouter({ resend, logger }));
+  const createEodEmailMaterialsRouter = require('./routes/eod-email-materials');
+  app.use('/api/eod', createEodEmailMaterialsRouter({ resend, logger }));
 
   const trackersDir = path.join(__dirname, 'public', 'trackers');
   const trackersAssetsDir = path.join(trackersDir, 'assets');

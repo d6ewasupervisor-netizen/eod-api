@@ -90,6 +90,7 @@ async function getDirectReports() {
     preferredName: e.person?.preferred_name || e.preferred_name || null,
     title: e.person?.person_title || e.person_title || '',
     phone: e.person?.phone_number || e.phone_number || '',
+    email: e.person?.email || e.email || '',
   }));
 
   directReportsCache = { data: employees, fetchedAt: now };
@@ -395,6 +396,7 @@ function registerRoutes(app, resend, pool) {
           name: s.employee?.person?.person_name || s.employee?.person_name || '',
           title: s.employee?.person?.person_title || '',
           phone: s.employee?.person?.phone_number || s.employee?.phone_number || '',
+          email: s.employee?.person?.email || s.employee?.email || '',
           isLead: s.is_lead || false,
           shiftStartTime: s.shift_start_time || '',
           shiftEndTime: s.shift_end_time || '',
