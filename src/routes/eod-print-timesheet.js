@@ -6,6 +6,7 @@ const path = require('path');
 const { requireAuth } = require('../auth-middleware');
 const { addReplyTo } = require('../lib/resend-reply-to');
 const { dispatchTrackedEmail } = require('../lib/resend-outbox');
+const { fillTimesheetPdf } = require('../lib/fill-timesheet-pdf');
 
 const SHEETS = {
   instawork: {
@@ -34,6 +35,37 @@ function normalizeStoreNumber(raw) {
   return String(n);
 }
 
+function normalizeEmployeeNames(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  const out = [];
+  const seen = new Set();
+  for (const item of list) {
+    const name = typeof item === 'string'
+      ? item.trim()
+      : String(item?.name || item?.personName || '').trim();
+    if (!name) continue;
+    const key = name.toLowerCase().replace(/\s+/g, ' ');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
+function formatTimesheetDate(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  // Already M/D/YYYY-ish
+  if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(s)) return s;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${Number(m[2])}/${Number(m[3])}/${m[1]}`;
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+  }
+  return s;
+}
+
 function createEodPrintTimesheetRouter({ resend, logger }) {
   const router = express.Router();
   const log = logger || {
@@ -44,11 +76,16 @@ function createEodPrintTimesheetRouter({ resend, logger }) {
 
   /**
    * POST /api/eod/print-timesheet
-   * Body: { storeNumber, sheet: 'instawork'|'kompass' }
+   * Body: {
+   *   storeNumber,
+   *   sheet: 'instawork'|'kompass',
+   *   leadName?,
+   *   workDate?,
+   *   employees?: string[] | { name }[]
+   * }
    *
-   * Same email-to-fax pipeline as Dump Bin print-at-store:
-   * Resend → PRINT_RECIPIENT with subject `#storeNumber` → flow-automation
-   * Metrofax → store customer service desk fax.
+   * Fills the fillable PDF (store / lead / date / employee rows), starts a
+   * new sheet when names overflow, then sends via the email-to-fax pipeline.
    */
   router.post('/print-timesheet', requireAuth, async (req, res) => {
     const userEmail = req.user?.email;
@@ -80,14 +117,37 @@ function createEodPrintTimesheetRouter({ resend, logger }) {
       return res.status(400).json({ error: 'store number is required' });
     }
 
+    const leadName = String(req.body?.leadName || '').trim();
+    const workDate = formatTimesheetDate(req.body?.workDate || req.body?.date || '');
+    const employeeNames = normalizeEmployeeNames(req.body?.employees);
+
     const pdfPath = path.join(__dirname, '..', 'assets', 'timesheets', sheet.filename);
-    let buf;
+    let templateBytes;
     try {
-      buf = fs.readFileSync(pdfPath);
+      templateBytes = fs.readFileSync(pdfPath);
     } catch (err) {
       log.error('[eod print-timesheet] missing asset', { pdfPath, err: err.message });
       return res.status(500).json({ error: `Timesheet PDF not available: ${sheet.filename}` });
     }
+
+    let filled;
+    try {
+      filled = await fillTimesheetPdf({
+        templateBytes,
+        sheetKey,
+        storeNumber,
+        leadName,
+        date: workDate,
+        employeeNames,
+      });
+    } catch (err) {
+      log.error('[eod print-timesheet] fill failed', err);
+      return res.status(500).json({ error: `Could not fill timesheet: ${err.message || err}` });
+    }
+
+    const attachmentName = filled.pageCount > 1
+      ? sheet.filename.replace(/\.pdf$/i, `_${filled.pageCount}pages.pdf`)
+      : sheet.filename;
 
     const from = `fax@${sendDomain}`;
     const subject = `#${storeNumber}`;
@@ -95,6 +155,8 @@ function createEodPrintTimesheetRouter({ resend, logger }) {
       <h2 style="color:#4a7fb5;margin:0 0 8px;">EOD Timesheet Print — #${escapeHtml(storeNumber)}</h2>
       <p>Requested by: <strong>${escapeHtml(userEmail)}</strong></p>
       <p>Document: <strong>${escapeHtml(sheet.label)}</strong></p>
+      <p>Lead: <strong>${escapeHtml(leadName || '—')}</strong> · Date: <strong>${escapeHtml(workDate || '—')}</strong></p>
+      <p>Employees filled: <strong>${filled.employeeCount}</strong> · Sheets: <strong>${filled.pageCount}</strong></p>
       <p style="color:#888;font-size:.85em;margin-top:20px;">Sent via the EOD print-timesheet workflow (email-to-fax).</p>
     </div>`;
 
@@ -107,8 +169,8 @@ function createEodPrintTimesheetRouter({ resend, logger }) {
         html,
         attachments: [
           {
-            filename: sheet.filename,
-            content: buf.toString('base64'),
+            filename: attachmentName,
+            content: Buffer.from(filled.bytes).toString('base64'),
           },
         ],
       };
@@ -120,8 +182,12 @@ function createEodPrintTimesheetRouter({ resend, logger }) {
         metadata: {
           storeNumber,
           sheet: sheetKey,
-          filename: sheet.filename,
+          filename: attachmentName,
           subject,
+          employeeCount: filled.employeeCount,
+          pageCount: filled.pageCount,
+          leadName: leadName || null,
+          workDate: workDate || null,
         },
       }, printPayload);
 
@@ -148,6 +214,8 @@ function createEodPrintTimesheetRouter({ resend, logger }) {
         label: sheet.label,
         storeNumber,
         fileCount: 1,
+        pageCount: filled.pageCount,
+        employeeCount: filled.employeeCount,
       });
     } catch (err) {
       log.error('[eod print-timesheet] Resend', err);
