@@ -3,6 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 const { pool } = require('./db');
+const {
+  fetchPersonSchedule,
+  addDaysYmd,
+} = require('./survey-sas-prod');
 
 const MASTER_ADMIN_EMAILS = new Set([
   'tyson.gauthier@retailodyssey.com',
@@ -166,11 +170,11 @@ function requireSurveyRole(...allowed) {
 }
 
 /**
- * Today's assignments for this person from the seeded Kompass schedule.
+ * Seed-only schedule for a person on one date.
  * Match order: workday_id → normalized roster name.
  * Prefers Lead rows when multiple, then first by store number.
  */
-function listScheduleToday(surveyUser, dateStr = null) {
+function listScheduleTodayFromSeed(surveyUser, dateStr = null) {
   const date = dateStr || todayPacificDate();
   const sched = loadScheduleSeed();
   let hits = [];
@@ -190,25 +194,109 @@ function listScheduleToday(surveyUser, dateStr = null) {
   for (const h of ordered) {
     if (seen.has(h.storeNum)) continue;
     seen.add(h.storeNum);
-    unique.push(h);
+    unique.push({
+      date: h.date,
+      storeNum: h.storeNum,
+      workdayId: h.workdayId,
+      name: h.name,
+      role: h.role,
+      team: h.team,
+      source: 'seed',
+    });
   }
   return {
     date,
     timezone: 'America/Los_Angeles',
-    source: sched.source,
+    source: 'seed',
+    seedSource: sched.source,
+    ok: true,
     assignments: unique,
   };
 }
 
+/** @deprecated Prefer listScheduleForUser — kept for sync call sites / tests. */
+function listScheduleToday(surveyUser, dateStr = null) {
+  return listScheduleTodayFromSeed(surveyUser, dateStr);
+}
+
 /**
- * Prefill store from today's schedule (single primary store).
+ * Live SAS PROD Kompass ISE schedule with seed fallback.
+ * Returns today + upcoming days so leads can see stores by day.
+ */
+async function listScheduleForUser(surveyUser, { days = 7, dateStr = null } = {}) {
+  const today = dateStr || todayPacificDate();
+  const end = addDaysYmd(today, Math.max(0, Number(days) - 1));
+  let prod = null;
+  try {
+    prod = await fetchPersonSchedule(surveyUser, { startDate: today, endDate: end });
+  } catch (err) {
+    console.warn('[survey-access] prod schedule failed:', err.message);
+  }
+
+  if (prod?.ok && prod.assignments?.length) {
+    const byDate = new Map();
+    for (const a of prod.assignments) {
+      if (!byDate.has(a.date)) byDate.set(a.date, []);
+      byDate.get(a.date).push(a);
+    }
+    const todayAssignments = (byDate.get(today) || []).slice().sort((a, b) => {
+      const la = String(a.role || '').toLowerCase() === 'lead' ? 0 : 1;
+      const lb = String(b.role || '').toLowerCase() === 'lead' ? 0 : 1;
+      return la - lb || a.storeNum - b.storeNum;
+    });
+    return {
+      date: today,
+      timezone: 'America/Los_Angeles',
+      source: 'sas-prod',
+      ok: true,
+      sessionAlive: true,
+      projectId: prod.projectId,
+      syncedAt: prod.syncedAt,
+      error: null,
+      assignments: todayAssignments,
+      scheduleWeek: prod.assignments,
+      byDate: Object.fromEntries(byDate),
+    };
+  }
+
+  // Seed fallback: today + next days from seed file
+  const week = [];
+  for (let i = 0; i < Math.max(1, Number(days) || 7); i++) {
+    const d = addDaysYmd(today, i);
+    const day = listScheduleTodayFromSeed(surveyUser, d);
+    for (const a of day.assignments) week.push(a);
+  }
+  const todaySeed = listScheduleTodayFromSeed(surveyUser, today);
+  const byDate = new Map();
+  for (const a of week) {
+    if (!byDate.has(a.date)) byDate.set(a.date, []);
+    byDate.get(a.date).push(a);
+  }
+  return {
+    date: today,
+    timezone: 'America/Los_Angeles',
+    source: 'seed',
+    seedSource: todaySeed.seedSource,
+    ok: true,
+    sessionAlive: !!prod?.sessionAlive,
+    projectId: prod?.projectId || null,
+    syncedAt: null,
+    error: prod?.error || (prod && !prod.ok ? 'Live PROD schedule unavailable' : null),
+    assignments: todaySeed.assignments,
+    scheduleWeek: week,
+    byDate: Object.fromEntries(byDate),
+  };
+}
+
+/**
+ * Prefill stores from today's schedule (live PROD preferred).
  * Master admins: none. Manual override always available in the UI.
  */
 async function listSuggestedStores(surveyUser) {
   if (surveyUser?.isMasterAdmin || isMasterAdminEmail(surveyUser?.email)) {
     return [];
   }
-  const today = listScheduleToday(surveyUser);
+  const today = await listScheduleForUser(surveyUser, { days: 1 });
   if (!today.assignments.length) return [];
 
   const storeNums = today.assignments.map((a) => a.storeNum);
@@ -231,6 +319,7 @@ async function listSuggestedStores(surveyUser) {
       suggested: true,
       fromSchedule: true,
       scheduleDate: today.date,
+      scheduleSource: today.source,
       team: a.team || null,
       role: a.role || null,
     };
@@ -602,6 +691,8 @@ module.exports = {
   listAccessibleStoresDetailed,
   listSuggestedStores,
   listScheduleToday,
+  listScheduleTodayFromSeed,
+  listScheduleForUser,
   todayPacificDate,
   listCatalogStores,
   listCatalogDistricts,

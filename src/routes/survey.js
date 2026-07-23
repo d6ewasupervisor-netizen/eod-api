@@ -7,7 +7,7 @@ const {
   requireSurveyRole,
   listAccessibleStores,
   listSuggestedStores,
-  listScheduleToday,
+  listScheduleForUser,
   todayPacificDate,
   listCatalogStores,
   listCatalogDistricts,
@@ -24,7 +24,7 @@ router.use(requireAuth, requireSurveyAccess);
 router.get('/me', async (req, res, next) => {
   try {
     const roles = req.user?.roles || [];
-    const scheduleToday = listScheduleToday(req.surveyUser);
+    const schedule = await listScheduleForUser(req.surveyUser, { days: 7 });
     const [suggested, catalog, districts, teams, suggestions, myStatuses] = await Promise.all([
       listSuggestedStores(req.surveyUser),
       listCatalogStores(),
@@ -81,13 +81,29 @@ router.get('/me', async (req, res, next) => {
         workdayId: req.surveyUser.workdayId || req.surveyUser.workday_id || null,
         isMasterAdmin: !!req.surveyUser.isMasterAdmin,
       },
-      scheduleDate: scheduleToday.date || todayPacificDate(),
-      scheduleTimezone: scheduleToday.timezone || 'America/Los_Angeles',
-      scheduleToday: scheduleToday.assignments.map((a) => ({
+      scheduleDate: schedule.date || todayPacificDate(),
+      scheduleTimezone: schedule.timezone || 'America/Los_Angeles',
+      scheduleSource: schedule.source || null,
+      scheduleOk: schedule.ok !== false,
+      scheduleError: schedule.error || null,
+      scheduleSyncedAt: schedule.syncedAt || null,
+      scheduleToday: schedule.assignments.map((a) => ({
         storeNum: a.storeNum,
         team: a.team,
         role: a.role,
         date: a.date,
+        visitId: a.visitId || null,
+        isLead: a.isLead,
+        source: a.source || schedule.source,
+      })),
+      scheduleWeek: (schedule.scheduleWeek || []).map((a) => ({
+        storeNum: a.storeNum,
+        team: a.team,
+        role: a.role,
+        date: a.date,
+        visitId: a.visitId || null,
+        isLead: a.isLead,
+        source: a.source || schedule.source,
       })),
       primaryStore,
       // Full schedule for today (UI drops draft/submitted into In progress & completed)

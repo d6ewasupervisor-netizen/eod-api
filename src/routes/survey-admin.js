@@ -12,13 +12,21 @@ const {
   buildCoverage,
   searchRoster,
   listTeams,
+  ensureRosterEmails,
   createAssignments,
   getAlertPrefs,
   upsertAlertPrefs,
   photoFileName,
 } = require('../lib/survey-ops');
 const { sortDistricts } = require('../lib/survey-access');
+const {
+  fetchLeadsInRange,
+  fetchProjectCycles,
+  resolveScheduleWindow,
+  clearCaches: clearSurveySasCache,
+} = require('../lib/survey-sas-prod');
 const { publicPhotoUrl, photoUrlTtlDays } = require('../lib/survey-photo-jwt');
+const { isSessionAlive } = require('../sas-bridge');
 
 const router = express.Router();
 router.use(requireAuth, requireSurveyAdmin);
@@ -463,6 +471,265 @@ router.get('/coverage', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/** Active Kompass ISE cycles from SAS PROD cycle management (project 1). */
+router.get('/prod-cycles', async (req, res, next) => {
+  try {
+    if (req.query.refresh === '1' || req.query.refresh === 'true') {
+      clearSurveySasCache();
+    }
+    const raw = await fetchProjectCycles({ refresh: true });
+    res.json({
+      ...raw,
+      sessionAlive: raw.sessionAlive ?? isSessionAlive(),
+    });
+  } catch (e) { next(e); }
+});
+
+/**
+ * Live Kompass ISE leads from SAS PROD.
+ * Query: date=YYYY-MM-DD | range=current|next | cycleId= | startDate=&endDate= | refresh=1
+ */
+router.get('/prod-schedule', async (req, res, next) => {
+  try {
+    const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
+    if (refresh) clearSurveySasCache();
+
+    const window = await resolveScheduleWindow({
+      date: req.query.date,
+      startDate: req.query.startDate || req.query.start,
+      endDate: req.query.endDate || req.query.end,
+      range: req.query.range,
+      cycleId: req.query.cycleId,
+      refresh,
+    });
+    if (!window.ok) {
+      return res.status(503).json({
+        ok: false,
+        error: window.error || 'Could not resolve PROD schedule window',
+        sessionAlive: window.sessionAlive ?? isSessionAlive(),
+        cycles: window.cycles || null,
+      });
+    }
+
+    const raw = await fetchLeadsInRange(window.startDate, window.endDate);
+    const scope = req.surveyAdminScope;
+    let visits = raw.visits || [];
+    let leads = raw.leads || [];
+
+    if (scope?.level === 'district') {
+      const allowed = new Set((scope.storeNums || []).map(Number));
+      visits = visits.filter((v) => allowed.has(Number(v.storeNum)));
+      leads = leads
+        .map((L) => ({
+          ...L,
+          stores: (L.stores || []).filter((s) => allowed.has(Number(s.storeNum))),
+        }))
+        .filter((L) => L.stores.length);
+    }
+
+    const storeNums = [...new Set([
+      ...visits.map((v) => Number(v.storeNum)),
+      ...leads.flatMap((L) => (L.stores || []).map((s) => Number(s.storeNum))),
+    ].filter(Number.isFinite))];
+    let byStore = new Map();
+    if (storeNums.length) {
+      const { rows } = await pool.query(
+        `SELECT store_num, district, store_name FROM survey_store_districts
+          WHERE store_num = ANY($1::int[])`,
+        [storeNums]
+      );
+      byStore = new Map(rows.map((r) => [Number(r.store_num), r]));
+    }
+    const decorate = (v) => {
+      const meta = byStore.get(Number(v.storeNum));
+      return {
+        ...v,
+        district: meta?.district || null,
+        storeName: meta?.store_name || null,
+      };
+    };
+
+    leads = leads.map((L) => {
+      const stores = (L.stores || []).map(decorate);
+      const districts = [...new Set(stores.map((s) => s.district).filter(Boolean))];
+      const teams = [...new Set(stores.map((s) => s.team).filter(Boolean))];
+      return { ...L, stores, districts, teams };
+    });
+
+    res.json({
+      ok: raw.ok,
+      sessionAlive: raw.sessionAlive ?? isSessionAlive(),
+      source: raw.source || 'sas-prod',
+      projectId: raw.projectId,
+      date: window.date,
+      startDate: window.startDate,
+      endDate: window.endDate,
+      mode: window.mode,
+      cycle: window.cycle || null,
+      cycles: window.cycles?.cycles || null,
+      syncedAt: raw.syncedAt || null,
+      error: raw.error || null,
+      visitCount: visits.length,
+      matchedLeadCount: leads.filter((L) => L.matched).length,
+      unmatchedLeadCount: leads.filter((L) => !L.matched).length,
+      unmatchedVisitCount: visits.filter((v) => !v.matched).length,
+      leads,
+      visits: visits.map(decorate),
+    });
+  } catch (e) { next(e); }
+});
+
+/**
+ * Assign surveys from live PROD schedule.
+ * Body: {
+ *   date? | range? | cycleId? | startDate?/endDate?,
+ *   selections?: [{ leadKey, email?, name?, storeNums? }],
+ *   leadEmails?, storeNums?, dueAt?, sendInvites?, remindDaysBefore?, notes?
+ * }
+ */
+router.post('/assignments/from-prod', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    if (body.refresh) clearSurveySasCache();
+
+    const window = await resolveScheduleWindow({
+      date: body.date,
+      startDate: body.startDate || body.start,
+      endDate: body.endDate || body.end,
+      range: body.range,
+      cycleId: body.cycleId,
+      refresh: !!body.refresh,
+    });
+    if (!window.ok) {
+      return res.status(503).json({
+        ok: false,
+        error: window.error || 'Could not resolve PROD schedule window',
+        sessionAlive: window.sessionAlive ?? isSessionAlive(),
+      });
+    }
+
+    const raw = await fetchLeadsInRange(window.startDate, window.endDate);
+    if (!raw.ok) {
+      return res.status(503).json({
+        ok: false,
+        error: raw.error || 'SAS PROD schedule unavailable',
+        sessionAlive: raw.sessionAlive,
+      });
+    }
+
+    const scope = req.surveyAdminScope;
+    const storeFilter = Array.isArray(body.storeNums)
+      ? new Set(body.storeNums.map(Number).filter(Number.isFinite))
+      : null;
+    const leadByKey = new Map((raw.leads || []).map((L) => [L.leadKey || (L.email ? `email:${L.email}` : null), L]));
+
+    const selections = Array.isArray(body.selections) ? body.selections : null;
+    const emailFilter = !selections && Array.isArray(body.leadEmails)
+      ? new Set(body.leadEmails.map((e) => String(e).trim().toLowerCase()).filter(Boolean))
+      : null;
+
+    const pairs = []; // { email, name, storeNum }
+    const pushPair = (email, name, sn) => {
+      if (!email || !Number.isFinite(sn)) return;
+      if (storeFilter && !storeFilter.has(sn)) return;
+      if (scope?.level === 'district' && scope.storeNums?.length) {
+        if (!scope.storeNums.map(Number).includes(sn)) return;
+      }
+      pairs.push({ email, name: name || null, storeNum: sn });
+    };
+
+    if (selections && selections.length) {
+      for (const sel of selections) {
+        const key = String(sel.leadKey || '').trim();
+        const L = key ? leadByKey.get(key) : null;
+        const email = String(sel.email || L?.email || '').trim().toLowerCase();
+        if (!email) {
+          const err = new Error(`Email required for lead ${sel.name || L?.name || key || '(unknown)'}`);
+          err.status = 400;
+          throw err;
+        }
+        const name = sel.name || L?.name || null;
+        const selectedStores = Array.isArray(sel.storeNums) && sel.storeNums.length
+          ? sel.storeNums.map(Number).filter(Number.isFinite)
+          : (L?.stores || []).map((s) => Number(s.storeNum));
+        for (const sn of selectedStores) pushPair(email, name, sn);
+      }
+    } else {
+      for (const L of raw.leads || []) {
+        const email = String(L.email || '').toLowerCase();
+        if (!email) continue;
+        if (emailFilter && !emailFilter.has(email)) continue;
+        for (const s of L.stores || []) {
+          pushPair(email, L.name, Number(s.storeNum));
+        }
+      }
+    }
+
+    if (!pairs.length) {
+      return res.status(400).json({
+        ok: false,
+        error: 'No PROD leads/stores selected in your scope (unmatched leads need a manual email)',
+        startDate: window.startDate,
+        endDate: window.endDate,
+        matchedLeadCount: (raw.leads || []).filter((L) => L.matched).length,
+      });
+    }
+
+    const byEmail = new Map();
+    for (const p of pairs) {
+      if (!byEmail.has(p.email)) byEmail.set(p.email, { name: p.name, stores: new Set() });
+      const bucket = byEmail.get(p.email);
+      if (p.name && !bucket.name) bucket.name = p.name;
+      bucket.stores.add(p.storeNum);
+    }
+
+    await ensureRosterEmails(
+      [...byEmail.entries()].map(([email, v]) => ({ email, name: v.name, role: 'lead' }))
+    );
+
+    const label =
+      window.cycle?.name
+        ? `PROD ${window.cycle.name}`
+        : window.startDate === window.endDate
+          ? `PROD ${window.startDate}`
+          : `PROD ${window.startDate}–${window.endDate}`;
+
+    let created = [];
+    let inviteResults = [];
+    for (const [email, bucket] of byEmail.entries()) {
+      const result = await createAssignments({
+        assignees: [{ email, name: bucket.name, role: 'lead' }],
+        storeNums: [...bucket.stores],
+        assignedBy: req.surveyUser.email,
+        dueAt: body.dueAt || null,
+        notes: body.notes || `Assigned from SAS PROD Kompass ISE ${label}`,
+        scopeLabel: body.scopeLabel || label,
+        remindDaysBefore: body.remindDaysBefore == null ? 1 : Number(body.remindDaysBefore),
+        sendInvites: body.sendInvites !== false,
+      });
+      created = created.concat(result.created);
+      inviteResults = inviteResults.concat(result.inviteResults || []);
+    }
+
+    res.json({
+      ok: true,
+      date: window.date,
+      startDate: window.startDate,
+      endDate: window.endDate,
+      cycle: window.cycle || null,
+      source: 'sas-prod',
+      created: created.length,
+      leadCount: byEmail.size,
+      storePairs: pairs.length,
+      inviteResults,
+      assignments: created,
+    });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ ok: false, error: e.message });
+    next(e);
+  }
+});
+
 router.get('/roster-search', async (req, res, next) => {
   try {
     const people = await searchRoster({
@@ -480,11 +747,15 @@ router.post('/assignments', async (req, res, next) => {
     const body = req.body || {};
     let storeNums = Array.isArray(body.storeNums) ? body.storeNums.map(Number) : [];
     const assigneeEmails = Array.isArray(body.assigneeEmails) ? body.assigneeEmails : [];
+    const assignees = Array.isArray(body.assignees) ? body.assignees : [];
     const team = body.team || null;
     const role = body.role || null;
 
     // Resolve team/role bulk → emails
-    let emails = [...assigneeEmails];
+    let emails = [
+      ...assigneeEmails,
+      ...assignees.map((a) => (typeof a === 'string' ? a : a?.email)).filter(Boolean),
+    ];
     if (team || (role && !emails.length)) {
       const people = await searchRoster({ team, role, limit: 200, q: '' });
       emails = [...new Set([...emails, ...people.map((p) => p.email)])];
@@ -497,7 +768,13 @@ router.post('/assignments', async (req, res, next) => {
       storeNums = storeNums.filter((n) => allowed.has(Number(n)));
     }
 
+    const namedAssignees = [
+      ...assignees.map((a) => (typeof a === 'string' ? { email: a } : a)).filter((a) => a?.email),
+      ...emails.map((email) => ({ email })),
+    ];
+
     const result = await createAssignments({
+      assignees: namedAssignees,
       assigneeEmails: emails,
       storeNums,
       assignedBy: req.surveyUser.email,

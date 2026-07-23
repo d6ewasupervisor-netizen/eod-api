@@ -142,7 +142,7 @@ async function buildCoverage(scope) {
             ro.name AS assignee_name, ro.team AS assignee_team, ro.role AS assignee_role,
             ab.name AS assigned_by_name
        FROM survey_assignments a
-       JOIN survey_roster ro ON ro.email = a.assignee_email
+       LEFT JOIN survey_roster ro ON ro.email = a.assignee_email
        LEFT JOIN survey_roster ab ON ab.email = a.assigned_by
       WHERE a.status = 'open' AND a.store_num = ANY($1::int[])
       ORDER BY a.due_at NULLS LAST, a.store_num`,
@@ -249,8 +249,50 @@ function remindAtFromDue(dueAt, daysBefore = 1) {
   return d;
 }
 
+/**
+ * Ensure assignee emails exist on survey_roster (FK). Creates lightweight
+ * roster rows for manual / alternate emails that are not already in the system.
+ * @param {Array<string|{email:string,name?:string,role?:string}>} assignees
+ */
+async function ensureRosterEmails(assignees, client = pool) {
+  const list = [];
+  for (const raw of assignees || []) {
+    if (typeof raw === 'string') {
+      const email = String(raw).trim().toLowerCase();
+      if (email) list.push({ email, name: null, role: 'lead' });
+      continue;
+    }
+    const email = String(raw?.email || '').trim().toLowerCase();
+    if (!email) continue;
+    list.push({
+      email,
+      name: raw.name ? String(raw.name).trim() : null,
+      role: ['supervisor', 'lead', 'member'].includes(String(raw.role || '').toLowerCase())
+        ? String(raw.role).toLowerCase()
+        : 'lead',
+    });
+  }
+  const unique = new Map();
+  for (const a of list) {
+    if (!unique.has(a.email)) unique.set(a.email, a);
+  }
+  for (const a of unique.values()) {
+    const displayName = a.name || a.email.split('@')[0] || a.email;
+    await client.query(
+      `INSERT INTO survey_roster (email, name, role, team, active)
+       VALUES ($1, $2, $3, NULL, TRUE)
+       ON CONFLICT (email) DO UPDATE SET
+         active = TRUE,
+         updated_at = now()`,
+      [a.email, displayName, a.role]
+    );
+  }
+  return [...unique.keys()];
+}
+
 async function createAssignments({
   assigneeEmails,
+  assignees = null,
   storeNums,
   assignedBy,
   dueAt = null,
@@ -259,7 +301,12 @@ async function createAssignments({
   remindDaysBefore = 1,
   sendInvites = true,
 }) {
-  const emails = [...new Set((assigneeEmails || []).map((e) => String(e).trim().toLowerCase()).filter(Boolean))];
+  const fromAssignees = Array.isArray(assignees)
+    ? assignees.map((a) => (typeof a === 'string' ? { email: a } : a))
+    : [];
+  const fromEmails = (assigneeEmails || []).map((e) => ({ email: e }));
+  const people = [...fromAssignees, ...fromEmails];
+  const emails = await ensureRosterEmails(people);
   const stores = [...new Set((storeNums || []).map(Number).filter(Number.isFinite))];
   if (!emails.length) {
     const err = new Error('At least one assignee required');
@@ -276,6 +323,7 @@ async function createAssignments({
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await ensureRosterEmails(people, client);
     for (const email of emails) {
       for (const store of stores) {
         const { rows } = await client.query(
@@ -534,6 +582,7 @@ module.exports = {
   buildCoverage,
   searchRoster,
   listTeams,
+  ensureRosterEmails,
   createAssignments,
   sendAssignmentInvites,
   getAlertPrefs,
