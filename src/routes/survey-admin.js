@@ -98,7 +98,8 @@ async function fetchResponses(filters) {
   }
   const { rows } = await pool.query(
     `SELECT r.id, r.store_num, d.store_name, COALESCE(d.district,'Unassigned') AS district, r.respondent,
-            ro.name AS respondent_name, ro.team, r.answers, r.photos, r.status, r.submitted_at, r.updated_at
+            ro.name AS respondent_name, ro.team, r.answers, r.photos, r.status, r.submitted_at, r.updated_at,
+            'current'::text AS source, EXTRACT(YEAR FROM COALESCE(r.submitted_at, r.updated_at))::int AS year
        FROM survey_responses r
        JOIN survey_question_sets q ON q.id = r.question_set_id
        JOIN survey_roster ro ON ro.email = r.respondent
@@ -108,6 +109,104 @@ async function fetchResponses(filters) {
     params
   );
   return rows;
+}
+
+/**
+ * 2025 MS Forms baseline rows, shaped like survey_responses for admin explore/trends.
+ * IDs are negated so they never collide with live response ids.
+ * Baseline is always "submitted"; skipped when filters ask for drafts only.
+ */
+async function fetchBaselineResponses(filters) {
+  const status = filters.status || 'submitted';
+  if (status === 'draft') return [];
+
+  const params = [];
+  const where = ['TRUE'];
+  if (filters.stores && filters.stores.length) {
+    params.push(filters.stores.map(Number));
+    where.push(`b.store_num = ANY($${params.length}::int[])`);
+  }
+  if (filters.districts && filters.districts.length) {
+    params.push(filters.districts);
+    where.push(`COALESCE(d.district,'Unassigned') = ANY($${params.length}::text[])`);
+  }
+  if (filters.respondents && filters.respondents.length) {
+    params.push(filters.respondents.map((e) => String(e).toLowerCase()));
+    where.push(`lower(COALESCE(b.respondent, '')) = ANY($${params.length}::text[])`);
+  }
+
+  const { rows } = await pool.query(
+    `SELECT b.id, b.store_num, d.store_name, COALESCE(d.district,'Unassigned') AS district,
+            b.respondent, b.answers, b.submitted AS submitted_at, b.source
+       FROM survey_baseline b
+       LEFT JOIN survey_store_districts d ON d.store_num = b.store_num
+      WHERE ${where.join(' AND ')}
+      ORDER BY b.store_num, b.submitted DESC NULLS LAST`,
+    params
+  );
+
+  return rows.map((r) => ({
+    id: -Number(r.id),
+    store_num: r.store_num,
+    store_name: r.store_name,
+    district: r.district,
+    respondent: r.respondent || 'ms-forms-2025',
+    respondent_name: r.respondent || '2025 MS Forms',
+    team: null,
+    answers: r.answers || {},
+    photos: [],
+    status: 'submitted',
+    submitted_at: r.submitted_at,
+    updated_at: r.submitted_at,
+    source: 'baseline',
+    year: 2025,
+  }));
+}
+
+function aggregateAnswers(responses, questions) {
+  const agg = {};
+  for (const q of questions) {
+    agg[q.id] = {
+      id: q.id,
+      text: q.text,
+      section: q.section,
+      sectionTitle: q.sectionTitle,
+      good: q.good || null,
+      counts: {},
+      n: 0,
+      problems: 0,
+      tracked: !!q.good,
+    };
+  }
+  for (const r of responses) {
+    const answers = r.answers || {};
+    for (const q of questions) {
+      const val = answers[q.id];
+      if (val == null || val === '') continue;
+      const key = Array.isArray(val) ? val.join(', ') : String(val);
+      const a = agg[q.id];
+      a.counts[key] = (a.counts[key] || 0) + 1;
+      a.n++;
+      if (isProblem(q, val) === true) a.problems++;
+    }
+  }
+  return agg;
+}
+
+function topTrending(agg, minN = 3, limit = 3) {
+  return Object.values(agg)
+    .filter((a) => a.tracked && a.n >= minN)
+    .map((a) => ({ ...a, problemRate: a.problems / a.n }))
+    .sort((x, y) => y.problemRate - x.problemRate || y.n - x.n)
+    .slice(0, limit);
+}
+
+function baselineRates(agg) {
+  const baseline = {};
+  for (const [id, v] of Object.entries(agg)) {
+    if (v.n > 0) baseline[id] = { n: v.n, problemRate: v.problems / v.n };
+  }
+  return baseline;
 }
 
 /** Attach public no-login photo URLs (JWT) for admin viewer / exports. */
@@ -186,60 +285,48 @@ function parseListParam(v) {
 }
 
 // ---- Dashboard summary: per-question aggregates, top-3 trending, baseline deltas
+// When this year has no chartable submitted answers, trending + question aggs seed from 2025 baseline.
 router.get('/summary', async (req, res, next) => {
   try {
     const qs = await activeQuestionSet();
     if (!qs) return res.status(404).json({ ok: false, error: 'No active question set' });
     const questions = flattenQuestions(qs.spec);
     const filters = scopedFilters(req);
-    const responses = await fetchResponses(filters);
+    const [responses, baselineRows] = await Promise.all([
+      fetchResponses(filters),
+      fetchBaselineResponses(filters),
+    ]);
 
-    const agg = {};
-    for (const q of questions) agg[q.id] = { id: q.id, text: q.text, section: q.section, sectionTitle: q.sectionTitle, good: q.good || null, counts: {}, n: 0, problems: 0, tracked: !!q.good };
-    for (const r of responses) {
-      for (const q of questions) {
-        const val = r.answers[q.id];
-        if (val == null || val === '') continue;
-        const key = Array.isArray(val) ? val.join(', ') : String(val);
-        const a = agg[q.id];
-        a.counts[key] = (a.counts[key] || 0) + 1;
-        a.n++;
-        const p = isProblem(q, val);
-        if (p === true) a.problems++;
-      }
-    }
+    const liveAgg = aggregateAnswers(responses, questions);
+    const baseAgg = aggregateAnswers(baselineRows, questions);
+    const baseline = baselineRates(baseAgg);
+
     const MIN_N = 3;
-    const trending = Object.values(agg)
-      .filter(a => a.tracked && a.n >= MIN_N)
-      .map(a => ({ ...a, problemRate: a.problems / a.n }))
-      .sort((x, y) => y.problemRate - x.problemRate || y.n - x.n)
-      .slice(0, 3);
+    let trending = topTrending(liveAgg, MIN_N, 3);
+    let trendingSource = 'current';
+    let questionsOut = Object.values(liveAgg);
 
-    // Baseline comparison (2025) for mapped questions
-    const { rows: baseRows } = await pool.query('SELECT store_num, answers FROM survey_baseline');
-    const base = {};
-    for (const q of questions) base[q.id] = { n: 0, problems: 0 };
-    for (const b of baseRows) {
-      for (const q of questions) {
-        const val = b.answers[q.id];
-        if (val == null || val === '') continue;
-        base[q.id].n++;
-        if (isProblem(q, val) === true) base[q.id].problems++;
-      }
+    if (!trending.length && baselineRows.length) {
+      trending = topTrending(baseAgg, MIN_N, 3);
+      trendingSource = 'baseline';
+      questionsOut = Object.values(baseAgg);
     }
-    const baseline = {};
-    for (const [id, v] of Object.entries(base)) {
-      if (v.n > 0) baseline[id] = { n: v.n, problemRate: v.problems / v.n };
-    }
+
+    const displayRows = trendingSource === 'baseline' ? baselineRows : responses;
 
     res.json({
       ok: true,
       totals: {
-        responses: responses.length,
-        stores: new Set(responses.map(r => r.store_num)).size,
-        respondents: new Set(responses.map(r => r.respondent)).size,
+        responses: displayRows.length,
+        stores: new Set(displayRows.map((r) => r.store_num)).size,
+        respondents: new Set(displayRows.map((r) => r.respondent)).size,
+        currentResponses: responses.length,
+        currentStores: new Set(responses.map((r) => r.store_num)).size,
+        baselineResponses: baselineRows.length,
+        baselineStores: new Set(baselineRows.map((r) => r.store_num)).size,
       },
-      questions: Object.values(agg),
+      trendingSource,
+      questions: questionsOut,
       trending,
       baseline,
     });
@@ -247,16 +334,23 @@ router.get('/summary', async (req, res, next) => {
 });
 
 // ---- Filterable flat data for the client-side pivot/rearrange UI
+// Includes 2025 baseline rows by default (includeBaseline=0 to omit).
 router.get('/responses', async (req, res, next) => {
   try {
     const filters = scopedFilters(req);
+    const includeBaseline = String(req.query.includeBaseline || '1') !== '0';
     let responses = await fetchResponses(filters);
+    if (includeBaseline) {
+      const baselineRows = await fetchBaselineResponses(filters);
+      responses = responses.concat(baselineRows);
+    }
     const wantPhotos = String(req.query.photos || '1') !== '0';
     if (wantPhotos) responses = await withPhotoLinks(responses);
     res.json({
       ok: true,
       responses,
       photoLinkTtlDays: photoUrlTtlDays(),
+      includeBaseline,
     });
   } catch (e) { next(e); }
 });
@@ -267,8 +361,15 @@ router.get('/responses/:id', async (req, res, next) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });
     const filters = scopedFilters(req);
-    const all = await fetchResponses({ ...filters, status: filters.status || 'all' });
-    const row = all.find((r) => Number(r.id) === id);
+    const statusAll = { ...filters, status: filters.status || 'all' };
+    let row = null;
+    if (id < 0) {
+      const baselineRows = await fetchBaselineResponses(statusAll);
+      row = baselineRows.find((r) => Number(r.id) === id) || null;
+    } else {
+      const all = await fetchResponses(statusAll);
+      row = all.find((r) => Number(r.id) === id) || null;
+    }
     if (!row) return res.status(404).json({ ok: false, error: 'Response not found in your scope' });
     const [enriched] = await withPhotoLinks([row]);
     const qs = await activeQuestionSet();
@@ -346,7 +447,11 @@ router.get('/export.csv', async (req, res, next) => {
     const cols = qids ? questions.filter(q => qids.includes(q.id)) : questions.filter(q => q.type !== undefined);
     const filters = scopedFilters(req);
     const includePhotoLinks = String(req.query.photoLinks || '1') !== '0';
+    const includeBaseline = String(req.query.includeBaseline || '1') !== '0';
     let responses = await fetchResponses(filters);
+    if (includeBaseline) {
+      responses = responses.concat(await fetchBaselineResponses(filters));
+    }
     if (includePhotoLinks) responses = await withPhotoLinks(responses);
     const esc = v => {
       const s = v == null ? '' : (Array.isArray(v) ? v.join('; ') : String(v));
@@ -371,7 +476,7 @@ router.get('/export.csv', async (req, res, next) => {
     const header = [
       'id', 'store', 'store_name', 'district',
       'respondent', 'respondent_name', 'team',
-      'status', 'submitted_at',
+      'status', 'source', 'year', 'submitted_at',
     ];
     for (const c of cols) {
       header.push(`${c.id} ${String(c.text || '').split('{{storeName}}').join('store')}`);
@@ -393,6 +498,8 @@ router.get('/export.csv', async (req, res, next) => {
         r.respondent_name,
         r.team || '',
         r.status,
+        r.source || 'current',
+        r.year || '',
         r.submitted_at ? new Date(r.submitted_at).toISOString() : '',
       ];
       for (const c of cols) {
